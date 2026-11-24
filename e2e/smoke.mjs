@@ -336,6 +336,178 @@ async function touch(browser) {
   check((await state(page)).shapes === 1, 'a tap colors the area');
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   check((await state(page)).shapes === 0, 'undo brings it back');
+  // Holding still and then dragging draws a selection box.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+0');
+  const stage = await page.evaluate(() => {
+    const r = document.querySelector('.stage-svg').getBoundingClientRect();
+    return { x: r.left, y: r.top };
+  });
+  const from = [stage.x + 30, stage.y + 190];
+  await touchEv('touchStart', [from]);
+  await page.waitForTimeout(650);
+  for (let i = 1; i <= 8; i++) await touchEv('touchMove', [[from[0] + i * 40, from[1] + i * 45]]);
+  await touchEv('touchEnd', []);
+  await page.waitForTimeout(150);
+  check((await state(page)).selection === 1, 'holding still, then dragging, box-selects');
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
+/** Mouse controls, select modes, grouping, drawing and the smaller tools (desktop). */
+async function controls(browser) {
+  console.log('\nMouse controls, select modes and tools (desktop)');
+  const { ctx, page, errors } = await fresh(browser, false);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  const ui = () =>
+    page.evaluate(() => {
+      const u = window.__lc.ui();
+      return { tool: u.tool, sel: u.selection.length, view: u.view, mode: u.selectMode, brush: u.brushWidth };
+    });
+  const doc = () => page.evaluate(() => window.__lc.doc());
+  const pick = async (group, item) => {
+    await btn(group).hover();
+    await page.waitForTimeout(320);
+    await page.getByRole('menuitem', { name: new RegExp(`^${item}`) }).click();
+  };
+  /** Drag through a list of document points. */
+  const stroke = async (pts) => {
+    const first = await toScreen(page, pts[0][0], pts[0][1]);
+    await page.mouse.move(first.x, first.y);
+    await page.mouse.down();
+    for (const q of pts.slice(1)) {
+      const s = await toScreen(page, q[0], q[1]);
+      await page.mouse.move(s.x, s.y, { steps: 4 });
+    }
+    await page.mouse.up();
+  };
+
+  // Panning and selecting
+  let v0 = (await ui()).view;
+  await drag(page, [100, 100], [200, 160]);
+  let v1 = (await ui()).view;
+  check(Math.abs(v1.x - v0.x) > 30 && Math.abs(v1.y - v0.y) > 20, 'dragging empty canvas with the left button pans');
+  await page.keyboard.press('Control+0');
+  await btn('Circle').click();
+  await btn('Circle').click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.down('Shift');
+  await drag(page, [150, 150], [900, 900]);
+  await page.keyboard.up('Shift');
+  check((await ui()).sel === 2, 'Shift-drag box-selects');
+  await page.keyboard.press('Control+g');
+  let d = await doc();
+  check(d.guides.every((g) => g.group) && Object.keys(d.groups).length === 1, 'Ctrl+G groups outlines');
+  await page.keyboard.press('Escape');
+  const g0 = d.guides[0];
+  await clickDoc(page, g0.cx - g0.rx * Math.SQRT1_2, g0.cy - g0.ry * Math.SQRT1_2);
+  check((await ui()).sel === 2, 'clicking one member selects the whole group');
+  await page.keyboard.press('Control+Shift+g');
+  check(Object.keys((await doc()).groups).length === 0, 'Ctrl+Shift+G ungroups');
+  await page.keyboard.press('Escape');
+  await pick('Select', 'Lasso');
+  await stroke([[150, 150], [900, 150], [900, 900], [150, 900], [150, 160]]);
+  check((await ui()).sel === 2, 'the lasso selects what it surrounds');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  check((await ui()).mode === 'move', 'Esc returns to moving things');
+  await pick('Select', 'Pan');
+  v0 = (await ui()).view;
+  await drag(page, [g0.cx, g0.cy], [g0.cx + 60, g0.cy + 40]);
+  v1 = (await ui()).view;
+  d = await doc();
+  check(Math.abs(v1.x - v0.x) > 10 && d.guides[0].cx === g0.cx, 'Pan pans even when the drag starts on something');
+  await pick('Select', 'Move');
+  await page.keyboard.press('Control+0');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
+
+  // Draw and Brush
+  await pick('Lines', 'Draw');
+  const wave = [];
+  for (let i = 0; i <= 30; i++) wave.push([250 + i * 16, 500 + Math.sin(i / 4) * 120]);
+  await stroke(wave);
+  d = await doc();
+  const curve = d.guides.at(-1);
+  check(curve?.type === 'curve' && curve.pts.length >= 3 && curve.pts.length <= 14, `Draw turns a wobbly line into a smooth curve with few points (${curve?.pts?.length})`);
+  await btn('Done').click();
+  check((await ui()).tool === 'arrange', 'Done leaves the tool');
+  await btn('Brush').click();
+  check((await page.getByRole('slider', { name: 'Brush size' }).getAttribute('max')) === '60', 'the brush slider tops out at 60');
+  await page.getByLabel('Brush size value').fill('90');
+  await page.getByLabel('Brush size value').press('Enter');
+  check((await ui()).brush === 90, 'a bigger brush size can be typed');
+  await page.getByLabel('Brush size value').fill('20');
+  await page.getByLabel('Brush size value').press('Enter');
+  await drag(page, [300, 250], [700, 300]);
+  d = await doc();
+  check(d.shapes.length === 1 && d.shapes[0].fill === 0, 'the brush paints a stroke in Classic');
+  await btn('Brush').click();
+  check((await ui()).tool === 'arrange', 'clicking the active tool again switches it off');
+
+  // Coloring a selection, ordering, thickness, kept rotation
+  await btn('Circle').click();
+  await btn('Color 2').click();
+  d = await doc();
+  check(d.shapes.length === 2 && Boolean(d.shapes[1].from?.area), 'clicking a color with a closed outline selected fills it');
+  const top = d.shapes[1].id;
+  await page.evaluate((id) => window.__lc.ui().select([id]), top);
+  const centre = await toScreen(page, d.guides.at(-1).cx, d.guides.at(-1).cy);
+  await page.mouse.click(centre.x, centre.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Send to back' }).click();
+  check((await doc()).shapes[0].id === top, 'right-click → Send to back reorders');
+  await page.keyboard.press('Escape');
+  await pick('Lines', 'Line');
+  await page.waitForTimeout(500);
+  const chip = btn('Thickness');
+  const x0 = (await chip.boundingBox()).x;
+  await chip.click();
+  await page.waitForTimeout(400); // let the popover finish opening before measuring it
+  const numBox = async () => (await page.getByLabel('Thickness value').boundingBox()).x;
+  const n0 = await numBox();
+  await page.getByLabel('Thickness value').fill('30');
+  await page.getByLabel('Thickness value').press('Enter');
+  await page.waitForTimeout(200);
+  const x1 = (await chip.boundingBox()).x;
+  const n1 = await numBox();
+  check(Math.abs(x1 - x0) < 0.5 && Math.abs(n1 - n0) < 0.5, `the Thickness control stays put going from thin to thick (${x0.toFixed(1)} → ${x1.toFixed(1)}, ${n0.toFixed(1)} → ${n1.toFixed(1)})`);
+  check((await doc()).guides.at(-1).width === 30, 'the line is now 30 thick');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await pick('Shapes', 'Triangle');
+  const knob = await page.evaluate(() => {
+    const r = document.querySelector('.handle-rot').getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  await page.mouse.move(knob.x, knob.y);
+  await page.mouse.down();
+  await page.mouse.move(knob.x + 90, knob.y + 30, { steps: 6 });
+  await page.mouse.up();
+  const tri = (await doc()).guides.at(-1);
+  check(Math.abs(tri.rot || 0) > 0.2, 'a turned triangle remembers its angle');
+  await page.keyboard.press('Escape');
+  await clickDoc(page, tri.pts[0].x, tri.pts[0].y);
+  const frame = await page.evaluate(() =>
+    document
+      .querySelector('.sel-frame')
+      .getAttribute('points')
+      .split(' ')
+      .map((p) => p.split(',').map(Number)),
+  );
+  check(Math.abs(Math.atan2(frame[1][1] - frame[0][1], frame[1][0] - frame[0][0]) - tri.rot) < 0.02, 'selecting it again shows the box still turned with it');
+
+  // Examples keep to their own colors
+  for (const name of ['Leaf', 'Sunset', 'Fish', 'Orbit', 'moon']) {
+    await btn('Menu').click();
+    await page.getByRole('button', { name: /^Examples/ }).click();
+    await page.getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
+    await page.waitForFunction((n) => window.__lc.doc().name === n, name);
+    const ex = await doc();
+    const used = new Set(ex.shapes.map((sh) => sh.fill));
+    check(ex.shapes.length > 0 && [...used].every((f) => Number.isInteger(f) && f < ex.palette.length) && used.size === ex.palette.length, `the ${name} example uses each of its ${ex.palette.length} colors`);
+  }
+  await page.screenshot({ path: join(shots, 'controls-desktop.png') });
   check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
   await ctx.close();
 }
@@ -408,6 +580,7 @@ try {
     await wordmark(browser, phone);
     await firstVisit(browser, phone);
   }
+  await controls(browser);
   await touch(browser);
 } catch (err) {
   console.error(err);

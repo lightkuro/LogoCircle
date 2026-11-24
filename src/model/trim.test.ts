@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { flattenChain, ringArea } from '@/geom';
 import { newDoc } from './doc';
-import { outlinePieces, pieceAt, trimPiece } from './cut';
+import { cutAlong, cutMarks, markAt, outlinePieces, pieceAt, restoreMark, trimPiece } from './cut';
 import { cornerRadius, guideArea, guideCenterline, setCornerRadius } from './guides';
 import { transformGuide } from './guides';
 import { colorize } from './trim.helpers';
@@ -100,6 +100,46 @@ describe('trimming a piece of an outline', () => {
     // about half the ring is left (the round ends add a little)
     expect(area(left)).toBeGreaterThan(full * 0.45);
     expect(area(left)).toBeLessThan(full * 0.62);
+  });
+});
+
+describe('bringing pieces back', () => {
+  it('a removed piece is kept aside, not as an outline', () => {
+    const doc = two();
+    const next = trimPiece(doc, doc.guides, pieceAt(doc.guides, { x: 600, y: 500 }, 4)!);
+    expect(next.trimmed).toHaveLength(1);
+    expect(next.guides.some((g) => g.id === next.trimmed![0]!.id)).toBe(false);
+    // a third of the circle
+    near(length(next.trimmed![0]!), (2 * Math.PI * R) / 3);
+  });
+
+  it('can be brought back as an outline', () => {
+    const doc = two();
+    const cut = trimPiece(doc, doc.guides, pieceAt(doc.guides, { x: 600, y: 500 }, 4)!);
+    const mark = markAt(cut, { x: 600, y: 500 }, 4)!;
+    expect(mark.kind).toBe('trimmed');
+    const back = restoreMark(cut, mark);
+    expect(back.trimmed).toBeUndefined();
+    expect(back.guides).toHaveLength(3);
+    expect(back.guides.some((g) => g.id === mark.id)).toBe(true);
+  });
+
+  it('a whole outline removed comes back closed', () => {
+    const doc: Doc = { ...newDoc(), guides: [circle('a', 300, 300, 100)] };
+    const cut = trimPiece(doc, doc.guides, pieceAt(doc.guides, { x: 400, y: 300 }, 4)!);
+    expect(cut.guides).toHaveLength(0);
+    const back = restoreMark(cut, cutMarks(cut)[0]!);
+    expect(guideArea(back.guides[0]!)).not.toBeNull();
+  });
+
+  it('a line left by slicing can become an ordinary line', () => {
+    const doc = colorize(two(), [[300, 500]], 0);
+    const sliced = cutAlong(doc, { x: 250, y: 200 }, { x: 250, y: 800 }, { outlines: false });
+    const line = sliced.guides.find((g) => g.type === 'line' && g.cut)!;
+    const mark = markAt(sliced, { x: 250, y: 500 }, 4)!;
+    expect(mark).toMatchObject({ id: line.id, kind: 'cut' });
+    const back = restoreMark(sliced, mark);
+    expect(back.guides.find((g) => g.id === line.id)).toMatchObject({ type: 'line', cut: undefined });
   });
 });
 

@@ -386,7 +386,7 @@
 .txp-grip {
   display: block;
   width: 100%;
-  height: 22px;
+  height: 20px;
   border: 0;
   background: transparent;
   position: relative;
@@ -395,7 +395,7 @@
   content: '';
   position: absolute;
   left: 50%;
-  top: 9px;
+  top: 8px;
   width: 40px;
   height: 5px;
   margin-left: -20px;
@@ -410,11 +410,49 @@
 }
 .txp-top {
   flex-shrink: 0;
-  padding: 0 16px 10px;
+  padding: 0 16px 8px;
 }
 .txp-top .tx-preview {
-  height: 68px;
-  padding: 8px 12px;
+  height: 78px;
+  padding: 7px 12px;
+}
+.txp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.txp-tabs .seg {
+  flex: 1;
+  display: grid;
+}
+.txp-tabs .ib {
+  flex-shrink: 0;
+}
+.txp-sliders {
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
+}
+.txp-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.txp-slider > span {
+  width: 58px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.txp-slider .slider {
+  flex: 1;
+  min-width: 0;
+}
+.txp-body .tx-colors {
+  padding-top: 6px;
 }
 .txp-entry {
   display: flex;

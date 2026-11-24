@@ -17,6 +17,7 @@ import { ZoomControl } from '@/ui/ZoomControl';
 import { AdvancedPanel } from '@/ui/advanced/Panel';
 import { thumbnail } from '@/export/svg';
 import { isTyping } from '@/canvas/useGestures';
+import { startBackdropNudge } from '@/ui/backdrop';
 
 const seenBefore = (): boolean => {
   try {
@@ -51,6 +52,8 @@ export function App() {
       });
     return () => stop?.();
   }, []);
+
+  useEffect(() => startBackdropNudge(), []);
 
   // Photos can be pasted or dropped anywhere.
   useEffect(() => {

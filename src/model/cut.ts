@@ -10,7 +10,7 @@ import { carrierKey, edgesBBox, evalC, flattenEdge, lineChain, TAU, type BBox, t
 import { board } from './doc';
 import { bandSpine, guideArea, guideCenterline, guideChains, guideWidth, reach } from './guides';
 import { uid } from './ids';
-import type { Doc, Guide, LineGuide, Shape } from './types';
+import type { Band, Doc, Guide, LineGuide, Shape } from './types';
 
 const CUT = '__cut__';
 
@@ -283,7 +283,7 @@ export function outlinePieces(guides: readonly Guide[]): Piece[] {
   const boxes = lines.map((list) => list.map((e) => edgesBBox([e])));
   const out: Piece[] = [];
   live.forEach((g, gi) => {
-    if (g.locked) return;
+    if (g.locked || (g.type === 'line' && g.cut)) return;
     const others: Edge[] = [];
     const otherBoxes: BBox[] = [];
     lines.forEach((list, k) => {
@@ -411,5 +411,83 @@ export function trimPiece(doc: Doc, guides: readonly Guide[], piece: Piece): Doc
 
   const at = doc.guides.indexOf(g);
   const next = [...doc.guides.slice(0, at), ...made, ...doc.guides.slice(at + 1)];
-  return { ...doc, guides: next, shapes, updatedAt: Date.now() };
+  // The piece itself is set aside, thin and along its middle, so it can be shown and brought back.
+  const whole = piece.of === 1 && !!spine[piece.chain]?.closed;
+  const gone = pieceGuide(piece.edges, whole, { group: g.group, band: whole && g.type !== 'line' ? g.band : 'mid' }, width);
+  return { ...doc, guides: next, trimmed: [...(doc.trimmed ?? []), gone], shapes, updatedAt: Date.now() };
+}
+
+/** A guide for a run of edges: a straight line when it is one, otherwise a free run of edges. */
+function pieceGuide(edges: Edge[], closed: boolean, base: { group?: string; band?: Band }, width: number): Guide {
+  const id = uid('g');
+  const only = edges.length === 1 ? edges[0]! : null;
+  if (only && only.c.k === 'L' && !closed) {
+    const a = evalC(only.c, only.t0);
+    const b = evalC(only.c, only.t1);
+    return { id, group: base.group, type: 'line', x0: a.x, y0: a.y, x1: b.x, y1: b.y, width };
+  }
+  return { id, group: base.group, type: 'edges', edges, closed, width, band: width > 0 ? base.band : undefined };
+}
+
+/**
+ * Bring a removed piece back as an outline of its own. A cut line brought back
+ * becomes an ordinary line.
+ */
+export function restoreTrimmed(doc: Doc, id: string): Doc {
+  const list = doc.trimmed ?? [];
+  const g = list.find((x) => x.id === id);
+  if (!g) return doc;
+  const back = { ...g, group: g.group && doc.groups[g.group] ? g.group : undefined } as Guide;
+  if (back.type === 'line') delete (back as { cut?: boolean }).cut;
+  const trimmed = list.filter((x) => x.id !== id);
+  return { ...doc, guides: [...doc.guides, back], trimmed: trimmed.length ? trimmed : undefined, updatedAt: Date.now() };
+}
+
+/** Make a dashed cut line, left by slicing, an ordinary line. */
+export function restoreCutLine(doc: Doc, id: string): Doc {
+  const g = doc.guides.find((x) => x.id === id);
+  if (!g || g.type !== 'line' || !g.cut) return doc;
+  return { ...doc, guides: doc.guides.map((x) => (x === g ? { ...g, cut: undefined } : x)), updatedAt: Date.now() };
+}
+
+/** What can be brought back: removed pieces, and the lines left by slicing. */
+export interface Mark {
+  id: string;
+  kind: 'trimmed' | 'cut';
+  pts: Pt[];
+}
+
+const markCache = new WeakMap<Doc, Mark[]>();
+
+export function cutMarks(doc: Doc): Mark[] {
+  const hit = markCache.get(doc);
+  if (hit) return hit;
+  const out: Mark[] = [];
+  const flat = (g: Guide): Pt[] => {
+    const pts: Pt[] = [];
+    for (const c of guideCenterline(g)) for (const e of c.edges) pts.push(...flattenEdge(e, 0.5));
+    return pts;
+  };
+  for (const g of doc.trimmed ?? []) out.push({ id: g.id, kind: 'trimmed', pts: flat(g) });
+  for (const g of doc.guides) if (g.type === 'line' && g.cut && !g.hidden) out.push({ id: g.id, kind: 'cut', pts: flat(g) });
+  markCache.set(doc, out);
+  return out;
+}
+
+/** The mark under a point, if any is within `tol`. */
+export function markAt(doc: Doc, p: Pt, tol: number): Mark | null {
+  let best: Mark | null = null;
+  let bestD = Infinity;
+  for (const m of cutMarks(doc)) {
+    const d = distToPolyline(p, m.pts);
+    if (d <= tol && d < bestD) {
+      best = m;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+export function restoreMark(doc: Doc, mark: Mark): Doc {
+  return mark.kind === 'trimmed' ? restoreTrimmed(doc, mark.id) : restoreCutLine(doc, mark.id);
 }

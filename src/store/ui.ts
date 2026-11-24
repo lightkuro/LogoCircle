@@ -58,7 +58,7 @@ interface UiState {
   panelOpen: boolean;
   /** Snap to nearby outlines, edges and centres while dragging. */
   snap: boolean;
-  /** Cut lines visible (and dividing areas). */
+  /** Marks left by cutting visible: lines left by slicing (which then divide areas) and removed pieces, dotted. */
   showCuts: boolean;
   /** The selection box's angle after turning several things together; `key` names that selection. */
   selRot: { key: string; rot: number } | null;
@@ -116,7 +116,7 @@ export const useUi = create<UiState>((set) => ({
   brushWidth: 24,
   panelOpen: false,
   snap: true,
-  showCuts: true,
+  showCuts: false,
   selRot: null,
   frameEdit: false,
   corner: null,

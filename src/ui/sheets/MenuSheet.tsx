@@ -4,18 +4,23 @@ import { useUi } from '@/store/ui';
 import { useDoc } from '@/store/doc';
 import { useIsPhone } from '@/store/settings';
 import { createNewDoc, setMode } from '@/actions';
-import { Segmented, Sheet } from '../primitives';
+import { Segmented, Sheet, Tip } from '../primitives';
 import { importSvgFile, openProjectFile, saveProjectFile } from '@/advanced/files';
 
+/** A menu row. Its `hint` shows on hover with a mouse; on a phone the label says enough. */
 function Row({ icon, label, hint, onClick }: { icon: ReactNode; label: string; hint?: string; onClick: () => void }) {
-  return (
+  const row = (
     <button type="button" className="row-btn" onClick={onClick}>
       {icon}
-      <span className="min-w-0">
-        <span className="block">{label}</span>
-        {hint && <span className="block text-[12.5px] text-muted">{hint}</span>}
-      </span>
+      <span className="min-w-0">{label}</span>
     </button>
+  );
+  return hint ? (
+    <Tip label={hint} side="right">
+      {row}
+    </Tip>
+  ) : (
+    row
   );
 }
 
@@ -52,9 +57,6 @@ export function MenuSheet() {
               { value: 'advanced', label: 'Advanced' },
             ]}
           />
-          <p className="mb-0 mt-2 text-[12.5px] leading-snug text-muted">
-            {mode === 'classic' ? 'Classic keeps it to four colors and the essentials.' : 'Advanced adds layers, more colors, a pen, strokes and precise controls.'}
-          </p>
         </div>
       )}
       <Row
@@ -74,8 +76,7 @@ export function MenuSheet() {
           <Row icon={<FolderOpen />} label="Open project file" onClick={() => void openProjectFile().then(close)} />
         </>
       )}
-      <Row icon={<Settings />} label="Settings" hint={phone ? 'Layout, appearance, helpers' : 'Layout, appearance, mouse and keyboard'} onClick={() => useUi.setState({ sheet: 'settings' })} />
-      <p className="mb-0 mt-3 px-2 text-[12px] leading-snug text-muted">Everything stays on this device. Nothing is uploaded.</p>
+      <Row icon={<Settings />} label="Settings" hint="Layout, appearance, mouse and keyboard" onClick={() => useUi.setState({ sheet: 'settings' })} />
     </Sheet>
   );
 }

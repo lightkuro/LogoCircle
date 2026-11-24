@@ -3,28 +3,25 @@ import { Hand, RotateCcw, SquareDashed, X } from 'lucide-react';
 import { useUi } from '@/store/ui';
 import { settings, useIsTouch, useSettings, type DragEmpty, type Layout, type Theme } from '@/store/settings';
 import { COMMANDS, GROUPS, bind, combosFor, comboOf, commandFor, formatCombo, isCustom, unbind, type Command } from '@/keys';
-import { Segmented, Sheet } from '../primitives';
+import { InfoTip, Segmented, Sheet } from '../primitives';
 import '@/styles/settings.css';
 
-const LAYOUT_NOTE: Record<Layout, string> = {
-  auto: 'Picks the phone or the desktop interface from the size of the screen.',
-  desktop: 'Always the desktop interface, with mouse and keyboard controls.',
-  mobile: 'Always the phone interface, with touch controls.',
-};
+const LAYOUT_NOTE = 'Auto picks the phone or desktop layout by screen size.';
+const THEME_NOTE = 'Auto follows this device.';
 
-const THEME_NOTE: Record<Theme, string> = {
-  auto: 'Follows this device.',
-  light: 'Always light.',
-  dark: 'Always dark.',
-};
+/** A setting's name with its (i). */
+function Title({ children, info }: { children: string; info: string }) {
+  return (
+    <span className="set-title">
+      {children} <InfoTip about={children} text={info} />
+    </span>
+  );
+}
 
 function Switch({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="set-row">
-      <span className="min-w-0">
-        <span className="set-title">{label}</span>
-        <span className="set-hint">{hint}</span>
-      </span>
+      <Title info={hint}>{label}</Title>
       <button type="button" role="switch" className="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)}>
         <span className="switch-thumb" />
       </button>
@@ -148,8 +145,13 @@ function Shortcuts() {
 
   return (
     <>
-      <div className="label">Keyboard shortcuts</div>
-      <p className="set-hint mt-0">Pick a key, then press the new one. Esc leaves it as it was.</p>
+      <div className="label set-label">
+        Keyboard shortcuts
+        <InfoTip
+          about="keyboard shortcuts"
+          text="Pick a key, then press the new one. Esc leaves it as it was. Arrow keys nudge the selection, Esc steps back and Space moves the view; those stay as they are."
+        />
+      </div>
       {GROUPS.map((group) => {
         const list = COMMANDS.filter((c) => c.group === group && (advanced || !c.advanced));
         if (!list.length) return null;
@@ -160,7 +162,6 @@ function Shortcuts() {
           </div>
         );
       })}
-      <p className="set-hint">Arrow keys nudge the selection, Esc steps back and Space moves the view. Those stay as they are.</p>
       <button
         type="button"
         className="btn mt-2"
@@ -195,7 +196,7 @@ export function SettingsSheet() {
         Interface
       </div>
       <div className="set-row">
-        <span className="set-title">Layout</span>
+        <Title info={LAYOUT_NOTE}>Layout</Title>
         <Segmented<Layout>
           label="Layout"
           value={layout}
@@ -207,9 +208,8 @@ export function SettingsSheet() {
           ]}
         />
       </div>
-      <p className="set-hint">{LAYOUT_NOTE[layout]}</p>
-      <div className="set-row mt-2">
-        <span className="set-title">Appearance</span>
+      <div className="set-row">
+        <Title info={THEME_NOTE}>Appearance</Title>
         <Segmented<Theme>
           label="Appearance"
           value={theme}
@@ -221,11 +221,13 @@ export function SettingsSheet() {
           ]}
         />
       </div>
-      <p className="set-hint">{THEME_NOTE[theme]}</p>
 
       {!touch && (
         <>
-          <div className="label">Mouse</div>
+          <div className="label set-label">
+            Mouse
+            <InfoTip about="the mouse" text="What dragging on empty canvas does. Either way, Shift and drag selects a box, and Space or the middle button moves the view." />
+          </div>
           <div role="radiogroup" aria-label="Dragging on empty canvas" className="grid gap-1.5">
             <Choice checked={dragEmpty === 'pan'} onSelect={drag('pan')} icon={<Hand />}>
               Left drag moves the view, right drag selects a box
@@ -234,7 +236,6 @@ export function SettingsSheet() {
               Left drag selects a box, right drag moves the view
             </Choice>
           </div>
-          <p className="set-hint">Either way, Shift-drag selects a box, and Space or the middle button moves the view.</p>
         </>
       )}
 

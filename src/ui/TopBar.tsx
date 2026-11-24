@@ -71,8 +71,7 @@ function MoreButton({ phone, canRedo }: { phone: boolean; canRedo: boolean }) {
             <Item icon={<Save />} label="Save" onClick={() => void saveToDevice()} />
             {phone && <Item icon={<Share />} label="Export" onClick={() => useUi.setState({ sheet: 'export' })} />}
             <div className="menu-sep" />
-            <Item icon={<RotateCcw />} label="Reset to the default design" onClick={() => void resetToStarter()} />
-            <p className="bar-menu-note">Your work saves by itself as you go. Save is there for peace of mind.</p>
+            <Item icon={<RotateCcw />} label="Reset to default" onClick={() => void resetToStarter()} />
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>
@@ -119,8 +118,8 @@ export function TopBar() {
             value={mode}
             onChange={setMode}
             options={[
-              { value: 'classic', label: 'Classic' },
-              { value: 'advanced', label: 'Advanced' },
+              { value: 'classic', label: 'Classic', tip: 'Up to four colors and the essentials' },
+              { value: 'advanced', label: 'Advanced', tip: 'Layers, more colors, a pen, strokes and precise controls' },
             ]}
           />
         </div>

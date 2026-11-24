@@ -210,8 +210,17 @@ export function GuidesLayer() {
       {list.map((g) => (
         <GuideItem key={g.id} guide={g} selected={selection.includes(g.id)} quiet={quiet} part="line" />
       ))}
+      {showCuts && <TrimmedLayer />}
     </g>
   );
+}
+
+/** Pieces removed with the Cut tool: faint and dotted, there to be brought back. */
+function TrimmedLayer() {
+  const trimmed = useDoc((s) => s.doc.trimmed);
+  const d = useMemo(() => (trimmed?.length ? trimmed.map((g) => chainsToPath(guideCenterline(g))).join('') : ''), [trimmed]);
+  if (!d) return null;
+  return <path d={d} className="trimmed" />;
 }
 
 // ---------------------------------------------------------------------------
@@ -261,12 +270,14 @@ export function SceneOverlays() {
   const dashed = useDrag((s) => s.draftDashed);
   const trim = useDrag((s) => s.trim);
   const trimWidth = useDrag((s) => s.trimWidth);
+  const restore = useDrag((s) => s.restore);
   const ink = useUi((s) => s.ink);
   const palette = useDoc((s) => s.doc.palette);
   return (
     <g style={{ pointerEvents: 'none' }}>
       {trim && trimWidth > 0 && <path d={trim} className="trim-band" strokeWidth={trimWidth} />}
       {trim && <path d={trim} className="trim-hot" />}
+      {restore && <path d={restore} className="restore-hot" />}
       {lines.map((l, i) => (
         <line key={i} x1={l.a.x} y1={l.a.y} x2={l.b.x} y2={l.b.y} className="snap-line" />
       ))}

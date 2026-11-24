@@ -214,3 +214,12 @@
 .set-row + .set-row {
   margin-top: 12px;
 }
+
+.set-title .info-btn {
+  margin-left: 2px;
+}
+.set-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

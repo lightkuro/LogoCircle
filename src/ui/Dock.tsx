@@ -7,6 +7,7 @@ import {
   ClipboardPaste,
   Crop,
   Ellipsis,
+  Eye,
   Hand,
   Hexagon,
   Image as ImageIcon,
@@ -46,6 +47,8 @@ interface Entry {
   active?: boolean;
   /** Draw a divider above this entry in the list. */
   divide?: boolean;
+  /** A switch rather than a tool: shows a check, and never becomes the button's face. */
+  checked?: boolean;
 }
 
 const openText = (): void => useUi.setState({ sheet: 'text', textTarget: null, tool: 'arrange', erasing: false, colorPanel: null });
@@ -66,7 +69,7 @@ function Single({ entry }: { entry: Entry }) {
  * opens the list. With a mouse, hovering opens it too, and clicking the button
  * itself picks the tool shown on it again.
  */
-function Group({ label, entries, align, icon }: { label: string; entries: Entry[]; align?: 'start' | 'end'; icon?: ReactNode }) {
+function Group({ label, entries, align, icon, caret }: { label: string; entries: Entry[]; align?: 'start' | 'end'; icon?: ReactNode; caret?: boolean }) {
   const touch = useIsTouch();
   const [open, setOpen] = useState(false);
   const [last, setLast] = useState(0);
@@ -93,7 +96,7 @@ function Group({ label, entries, align, icon }: { label: string; entries: Entry[
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const pick = (i: number): void => {
-    setLast(i);
+    if (entries[i]!.checked === undefined) setLast(i);
     setOpen(false);
     entries[i]!.run();
   };
@@ -126,21 +129,27 @@ function Group({ label, entries, align, icon }: { label: string; entries: Entry[
           else setOpen(!open);
         }}
       >
+        {caret && <ChevronUp className="tool-caret" data-open={open || undefined} aria-hidden />}
         {icon ?? shown.icon}
-        <span className="tool-label">
-          {label}
-          <ChevronUp className="tool-caret" data-open={open || undefined} />
-        </span>
+        <span>{label}</span>
       </button>
       {open && (
         <div className="pop flyout" data-align={align} role="menu" aria-label={label}>
           {entries.map((e, i) => (
             <div key={e.id}>
               {e.divide && <div className="menu-sep" />}
-              <button type="button" role="menuitem" className="menu-item" data-active={e.active || undefined} onClick={() => pick(i)}>
+              <button
+                type="button"
+                role={e.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                aria-checked={e.checked}
+                className="menu-item"
+                data-active={e.active || undefined}
+                onClick={() => pick(i)}
+              >
                 {e.icon}
                 {e.label}
                 {e.keys && <kbd>{e.keys}</kbd>}
+                {e.checked !== undefined && <span className="menu-switch" data-on={e.checked || undefined} aria-hidden />}
               </button>
             </div>
           ))}
@@ -199,10 +208,8 @@ function Swatch({ index, color, last }: { index: number; color: string; last: bo
 }
 
 function Colors() {
-  const key = useKeys();
   const palette = useDoc((s) => s.doc.palette);
   const mode = useUi((s) => s.mode);
-  const erasing = useUi((s) => s.tool === 'color' && s.erasing);
   const paperPanel = useUi((s) => s.colorPanel === 'paper');
   const limit = mode === 'classic' ? 4 : 24;
   const shown = palette.slice(0, limit);
@@ -221,15 +228,8 @@ function Colors() {
           </button>
         </Tip>
       )}
-      <div className="swatch-wrap">
-        <Tip label="Erase" keys={key('erase')}>
-          <button type="button" className="tool" aria-pressed={erasing} data-active={erasing || undefined} onClick={pickEraser}>
-            <EraseIcon />
-            <span>Erase</span>
-          </button>
-        </Tip>
-        {paperPanel && <ColorPanel target="paper" align="end" />}
-      </div>
+      {/* The paper's color panel opens here, beside the colors, wherever it was asked for. */}
+      <div className="swatch-wrap paper-anchor">{paperPanel && <ColorPanel target="paper" align="end" />}</div>
     </>
   );
 }
@@ -277,6 +277,8 @@ export function Dock() {
   const mode = useUi((s) => s.mode);
   const selectMode = useUi((s) => s.selectMode);
   const hasPhoto = useDoc((s) => s.doc.refs.length > 0);
+  const erasing = useUi((s) => s.tool === 'color' && s.erasing);
+  const showCuts = useUi((s) => s.showCuts);
   const advanced = mode === 'advanced';
   const arranging = tool === 'arrange';
 
@@ -308,6 +310,11 @@ export function Dock() {
     { id: 'paste', label: 'Paste a photo', keys: key('paste'), icon: <ClipboardPaste />, run: () => void pastePhoto() },
     ...(hasPhoto && !advanced ? [{ id: 'controls', label: 'Photo settings', keys: key('photo'), icon: <SlidersHorizontal />, run: openPhoto }] : []),
   ];
+  const cuts: Entry[] = [
+    { id: 'cut', label: 'Cut', keys: key('cut'), icon: <Scissors />, run: () => setTool('cut'), active: tool === 'cut' },
+    { id: 'erase', label: 'Erase', keys: key('erase'), icon: <EraseIcon />, run: pickEraser, active: erasing },
+    { id: 'marks', label: 'Show cut lines', icon: <Eye />, run: () => useUi.setState({ showCuts: !showCuts }), checked: showCuts, divide: true },
+  ];
   // Phones: the things reached for less often share one button.
   const more: Entry[] = [
     ...photos,
@@ -318,10 +325,10 @@ export function Dock() {
   return (
     <div className="glass dock" role="toolbar" aria-label="Tools">
       <Single entry={{ id: 'text', label: 'Text', keys: key('text'), icon: <Type />, run: openText }} />
-      <Group label="Shapes" entries={shapes} align="start" />
-      <Group label="Lines" entries={lines} />
-      <Single entry={{ id: 'cut', label: 'Cut', keys: key('cut'), icon: <Scissors />, run: () => setTool('cut'), active: tool === 'cut' }} />
-      {phone ? <Group label="More" entries={more} icon={<Ellipsis />} /> : <Group label="Photo" entries={photos} icon={<ImageIcon />} />}
+      <Group label="Shapes" entries={shapes} align="start" caret />
+      <Group label="Lines" entries={lines} caret />
+      <Group label="Cut" entries={cuts} caret />
+      {!phone && <Group label="Photo" entries={photos} icon={<ImageIcon />} />}
       {!phone && (
         <>
           <span className="sep" />
@@ -330,6 +337,7 @@ export function Dock() {
         </>
       )}
       <Group label="Select" entries={selects} align="end" />
+      {phone && <Group label="More" entries={more} icon={<Ellipsis />} align="end" />}
     </div>
   );
 }

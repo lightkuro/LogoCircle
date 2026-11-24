@@ -207,6 +207,12 @@ export interface Doc {
   /** Linked swatches. Classic works with one to four of them. */
   palette: string[];
   guides: Guide[];
+  /**
+   * Pieces of outline removed with the Cut tool. They are not outlines any
+   * more (they divide nothing and never export) but can be shown, faintly,
+   * and brought back.
+   */
+  trimmed?: Guide[];
   shapes: Shape[];
   groups: Record<string, Group>;
   refs: RefImage[];

@@ -144,12 +144,13 @@ function useHint(): string | null {
   const multi = useUi((s) => s.multi);
   const corner = useUi((s) => s.corner);
   const count = usePen((s) => s.count);
+  const marks = useUi((s) => s.showCuts);
   const tap = touch ? 'Tap' : 'Click';
   if (frameEdit) return 'Drag the frame or its handles to set what gets exported';
   if (tool === 'color') return erasing ? `${tap} areas to clear them` : `${tap} areas to color them`;
   if (tool === 'pen') return count === 0 ? `${tap} to place points. Drag to bend.` : `${count} point${count === 1 ? '' : 's'}`;
   if (tool === 'brush') return 'Paint with the color you picked';
-  if (tool === 'cut') return `${tap} a piece of an outline to remove it. Drag across a shape to slice it.`;
+  if (tool === 'cut') return marks ? `${tap} a piece to remove it, or a dotted one to bring it back` : `${tap} a piece of an outline to remove it. Drag across a shape to slice it.`;
   if (tool === 'draw') return 'Draw a line. It comes out as a smooth curve.';
   if (corner) return corner.index < 0 ? 'Rounding all the corners' : 'Rounding this corner';
   if (multi) return `${tap} things to add them to the selection`;
@@ -175,7 +176,6 @@ export function TopHint() {
 
 function ThicknessControls({ guides }: { guides: Guide[] }) {
   const live = useLiveEdit();
-  const touch = useIsTouch();
   const width = Math.round(guideWidth(guides[0]!));
   const ids = new Set(guides.map((g) => g.id));
   const closed = guides.every(isClosedOutline);
@@ -207,7 +207,6 @@ function ThicknessControls({ guides }: { guides: Guide[] }) {
           />
         </div>
       )}
-      <p className="m-0 text-[12px] leading-snug text-muted">A thick outline is a band. With it selected, {touch ? 'tap' : 'click'} a color to color it.</p>
     </div>
   );
 }
@@ -356,12 +355,12 @@ function BrushBar() {
 
 function CutBar({ hint }: { hint: string | null }) {
   const showCuts = useUi((s) => s.showCuts);
-  const any = useDoc((s) => s.doc.guides.some((g) => g.type === 'line' && g.cut));
+  const any = useDoc((s) => !!s.doc.trimmed?.length || s.doc.guides.some((g) => g.type === 'line' && g.cut));
   return (
     <ToolBar name="Cut" hint={hint}>
       {any && (
         <Chip
-          tip={showCuts ? 'Hide the dashed lines left by slicing' : 'Show where things were sliced'}
+          tip={showCuts ? 'Hide what was cut' : 'Show what was cut, to bring pieces back'}
           label="Cut lines"
           icon={showCuts ? <Eye /> : <EyeOff />}
           active={showCuts}
@@ -520,7 +519,6 @@ export function ContextBar() {
           {selection.length > 1 && !grouped && <Row icon={<GroupIcon />} label="Group" onClick={groupSelection} />}
           {grouped && !group?.text && <Row icon={<Ungroup />} label="Ungroup" onClick={ungroupSelection} />}
           <Row icon={<SquareDashedMousePointer />} label="Select more" active={multi} onClick={toggleMulti} />
-          {cornered && <p className="bar-menu-note">Press and hold a corner to round just that one.</p>}
         </Menu>
         {editable ? <Chip tip="Edit the text" label="Edit" icon={<Pencil />} onClick={editText} /> : <Chip tip="Duplicate" label="Duplicate" icon={<CopyPlus />} onClick={duplicateSelection} />}
         <span className="sep" />

@@ -7,14 +7,14 @@ import { useDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
 import { docToSvg, svgDataUrl, type SvgOptions } from '@/export/svg';
 import { copyText, download, fileBase, rasterBlob, shareOrDownload, svgBlob } from '@/export/files';
-import { Segmented, Sheet } from '../primitives';
+import { Segmented, Sheet, Tip } from '../primitives';
 
+/** A switch row. The hint shows on hover with a mouse. */
 function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} className="row-btn" style={{ paddingLeft: 4, paddingRight: 4 }} onClick={() => onChange(!checked)}>
+  const row = (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} className="row-btn" style={{ paddingLeft: 4, paddingRight: 4 }} onClick={() => onChange(!checked)}>
       <span className="min-w-0 flex-1">
         <span className="block text-[15px] font-medium">{label}</span>
-        {hint && <span className="block text-[12.5px] text-muted">{hint}</span>}
       </span>
       <span
         aria-hidden
@@ -42,6 +42,13 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
         />
       </span>
     </button>
+  );
+  return hint ? (
+    <Tip label={hint} side="right">
+      {row}
+    </Tip>
+  ) : (
+    row
   );
 }
 
@@ -94,15 +101,15 @@ export function ExportSheet() {
         <Toggle label="Background" hint="Off keeps the logo transparent" checked={background} onChange={setBackground} />
         <Toggle label="Construction lines" hint="Show the outlines the logo was built from" checked={guides} onChange={setGuides} />
         {mode === 'advanced' && <Toggle label="Crop to artwork" hint="Trim the empty space around the logo" checked={content} onChange={setContent} />}
-        <button type="button" className="row-btn" style={{ paddingLeft: 4, paddingRight: 4 }} onClick={() => editFrame(true)}>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-medium">Export frame</span>
-            <span className="block text-[12.5px] text-muted">
-              {Math.round(frame.w)} × {Math.round(frame.h)} · move or resize what gets exported
+        <Tip label="Move or resize what gets exported" side="right">
+          <button type="button" className="row-btn" style={{ paddingLeft: 4, paddingRight: 4 }} onClick={() => editFrame(true)}>
+            <span className="min-w-0 flex-1 text-[15px] font-medium">Export frame</span>
+            <span className="text-[13px] text-muted" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {Math.round(frame.w)} by {Math.round(frame.h)}
             </span>
-          </span>
-          <Crop />
-        </button>
+            <Crop />
+          </button>
+        </Tip>
       </div>
 
       <div className="mt-3 grid gap-2">

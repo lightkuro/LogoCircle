@@ -8,8 +8,8 @@ type Rows = [string, string][];
 const steps = (tap: string, hold: string): Rows => [
   ['Outlines', 'Add circles, shapes, lines and curves. They are only guides: move, resize and overlap them freely. Trace over a photo if you like.'],
   ['Color', `${tap} a color, then ${tap.toLowerCase()} or drag across the areas the outlines make. Neighbouring areas of the same color join into one shape. Or select an outline and ${tap.toLowerCase()} a color to color it directly.`],
-  ['Refine', `Erase areas you do not want. With Cut, ${tap.toLowerCase()} a piece of an outline between two crossings to remove it, or drag a line across shapes to slice them. A fill follows its outlines when you move them. Words work the same way.`],
-  ['Export', 'Hide the outlines to see the result, adjust the export frame if you need to, then export a clean SVG or PNG from the three dots at the top.'],
+  ['Refine', `Under Cut: Cut removes the piece of an outline you ${tap.toLowerCase()}, between two crossings, or slices shapes along a line you drag; Erase clears areas. Show cut lines brings removed pieces back. A fill follows its outlines when you move them. Words work the same way.`],
+  ['Export', 'Hide the outlines to see the result, adjust the export frame if you need to, then export a clean SVG or PNG. Everything stays on this device; nothing is uploaded.'],
   ['More', `${hold} anything for what can be done with it: round one corner, edit a word, change the order, group, and more.`],
 ];
 

@@ -8,7 +8,7 @@ import { ui, useUi } from '@/store/ui';
 import { addGuide, addShapes } from '@/model/ops';
 import { guideCenterline } from '@/model/guides';
 import type { CurveGuide, Guide, PathGuide, PathNode, Shape } from '@/model/types';
-import { cutAlong, pieceAt, trimPiece, type Piece } from '@/model/cut';
+import { cutAlong, markAt, pieceAt, restoreMark, trimPiece, type Mark, type Piece } from '@/model/cut';
 import { visibleGuides } from '@/model/paint';
 import { isTouch } from '@/store/settings';
 import { toast } from 'sonner';
@@ -240,7 +240,8 @@ registerDrawTool('draw', {
 let cutFrom: Pt | null = null;
 let cutTo: Pt | null = null;
 let slicing = false;
-let hot: Piece | null = null;
+/** What a tap here would do: remove a piece, or bring a dotted one back. */
+let hot: { piece: Piece } | { mark: Mark } | null = null;
 
 // The outlines on screen, kept as one array per document so the pieces are worked out once.
 let shownFor: { src: Guide[]; cuts: boolean; list: Guide[] } | null = null;
@@ -254,13 +255,26 @@ function shownOutlines(): Guide[] {
   return shownFor.list;
 }
 
-function showHot(piece: Piece | null): void {
-  if (piece === hot && (piece !== null) === (useDrag.getState().trim !== null)) return;
-  hot = piece;
-  if (!piece) return void useDrag.getState().set({ trim: null, trimWidth: 0 });
-  let d = '';
-  piece.pts.forEach((p, i) => (d += `${i ? 'L' : 'M'}${fmt(p.x)} ${fmt(p.y)}`));
-  useDrag.getState().set({ trim: d, trimWidth: piece.reach * 2 });
+const pathOf = (pts: Pt[]): string => pts.map((p, i) => `${i ? 'L' : 'M'}${fmt(p.x)} ${fmt(p.y)}`).join('');
+
+/** The piece or dotted mark under a point. A dotted mark, when shown, wins: it is what the tap is aimed at. */
+function targetAt(p: Pt, tol: number): typeof hot {
+  const s = ui();
+  if (s.showCuts && s.showGuides) {
+    const mark = markAt(getDoc(), p, tol);
+    if (mark) return { mark };
+  }
+  const piece = pieceAt(shownOutlines(), p, tol);
+  return piece ? { piece } : null;
+}
+
+function showHot(next: typeof hot): void {
+  const same = next === hot || (next && hot && 'piece' in next && 'piece' in hot && next.piece === hot.piece) || (next && hot && 'mark' in next && 'mark' in hot && next.mark.id === hot.mark.id);
+  if (same && (next !== null) === (useDrag.getState().trim !== null || useDrag.getState().restore !== null)) return;
+  hot = next;
+  if (!next) return void useDrag.getState().set({ trim: null, trimWidth: 0, restore: null });
+  if ('piece' in next) useDrag.getState().set({ trim: pathOf(next.piece.pts), trimWidth: next.piece.reach * 2, restore: null });
+  else useDrag.getState().set({ trim: null, trimWidth: 0, restore: pathOf(next.mark.pts) });
 }
 
 function showCut(): void {
@@ -268,15 +282,22 @@ function showCut(): void {
   useDrag.getState().set({ draft: `M${fmt(cutFrom.x)} ${fmt(cutFrom.y)}L${fmt(cutTo.x)} ${fmt(cutTo.y)}`, draftWidth: 0, draftDashed: true });
 }
 
+const clearCut = (): void => {
+  cutFrom = cutTo = null;
+  slicing = false;
+  hot = null;
+  useDrag.getState().set({ draft: null, draftDashed: false, trim: null, trimWidth: 0, restore: null });
+};
+
 registerDrawTool('cut', {
   hover(p) {
-    showHot(pieceAt(shownOutlines(), p, 7 / ui().view.k));
+    showHot(targetAt(p, 7 / ui().view.k));
   },
   down(p, e) {
     cutFrom = p;
     cutTo = p;
     slicing = false;
-    showHot(pieceAt(shownOutlines(), p, (e.pointerType === 'touch' ? 16 : 7) / ui().view.k));
+    showHot(targetAt(p, (e.pointerType === 'touch' ? 16 : 7) / ui().view.k));
   },
   move(p, e) {
     if (!cutFrom) return;
@@ -299,22 +320,19 @@ registerDrawTool('cut', {
   up() {
     const a = cutFrom;
     const b = cutTo;
-    const piece = hot;
+    const target = hot;
     const sliced = slicing;
-    cutFrom = cutTo = null;
-    slicing = false;
-    hot = null;
-    useDrag.getState().set({ draft: null, draftDashed: false, trim: null, trimWidth: 0 });
+    clearCut();
     const doc = getDoc();
     const tap = isTouch() ? 'Tap' : 'Click';
     if (!sliced) {
-      if (!piece) {
+      if (!target) {
         toast('Nothing to cut there', { description: `${tap} a piece of an outline to remove it, or drag a line across a shape to slice it.` });
         return;
       }
       let next = doc;
       try {
-        next = trimPiece(doc, shownOutlines(), piece);
+        next = 'mark' in target ? restoreMark(doc, target.mark) : trimPiece(doc, shownOutlines(), target.piece);
       } catch {
         next = doc;
       }
@@ -336,12 +354,6 @@ registerDrawTool('cut', {
     }
     buzz(8);
     commit(next);
-    useUi.setState({ showCuts: true });
   },
-  cancel() {
-    cutFrom = cutTo = null;
-    slicing = false;
-    hot = null;
-    useDrag.getState().set({ draft: null, draftDashed: false, trim: null, trimWidth: 0 });
-  },
+  cancel: clearCut,
 });

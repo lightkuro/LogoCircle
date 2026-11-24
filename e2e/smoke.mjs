@@ -224,7 +224,7 @@ async function geometric(browser, phone) {
   let s = await state(page);
   check(s.shapes === 3, `three separate colored bands (got ${s.shapes})`);
   // Cut straight down through everything: each band falls into two pieces.
-  await page.getByRole('button', { name: 'Cut', exact: true }).click();
+  await fromGroup(page, 'Cut', 'Cut');
   await drag(page, [512, 300], [512, 720]);
   s = await state(page);
   const cuts = await page.evaluate(() => window.__lc.doc().guides.filter((g) => g.type === 'line' && g.cut).length);
@@ -291,7 +291,7 @@ async function wordmark(browser, phone) {
   await moveSelectionTo(page, d.x0 + w * 0.3, d.y1 - h * 0.62);
   const before = await page.evaluate(() => JSON.stringify(window.__lc.doc().shapes[3].rings).length);
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Erase', exact: true }).click();
+  await fromGroup(page, 'Cut', 'Erase');
   await page.waitForTimeout(150);
   // a spot on the bowl's ring that the circle covers
   await clickDoc(page, d.x0 + w * 0.42 - 28, d.y1 - h * 0.36 - 28);
@@ -568,7 +568,7 @@ async function refinements(browser) {
   const ln = before.guides.find((g) => g.type === 'line');
   const circle = before.guides.find((g) => g.type === 'ellipse');
   check(ln.x0 < circle.cx - circle.rx && ln.x1 > circle.cx + circle.rx, 'the line crosses the whole circle');
-  await btn('Cut').click();
+  await fromGroup(page, 'Cut', 'Cut');
   const mid = await toScreen(page, 512, 512);
   await page.mouse.move(mid.x - 3, mid.y);
   await page.mouse.move(mid.x, mid.y);
@@ -581,6 +581,16 @@ async function refinements(browser) {
   await page.mouse.click(top.x, top.y);
   d = await doc();
   check(d.guides.filter((g) => g.type === 'edges').length === 1 && !d.guides.some((g) => g.type === 'ellipse'), 'clicking half of the circle leaves the other half');
+  check(d.trimmed?.length === 2 && (await page.locator('.trimmed').count()) === 0, 'what was removed is kept, out of sight');
+  // Show cut lines: the removed pieces come back as dots, and a click on one brings it back.
+  await btn('Cut lines').click();
+  check((await page.locator('.trimmed').count()) === 1, 'Show cut lines shows them dotted');
+  await page.mouse.move(mid.x - 3, mid.y);
+  await page.mouse.move(mid.x, mid.y);
+  check((await page.locator('.restore-hot').count()) === 1, 'hovering a dotted piece shows it would come back');
+  await page.mouse.click(mid.x, mid.y);
+  d = await doc();
+  check(d.trimmed?.length === 1 && d.guides.filter((g) => g.type === 'line').length === 3, 'clicking it brings the piece back as a line');
   await btn('Done').click();
   await page.keyboard.press('Control+a');
   await page.keyboard.press('Delete');
@@ -635,7 +645,7 @@ async function refinements(browser) {
   check(true, 'Save confirms that the logo is stored');
   const mine = (await doc()).guides.length;
   await btn('More options').click();
-  await page.getByRole('button', { name: 'Reset to the default design' }).click();
+  await page.getByRole('button', { name: 'Reset to default' }).click();
   await page.waitForFunction(() => Object.values(window.__lc.doc().groups).some((g) => g.text?.value === 'default'));
   check(true, 'Reset brings the default design back');
   await page.keyboard.press('Control+z');
@@ -652,8 +662,10 @@ async function phoneLayout(browser) {
   const btn = (name) => page.getByRole('button', { name, exact: true });
   const vh = page.viewportSize().height;
   const tools = await page.getByRole('toolbar', { name: 'Tools' }).boundingBox();
-  const last = await btn('Select').boundingBox();
-  check(Math.abs(last.x + last.width - (tools.x + tools.width)) < 12, 'Select sits at the right end of the tools');
+  const last = await btn('More').boundingBox();
+  const select = await btn('Select').boundingBox();
+  check(Math.abs(last.x + last.width - (tools.x + tools.width)) < 12 && select.x < last.x, 'More sits at the right end, just after Select');
+  check((await page.locator('.tool-caret').count()) === 3, 'only Shapes, Lines and Cut carry an arrow');
   check((await page.getByRole('toolbar').count()) === 2, 'with nothing selected there is one bar of tools and the colors at the side');
   const strip = await page.getByRole('toolbar', { name: 'Colors' }).boundingBox();
   check(strip.x < 20 && strip.height > strip.width * 2, 'the colors run down the left edge');
@@ -667,18 +679,29 @@ async function phoneLayout(browser) {
   const panel = page.getByRole('dialog', { name: 'Add text' });
   check((await panel.boundingBox()).height <= vh * 0.51, 'the text panel takes at most half the screen');
   check(await page.evaluate(() => document.activeElement?.tagName !== 'INPUT'), 'without calling up the keyboard');
-  await page.getByRole('button', { name: /^Fonts/ }).click();
-  await page.waitForTimeout(600);
-  check((await panel.boundingBox()).height > vh * 0.85, 'Fonts opens the whole panel');
-  const y0 = (await page.getByLabel('Preview').boundingBox()).y;
-  await page.locator('.txp-body').evaluate((el) => el.scrollTo(0, 900));
-  await page.waitForTimeout(150);
-  check(Math.abs((await page.getByLabel('Preview').boundingBox()).y - y0) < 1, 'the preview stays in place while the rest scrolls');
+  // Each setting is a page of its own, usable at half height.
+  check((await page.getByRole('group', { name: 'Fonts' }).count()) === 1, 'it opens on the fonts');
+  await page.getByRole('radio', { name: 'Size' }).click();
+  const sizeBox = await page.getByRole('slider', { name: 'Size' }).boundingBox();
+  const spacingBox = await page.getByRole('slider', { name: 'Letter spacing' }).boundingBox();
+  const panelBox = await panel.boundingBox();
+  check(sizeBox.y + sizeBox.height <= panelBox.y + panelBox.height && spacingBox.y + spacingBox.height <= panelBox.y + panelBox.height, 'Size shows both sliders without scrolling or growing the panel');
   const h0 = (await page.getByLabel('Preview').boundingBox()).height;
   await page.getByLabel('Size value').fill('460');
   await page.getByLabel('Size value').press('Enter');
   await page.waitForTimeout(150);
-  check((await page.getByLabel('Preview').boundingBox()).height > h0 * 1.2, 'and shows the size as it changes');
+  check((await page.getByLabel('Preview').boundingBox()).height > h0 * 1.2, 'the preview shows the size as it changes');
+  await page.getByRole('radio', { name: 'Color' }).click();
+  check((await page.getByRole('group', { name: 'Color' }).count()) === 1, 'Color is a page too');
+  // More room for fonts is there when wanted.
+  await page.getByRole('radio', { name: 'Font' }).click();
+  await btn('Make the panel bigger').click();
+  await page.waitForTimeout(500);
+  check((await panel.boundingBox()).height > vh * 0.85, 'the panel opens up to show more fonts at once');
+  const y0 = (await page.getByLabel('Preview').boundingBox()).y;
+  await page.locator('.txp-body').evaluate((el) => el.scrollTo(0, 900));
+  await page.waitForTimeout(150);
+  check(Math.abs((await page.getByLabel('Preview').boundingBox()).y - y0) < 1, 'the preview stays in place while the fonts scroll');
   await btn('Add').click();
   await page.waitForFunction(() => window.__lc.ui().sheet === null);
   check((await page.evaluate(() => Object.values(window.__lc.doc().groups)[0]?.text?.value)) === 'Test', 'adding with nothing typed places the word Test');
@@ -690,7 +713,7 @@ async function phoneLayout(browser) {
   const barBox = await bar.boundingBox();
   check(barBox.x >= 0 && barBox.x + barBox.width <= page.viewportSize().width, 'and its bar fits the screen without scrolling');
   await page.keyboard.press('Escape');
-  await btn('Cut').click();
+  await fromGroup(page, 'Cut', 'Cut');
   const hint = await page.locator('.hint-pill').boundingBox();
   const done = await btn('Done').boundingBox();
   check(hint.y < vh * 0.25 && done.y > vh * 0.6, 'a tool puts its hint at the top and Done at the bottom');

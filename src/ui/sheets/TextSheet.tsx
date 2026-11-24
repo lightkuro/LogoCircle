@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ALargeSmall, ChevronDown, Search, Type, Upload, X } from 'lucide-react';
+import { ChevronDown, Search, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import '@/styles/text.css';
 import { ringsToPath } from '@/geom';
@@ -11,7 +11,10 @@ import { DEFAULT_FONT, FONTS, FONT_KINDS, type FontDef, type FontKind } from '@/
 import { addCustomFont, cssFontLoaded, cssFontReady, customFonts, cssFamily, isCustomFont, removeCustomFont, restoreCustomFonts } from '@/text/load';
 import type { Layout } from '@/text/layout';
 import { useIsPhone } from '@/store/settings';
-import { Sheet, Slider } from '../primitives';
+import { Segmented, Sheet, Slider } from '../primitives';
+
+/** The pages of the phone panel. */
+type Page = 'font' | 'size' | 'color';
 
 /** What the previews say until a word has been typed. */
 const PLACEHOLDER = 'Test';
@@ -128,8 +131,8 @@ function Preview({ value, fontId, spacing, size, color, paper }: { value: string
   const w = Math.max(40, layout?.width ?? 200);
   const asc = layout?.ascent ?? 100;
   const desc = layout?.descent ?? -25;
-  // From a third of the box at the smallest size to all of it at the largest on the slider.
-  const k = 0.34 + 0.66 * Math.max(0, Math.min(1, (size - 40) / 440));
+  // From half the box at the smallest size to all of it at the largest on the slider.
+  const k = 0.5 + 0.5 * Math.max(0, Math.min(1, (size - 40) / 440));
   return (
     <div className={`tx-preview${paper ? '' : ' tx-checker'}`} style={paper ? { background: paper } : undefined} data-paper={paper ?? 'none'}>
       <svg viewBox={`${-6} ${-asc} ${w + 12} ${asc - desc}`} style={{ height: `${Math.round(k * 100)}%` }} aria-label="Preview">
@@ -251,13 +254,7 @@ function HalfPanel({
             setPull(null);
           }}
         >
-          <button type="button" className="txp-grip" aria-label={expanded ? 'Make the panel smaller' : 'Show everything'} aria-expanded={expanded} />
-          <div className="txp-head">
-            <span className="sheet-title">{title}</span>
-            <button type="button" className="ib" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={onClose}>
-              <X />
-            </button>
-          </div>
+          <button type="button" className="txp-grip" aria-label={expanded ? 'Make the panel smaller' : 'Make the panel bigger'} aria-expanded={expanded} />
         </div>
         <div className="txp-top">{top}</div>
         <div className="txp-body" ref={bodyRef}>
@@ -290,9 +287,8 @@ export function TextSheet() {
   const file = useRef<HTMLInputElement>(null);
   const phone = useIsPhone();
   const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState<Page>('font');
   const body = useRef<HTMLDivElement>(null);
-  const fontsAt = useRef<HTMLDivElement>(null);
-  const sizeAt = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -305,6 +301,7 @@ export function TextSheet() {
     setQuery('');
     setKind('all');
     setExpanded(false);
+    setPage('font');
     // A font from the long list stays in sight when the sheet reopens.
     setMore(MORE.some((f) => f.id === font));
     setMine(customFonts());
@@ -317,14 +314,9 @@ export function TextSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, target]);
 
-  /** Open the whole panel and bring one of its sections to the top. */
-  const showSection = (at: React.RefObject<HTMLDivElement | null>): void => {
-    setExpanded(true);
-    setTimeout(() => {
-      const el = at.current;
-      const box = body.current;
-      if (el && box) box.scrollTo({ top: el.offsetTop - box.offsetTop, behavior: 'smooth' });
-    }, 60);
+  const goTo = (p: Page): void => {
+    setPage(p);
+    body.current?.scrollTo({ top: 0 });
   };
 
   const pick = (id: string): void => {
@@ -412,15 +404,20 @@ export function TextSheet() {
   );
   const preview = <Preview value={value} fontId={fontId} spacing={spacing} size={size} color={resolveFill({ palette }, safeFill)} paper={paper} />;
 
+  const ownFont = (
+    <button type="button" className="tx-pill" onClick={() => file.current?.click()}>
+      <Upload />
+      Your font
+    </button>
+  );
   const fonts = (
     <>
-      <div className="tx-row" style={{ marginTop: 4 }} ref={fontsAt}>
-        <span className="label">Font</span>
-        <button type="button" className="tx-pill" onClick={() => file.current?.click()}>
-          <Upload />
-          Your font
-        </button>
-      </div>
+      {!phone && (
+        <div className="tx-row" style={{ marginTop: 4 }}>
+          <span className="label">Font</span>
+          {ownFont}
+        </div>
+      )}
       <input
         ref={file}
         type="file"
@@ -444,7 +441,7 @@ export function TextSheet() {
 
       <button type="button" className="tx-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>
         <span>
-          More fonts <small>{MORE.length} to choose from</small>
+          More fonts
         </span>
         <ChevronDown />
       </button>
@@ -488,15 +485,32 @@ export function TextSheet() {
           )}
         </>
       )}
+      {phone && <div className="tx-row">{ownFont}</div>}
     </>
   );
 
-  const sliders = (
-    <div ref={sizeAt}>
+  const sizeSlider = <Slider label="Size" min={40} max={480} step={2} typeMax={1200} value={size} onChange={setSize} format={(v) => String(Math.round(v))} />;
+  const spacingSlider = (
+    <Slider label="Letter spacing" min={-8} max={40} typeMax={200} value={Math.round(spacing * 100)} onChange={(v) => setSpacing(v / 100)} format={(v) => String(Math.round(v))} />
+  );
+  const sliders = phone ? (
+    // Phones: one line each, so both fit in the half-height panel.
+    <div className="txp-sliders">
+      <div className="txp-slider">
+        <span>Size</span>
+        {sizeSlider}
+      </div>
+      <div className="txp-slider">
+        <span>Spacing</span>
+        {spacingSlider}
+      </div>
+    </div>
+  ) : (
+    <div>
       <div className="label">Size</div>
-      <Slider label="Size" min={40} max={480} step={2} typeMax={1200} value={size} onChange={setSize} format={(v) => String(Math.round(v))} />
+      {sizeSlider}
       <div className="label">Letter spacing</div>
-      <Slider label="Letter spacing" min={-8} max={40} typeMax={200} value={Math.round(spacing * 100)} onChange={(v) => setSpacing(v / 100)} format={(v) => String(Math.round(v))} />
+      {spacingSlider}
     </div>
   );
 
@@ -512,7 +526,6 @@ export function TextSheet() {
   );
 
   if (phone) {
-    const fontName = [...mine, ...FONTS].find((f) => f.id === fontId)?.name ?? 'Font';
     return (
       <HalfPanel
         open={open}
@@ -528,37 +541,25 @@ export function TextSheet() {
               {field}
               {add}
             </div>
+            <div className="txp-tabs">
+              <Segmented<Page>
+                label="Text settings"
+                value={page}
+                onChange={goTo}
+                options={[
+                  { value: 'font', label: 'Font' },
+                  { value: 'size', label: 'Size' },
+                  { value: 'color', label: 'Color' },
+                ]}
+              />
+              <button type="button" className="ib" aria-label="Close" onClick={close}>
+                <X />
+              </button>
+            </div>
           </>
         }
       >
-        {expanded ? (
-          <>
-            {fonts}
-            {sliders}
-            <div className="label">Color</div>
-            {colors}
-          </>
-        ) : (
-          <>
-            <div className="txp-big">
-              <button type="button" className="txp-bigbtn" onClick={() => showSection(fontsAt)}>
-                <Type />
-                <span>
-                  <b>Fonts</b>
-                  <small>{fontName}</small>
-                </span>
-              </button>
-              <button type="button" className="txp-bigbtn" onClick={() => showSection(sizeAt)}>
-                <ALargeSmall />
-                <span>
-                  <b>Size and spacing</b>
-                  <small>{Math.round(size)}</small>
-                </span>
-              </button>
-            </div>
-            {colors}
-          </>
-        )}
+        {page === 'font' ? fonts : page === 'size' ? sliders : colors}
       </HalfPanel>
     );
   }

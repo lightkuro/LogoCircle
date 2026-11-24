@@ -30,6 +30,7 @@
   /* Alignment lines while dragging: present, but quiet. */
   --snap: #7786a3;
   --danger: #e5484d;
+  --restore: #1f9d55;
   --ink-button: #18181b;
   --ink-button-text: #ffffff;
   --shadow-float: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.1);
@@ -207,6 +208,8 @@ select {
   height: 100%;
   touch-action: none;
   outline: none;
+  /* Its own compositing layer: Safari then refreshes the frosted bars over it as it changes. */
+  transform: translateZ(0);
 }
 
 .checker-a {
@@ -274,12 +277,21 @@ select {
 /* Cut lines: clearly construction, never mistaken for artwork. */
 .guide.is-cut .guide-halo {
   stroke-width: 2.6px;
-  opacity: 0.7;
+  opacity: 0.5;
 }
-.guide.is-cut .guide-line {
-  stroke-dasharray: 5 4;
-  stroke-width: 1px;
-  opacity: 0.75;
+.guide.is-cut .guide-line,
+.trimmed {
+  stroke-dasharray: 0.5 4.5;
+  stroke-width: 1.6px;
+  opacity: 0.5;
+}
+/* Removed pieces: faint dots, never mistaken for an outline. */
+.trimmed {
+  fill: none;
+  stroke: var(--guide);
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 .ghost {
   fill: none;
@@ -293,6 +305,15 @@ select {
 .snap-line {
   stroke: var(--snap);
   stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+/* A dotted piece the Cut tool is about to bring back. */
+.restore-hot {
+  fill: none;
+  stroke: var(--restore);
+  stroke-width: 3px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
 /* The piece of outline the Cut tool is about to remove. */
@@ -441,7 +462,8 @@ select {
   background: var(--surface);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: var(--shadow-float);
+  /* --nudge flips by a hundredth of a pixel while the canvas moves, so Safari redraws the blur (see ui/backdrop.ts) */
+  box-shadow: var(--shadow-float), 0 0 0 var(--nudge, 0px) transparent;
   border-radius: var(--radius-chrome);
 }
 
@@ -1132,18 +1154,19 @@ select {
   position: relative;
   display: inline-flex;
 }
-/* A group's label carries a small arrow: there is more behind this button. */
-.tool-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
+/* A small arrow centred on top: this button holds more than one tool. */
+.tool-more {
+  position: relative;
 }
 .tool .tool-caret {
-  width: 11px;
-  height: 11px;
-  stroke-width: 2.6px;
-  opacity: 0.6;
-  margin-right: -3px;
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  stroke-width: 3px;
+  opacity: 0.45;
   transition: transform 160ms var(--ease-out);
 }
 .tool .tool-caret[data-open] {
@@ -1502,11 +1525,12 @@ html[data-layout='phone'] .tool {
   height: 17px;
 }
 .color-fold {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 46px;
-  height: 46px;
+  width: 36px;
+  height: 36px;
   border: 0;
   border-radius: 999px;
   color: var(--text);
@@ -1520,8 +1544,14 @@ html[data-layout='phone'] .tool {
   height: 20px;
 }
 .color-fold .swatch-dot {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
+}
+/* a comfortable target around the small button */
+.color-fold::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1537,4 +1567,78 @@ html[data-layout='phone'] .tool {
     opacity: 0;
     transform: translateY(-50%) translateX(-4px) scale(0.97);
   }
+}
+
+/* An on/off switch inside a menu row. */
+.menu-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 30px;
+  height: 18px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background-color 160ms ease;
+}
+.menu-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 160ms var(--ease-out);
+}
+.menu-switch[data-on] {
+  background: var(--accent);
+}
+.menu-switch[data-on]::after {
+  transform: translateX(12px);
+  background: var(--accent-ink);
+}
+.menu-item kbd + .menu-switch {
+  margin-left: 10px;
+}
+/* Holds the paper's color panel; takes no room itself. */
+.paper-anchor {
+  width: 0;
+  align-self: stretch;
+}
+
+/* The (i) beside a setting, and what it says. */
+.info-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  vertical-align: middle;
+}
+.info-btn::before {
+  content: '';
+  position: absolute;
+  inset: -11px;
+}
+.info-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.info-btn[data-popup-open] {
+  color: var(--text);
+}
+.info-pop {
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
 }

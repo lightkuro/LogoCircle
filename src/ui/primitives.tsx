@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
+import { Popover } from '@base-ui/react/popover';
 import { Drawer } from '@base-ui/react/drawer';
 import { Slider as BaseSlider } from '@base-ui/react/slider';
 import { Tooltip } from '@base-ui/react/tooltip';
-import { X } from 'lucide-react';
+import { Info, X } from 'lucide-react';
 
 export { useIsPhone, useIsTouch } from '@/store/settings';
 import { useIsPhone } from '@/store/settings';
@@ -40,6 +41,25 @@ export function Tip({ label, keys, children, side = 'top' }: { label: string; ke
 }
 
 export const TipProvider = Tooltip.Provider;
+
+/**
+ * A small (i) that explains the thing beside it, in place of a line of small
+ * print. Opens on hover with a mouse and on a tap with a finger.
+ */
+export function InfoTip({ text, about }: { text: string; about: string }) {
+  return (
+    <Popover.Root>
+      <Popover.Trigger className="info-btn" aria-label={`About ${about}`} openOnHover delay={120} closeDelay={80}>
+        <Info />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner side="top" sideOffset={8} collisionPadding={10} style={{ zIndex: 90 }}>
+          <Popover.Popup className="pop info-pop">{text}</Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
 
 // --- Buttons ----------------------------------------------------------------
 
@@ -80,7 +100,18 @@ export function ToolButton({ label, keys, active, icon, ...rest }: ToolButtonPro
 
 // --- Segmented control ------------------------------------------------------
 
-export function Segmented<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; label: string }) {
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+  label,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  /** `tip` explains an option on hover, with a mouse. */
+  options: { value: T; label: string; tip?: string }[];
+  label: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [pill, setPill] = useState({ x: 0, w: 0 });
   useLayoutEffect(() => {
@@ -90,11 +121,20 @@ export function Segmented<T extends string>({ value, onChange, options, label }:
   return (
     <div className="seg" ref={ref} role="radiogroup" aria-label={label}>
       <span className="seg-pill" style={{ width: pill.w, transform: `translateX(${pill.x}px)` }} />
-      {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={o.value === value} data-active={o.value === value} onClick={() => onChange(o.value)}>
-          {o.label}
-        </button>
-      ))}
+      {options.map((o) => {
+        const b = (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value} data-active={o.value === value} onClick={() => onChange(o.value)}>
+            {o.label}
+          </button>
+        );
+        return o.tip ? (
+          <Tip key={o.value} label={o.tip} side="bottom">
+            {b}
+          </Tip>
+        ) : (
+          b
+        );
+      })}
     </div>
   );
 }

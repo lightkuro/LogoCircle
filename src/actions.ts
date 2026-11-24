@@ -572,9 +572,9 @@ export async function resetToStarter(): Promise<void> {
   const fresh = await import('@/examples/starter').then((m) => m.buildStarter());
   const doc = getDoc();
   commit({ ...fresh, id: doc.id, name: doc.name, createdAt: doc.createdAt, updatedAt: Date.now() });
-  useUi.setState({ selection: [], tool: 'arrange', erasing: false, selectMode: 'move', showGuides: true, showCuts: true, frameEdit: false, colorPanel: null, menu: null, ink: 0, sheet: null, lastDup: null });
+  useUi.setState({ selection: [], tool: 'arrange', erasing: false, selectMode: 'move', showGuides: true, frameEdit: false, colorPanel: null, menu: null, ink: 0, sheet: null, lastDup: null });
   fitToScreen();
-  toast('Back to the default design', { description: 'Undo brings your logo back.', action: { label: 'Undo', onClick: () => useDoc.getState().undo() } });
+  toast('Back to the default', { description: 'Undo brings your logo back.', action: { label: 'Undo', onClick: () => useDoc.getState().undo() } });
 }
 
 // --- text -----------------------------------------------------------------------

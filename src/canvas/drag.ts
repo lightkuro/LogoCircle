@@ -37,11 +37,13 @@ interface DragState {
   /** The piece of outline the Cut tool would remove, as path data, and its thickness. */
   trim: string | null;
   trimWidth: number;
+  /** A dotted piece the Cut tool would bring back, as path data. */
+  restore: string | null;
   set: (patch: Partial<DragState>) => void;
   reset: () => void;
 }
 
-const EMPTY: Pick<DragState, 'ids' | 'mat' | 'guide' | 'paint' | 'hover' | 'marquee' | 'snapLines' | 'loupe' | 'draft' | 'draftWidth' | 'draftDashed' | 'shapeRings' | 'board' | 'hold' | 'trim' | 'trimWidth'> = {
+const EMPTY: Pick<DragState, 'ids' | 'mat' | 'guide' | 'paint' | 'hover' | 'marquee' | 'snapLines' | 'loupe' | 'draft' | 'draftWidth' | 'draftDashed' | 'shapeRings' | 'board' | 'hold' | 'trim' | 'trimWidth' | 'restore'> = {
   ids: null,
   mat: null,
   guide: null,
@@ -58,6 +60,7 @@ const EMPTY: Pick<DragState, 'ids' | 'mat' | 'guide' | 'paint' | 'hover' | 'marq
   hold: null,
   trim: null,
   trimWidth: 0,
+  restore: null,
 };
 
 export const useDrag = create<DragState>((set) => ({

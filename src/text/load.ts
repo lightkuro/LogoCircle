@@ -4,13 +4,19 @@ import { DEFAULT_FONT, FONTS, type FontDef } from './fonts';
 import { styleTable, type TextStyle } from './styles';
 
 const parsed = new Map<string, Promise<Font>>();
+
+/** opentype.js's parse, loaded on first use (under `default` when run by Node, for the recipe script). */
+async function opentypeParse(): Promise<(typeof import('opentype.js'))['parse']> {
+  const m = (await import('opentype.js')) as typeof import('opentype.js') & { default?: typeof import('opentype.js') };
+  return m.parse ?? m.default!.parse;
+}
 const custom = new Map<string, { def: FontDef; data: ArrayBuffer }>();
 
 async function parse(url: string): Promise<Font> {
   let p = parsed.get(url);
   if (!p) {
     p = (async () => {
-      const [{ parse: parseFont }, res] = await Promise.all([import('opentype.js'), fetch(url)]);
+      const [parseFont, res] = await Promise.all([opentypeParse(), fetch(url)]);
       if (!res.ok) throw new Error(`Font failed to load (${res.status})`);
       return parseFont(await res.arrayBuffer());
     })();
@@ -83,7 +89,7 @@ export async function loadFont(id: string, style?: Pick<TextStyle, 'weight' | 'i
     const key = `custom:${id}`;
     let p = parsed.get(key);
     if (!p) {
-      p = import('opentype.js').then(({ parse: parseFont }) => parseFont(c.data));
+      p = opentypeParse().then((parseFont) => parseFont(c.data));
       parsed.set(key, p);
       p.catch(() => parsed.delete(key));
     }
@@ -100,7 +106,7 @@ export async function loadFont(id: string, style?: Pick<TextStyle, 'weight' | 'i
 /** Register a font file the person uploaded. Returns its definition. */
 export async function addCustomFont(file: File): Promise<FontDef> {
   const data = await file.arrayBuffer();
-  const { parse: parseFont } = await import('opentype.js');
+  const parseFont = await opentypeParse();
   const font = parseFont(data); // throws on files it cannot read
   let name = '';
   try {

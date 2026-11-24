@@ -1,0 +1,18 @@
+{
+  "name": "Leaf",
+  "palette": ["#2f6f3e", "#7cb87e"],
+  "outlines": [
+    { "type": "circle", "cx": 432, "cy": 450, "r": 200 },
+    { "type": "circle", "cx": 592, "cy": 450, "r": 200 },
+    { "type": "line", "from": [512, 230], "to": [512, 680] }
+  ],
+  "trim": [
+    [512, 245],
+    [512, 665]
+  ],
+  "color": [
+    [470, 450, 0],
+    [555, 450, 1]
+  ],
+  "text": [{ "text": "leaf", "font": "paper-mono", "size": 150, "y": 830, "color": 0, "features": ["cv01"] }]
+}

@@ -85,12 +85,8 @@ export function MenuSheet() {
         }}
       />
       <Row icon={<LayoutGrid />} label="My logos" onClick={() => useUi.setState({ sheet: 'gallery', galleryTab: 'mine' })} />
-      {mode === 'advanced' && (
-        <>
-          <Row icon={<Save />} label="Save project file" hint="Everything, with outlines and photos" onClick={() => void saveProjectFile().then(close)} />
-          <Row icon={<FolderOpen />} label="Open project file" onClick={() => void openProjectFile().then(close)} />
-        </>
-      )}
+      {mode === 'advanced' && <Row icon={<Save />} label="Save project file" hint="Everything, with outlines and photos" onClick={() => void saveProjectFile().then(close)} />}
+      <Row icon={<FolderOpen />} label="Open project file" hint="Or drag one onto the canvas" onClick={() => void openProjectFile().then(close)} />
       <Row icon={<Settings />} label="Settings" hint="Layout, appearance, mouse and keyboard" onClick={() => useUi.setState({ sheet: 'settings' })} />
       <div className="menu-foot">
         <button type="button" className="menu-foot-version" aria-label={`Version ${VERSION}: what's new`} onClick={() => useUi.setState({ sheet: 'changes' })}>

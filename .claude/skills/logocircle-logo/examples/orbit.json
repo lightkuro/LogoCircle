@@ -1,0 +1,41 @@
+{
+  "name": "Orbit",
+  "palette": ["#1f3a5f", "#f2a541"],
+  "outlines": [
+    {
+      "type": "circle",
+      "cx": 512,
+      "cy": 440,
+      "r": 160
+    },
+    {
+      "type": "circle",
+      "cx": 512,
+      "cy": 440,
+      "r": 245,
+      "width": 18,
+      "band": "mid"
+    },
+    {
+      "type": "circle",
+      "cx": 726,
+      "cy": 226,
+      "r": 38
+    }
+  ],
+  "color": [
+    [512, 440, 0],
+    [512, 195, 1],
+    [726, 226, 1]
+  ],
+  "text": [
+    {
+      "text": "ORBIT",
+      "font": "unbounded",
+      "size": 110,
+      "y": 860,
+      "color": 0,
+      "spacing": 0.06
+    }
+  ]
+}

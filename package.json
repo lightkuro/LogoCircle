@@ -1,7 +1,7 @@
 {
   "name": "logocircle",
   "private": true,
-  "version": "1.14.0",
+  "version": "1.15.0",
   "type": "module",
   "license": "GPL-3.0-or-later",
   "scripts": {
@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "deploy": "npm run build && wrangler deploy",
-    "e2e": "node e2e/smoke.mjs"
+    "e2e": "node e2e/smoke.mjs",
+    "logo": "node scripts/logo.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

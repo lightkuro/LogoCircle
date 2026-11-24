@@ -26,6 +26,16 @@ The version number at the foot of the LogoCircle menu opens What's new, kept in 
 
 Everything is stored on your device (IndexedDB). Nothing is uploaded. The privacy and terms page is `public/privacy.html`, served at `/privacy`.
 
+## Logo recipes (for agents and scripts)
+
+A logo can be described as a short JSON recipe (outlines, the spots to color, words) and built into a project file with the app's own engine:
+
+```bash
+npm run logo -- path/to/recipe.json
+```
+
+It writes `<name>.logocircle.json` (drag it onto the canvas, or LogoCircle menu › Open project file), the exported `<name>.svg`, and PNG previews with and without the outlines (with Playwright installed), and prints any warnings, such as a color spot that landed in no area. `npm run logo -- --fonts` lists the fonts. The recipe format, a workflow and design notes are in the agent skill at `.claude/skills/logocircle-logo/SKILL.md`, with examples beside it; the builder is `src/recipe/`.
+
 ## Develop
 
 Requires Node 22 or newer.

@@ -1,0 +1,26 @@
+{
+  "name": "Peak",
+  "palette": ["#2d6a4f", "#b7e4c7"],
+  "outlines": [
+    {
+      "type": "polygon",
+      "points": [
+        [512, 190],
+        [800, 690],
+        [224, 690]
+      ]
+    },
+    { "type": "line", "from": [330, 430], "to": [694, 430] },
+    { "type": "circle", "cx": 770, "cy": 250, "r": 64 }
+  ],
+  "trim": [
+    [345, 430],
+    [680, 430]
+  ],
+  "color": [
+    [512, 330, 1],
+    [512, 600, 0],
+    [770, 250, 1]
+  ],
+  "text": [{ "text": "PEAK", "font": "bebas-neue", "size": 190, "y": 880, "color": 0, "spacing": 0.08 }]
+}

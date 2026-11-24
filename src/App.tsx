@@ -18,6 +18,7 @@ import { AdvancedPanel } from '@/ui/advanced/Panel';
 import { thumbnail } from '@/export/svg';
 import { isTyping } from '@/canvas/useGestures';
 import { startBackdropNudge } from '@/ui/backdrop';
+import { isProjectFile, openProjectFromFile } from '@/advanced/files';
 
 const seenBefore = (): boolean => {
   try {
@@ -74,7 +75,15 @@ export function App() {
       if (pasteFromSystem(file ?? null)) e.preventDefault();
     };
     const onDrop = (e: DragEvent): void => {
-      const file = [...(e.dataTransfer?.files ?? [])].find((f) => f.type.startsWith('image/'));
+      const files = [...(e.dataTransfer?.files ?? [])];
+      // a LogoCircle project file (from Save project file, or built from a recipe) opens as a logo
+      const project = files.find(isProjectFile);
+      if (project) {
+        e.preventDefault();
+        void openProjectFromFile(project);
+        return;
+      }
+      const file = files.find((f) => f.type.startsWith('image/'));
       if (file) {
         e.preventDefault();
         void addPhoto(file);

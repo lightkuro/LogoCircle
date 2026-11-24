@@ -1,0 +1,13 @@
+{
+  "name": "Star badge",
+  "palette": ["#b23a48", "#ffffff"],
+  "outlines": [
+    { "type": "rect", "cx": 512, "cy": 500, "w": 560, "h": 560, "radius": 90 },
+    { "type": "regular", "cx": 512, "cy": 440, "r": 160, "sides": 5, "star": 0.45 }
+  ],
+  "color": [
+    [320, 320, 0],
+    [512, 450, 1]
+  ],
+  "text": [{ "text": "STAR CO", "font": "archivo-black", "size": 78, "y": 700, "color": 1, "spacing": 0.04 }]
+}

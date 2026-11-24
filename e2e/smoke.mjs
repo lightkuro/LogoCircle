@@ -4,9 +4,9 @@
 //   npm run build && npm run e2e
 //
 // Needs Playwright with Chromium available (`npm i -D playwright && npx playwright install chromium`).
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -1381,6 +1381,38 @@ async function pasting(browser) {
   await ctx.close();
 }
 
+async function recipes(browser) {
+  console.log('\nLogo recipes: built by npm run logo, dropped onto the canvas');
+  const out = join(shots, 'recipe');
+  const run = spawnSync(process.execPath, [join(here, '..', 'scripts', 'logo.mjs'), join(here, '..', '.claude', 'skills', 'logocircle-logo', 'examples', 'peak.json'), '--out', out, '--no-png'], { encoding: 'utf8' });
+  let built = null;
+  try {
+    built = JSON.parse(run.stdout);
+  } catch {
+    /* reported below */
+  }
+  check(run.status === 0 && built && built.warnings.length === 0, `npm run logo builds the Peak example (${run.status === 0 ? built?.summary?.areas + ' areas' : run.stderr.slice(0, 120)})`);
+  if (!built) return;
+  const json = readFileSync(built.file, 'utf8');
+  const { ctx, page, errors } = await fresh(browser, false);
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  check((await page.getByRole('button', { name: /^Open project file/ }).count()) === 1, 'Open project file is in the menu in Classic too');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  // dropped onto the canvas, as from a file manager
+  await page.evaluate((text) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([text], 'peak.logocircle.json', { type: 'application/json' }));
+    document.querySelector('.stage-svg').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, json);
+  await page.waitForFunction(() => window.__lc.doc().name === 'Peak', null, { timeout: 5000 }).catch(() => {});
+  const d = await page.evaluate(() => ({ name: window.__lc.doc().name, guides: window.__lc.doc().guides.length, shapes: window.__lc.doc().shapes.length }));
+  check(d.name === 'Peak' && d.guides === 3 && d.shapes === built.summary.areas + built.summary.letters, `dropping the project file opens the logo, outlines and all (${JSON.stringify(d)})`);
+  await page.screenshot({ path: join(shots, 'recipe-opened.png') });
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 async function mirrorAndPicking(browser) {
   console.log('\nMirror copy, one at a time, hold and drag');
   // Mirror copy, with a mouse.
@@ -1700,7 +1732,7 @@ try {
       await fn(b, false);
       await fn(b, true);
     };
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, bordersAndFlips, pasting, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, bordersAndFlips, pasting, recipes, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1723,6 +1755,7 @@ try {
   await movePoints(browser);
   await bordersAndFlips(browser);
   await pasting(browser);
+  await recipes(browser);
   await textDesktop(browser);
 } catch (err) {
   if (err !== 'only') {

@@ -46,7 +46,14 @@ export async function saveProjectFile(): Promise<void> {
 
 export async function openProjectFile(): Promise<void> {
   const f = await pickFile('.json,application/json');
-  if (!f) return;
+  if (f) await openProjectFromFile(f);
+}
+
+/** Does this file look like a LogoCircle project (by its name or type)? */
+export const isProjectFile = (f: File): boolean => /\.json$/i.test(f.name) || f.type === 'application/json';
+
+/** Open a project file: from the menu, or dropped onto the canvas. */
+export async function openProjectFromFile(f: File): Promise<void> {
   try {
     const data = JSON.parse(await f.text()) as ProjectFile;
     if (data.app !== 'logocircle' || data.doc?.v !== 1) throw new Error('not a project');

@@ -73,7 +73,7 @@ export function ContextMenu() {
             disabled={it.disabled}
             onClick={() => {
               // A finger lifting off sends a stray click right where the menu just appeared: not a choice.
-              if (performance.now() - openedAt.current < 350) return;
+              if (menu.touch && performance.now() - openedAt.current < 350) return;
               useUi.setState({ menu: null });
               it.onSelect();
             }}

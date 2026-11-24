@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { LucideIcon } from 'lucide-react';
 import type { Mat } from '@/geom';
+import type { PatternSpec } from '@/model/pattern';
+import type { Crossing } from '@/model/fillet';
 
 export type Mode = 'classic' | 'advanced';
 /** arrange = move things around; color = tap areas; pen/brush are Advanced drawing tools. */
@@ -23,6 +25,10 @@ export interface MenuItem {
   /** A color dot shown before the label. */
   swatch?: string;
   icon?: LucideIcon;
+  /** A tick after the label: something switched on. */
+  checked?: boolean;
+  /** A heading that opens to these items (beside it with a mouse, in place with a finger). */
+  children?: MenuItem[];
 }
 
 export interface View {
@@ -42,6 +48,12 @@ interface UiState {
   selectMode: SelectMode;
   /** Touch: keep adding to the selection on tap. */
   multi: boolean;
+  /** "Move": the selection (by its key) shows only moving and turning, for small things that are hard to grab. */
+  moveOnly: string | null;
+  /** A pattern being set up: what is repeated, how, and the key of everything it selects. */
+  pattern: { ids: string[]; spec: PatternSpec; key: string } | null;
+  /** A crossing being rounded off, and the radius so far. */
+  fillet: { crossing: Crossing; r: number; max: number } | null;
   view: View;
   stage: { w: number; h: number };
   showGuides: boolean;
@@ -109,6 +121,9 @@ export const useUi = create<UiState>((set) => ({
   selection: [],
   selectMode: 'move',
   multi: false,
+  moveOnly: null,
+  pattern: null,
+  fillet: null,
   view: { x: 0, y: 0, k: 1 },
   stage: { w: 0, h: 0 },
   showGuides: true,
@@ -146,6 +161,7 @@ useUi.subscribe((s) => {
   if (s.corner && (s.tool !== 'arrange' || s.selection.length !== 1 || s.selection[0] !== s.corner.id)) useUi.setState({ corner: null });
   if (s.frameEdit && s.tool !== 'arrange') useUi.setState({ frameEdit: false });
   if (s.colorAnchor && s.colorPanel !== 'paper') useUi.setState({ colorAnchor: null });
+  if (s.moveOnly && (s.tool !== 'arrange' || selectionKey(s.selection) !== s.moveOnly)) useUi.setState({ moveOnly: null });
 });
 
 export const selectionKey = (ids: string[]): string => [...ids].sort().join(',');

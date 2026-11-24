@@ -56,6 +56,21 @@ export function lineChain(x0: number, y0: number, x1: number, y1: number): Chain
 }
 
 /** The outline of a thick line with round caps (a "stadium"). */
+/** A thick straight line with square ends that stop at the line's ends. */
+export function barChain(x0: number, y0: number, x1: number, y1: number, width: number): Chain {
+  const r = width / 2;
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return capsuleChain(x0, y0, x1, y1, width);
+  const nx = (-dy / len) * r;
+  const ny = (dx / len) * r;
+  return {
+    closed: true,
+    edges: [lineEdge(x0 - nx, y0 - ny, x1 - nx, y1 - ny), lineEdge(x1 - nx, y1 - ny, x1 + nx, y1 + ny), lineEdge(x1 + nx, y1 + ny, x0 + nx, y0 + ny), lineEdge(x0 + nx, y0 + ny, x0 - nx, y0 - ny)],
+  };
+}
+
 export function capsuleChain(x0: number, y0: number, x1: number, y1: number, width: number): Chain {
   const r = width / 2;
   const dx = x1 - x0;

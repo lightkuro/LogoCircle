@@ -49,12 +49,7 @@ export function frameLocalToDoc(f: Frame, lx: number, ly: number): Pt {
 export function frameCorners(f: Frame): Pt[] {
   const hw = f.w / 2;
   const hh = f.h / 2;
-  return [
-    frameLocalToDoc(f, -hw, -hh),
-    frameLocalToDoc(f, hw, -hh),
-    frameLocalToDoc(f, hw, hh),
-    frameLocalToDoc(f, -hw, hh),
-  ];
+  return [frameLocalToDoc(f, -hw, -hh), frameLocalToDoc(f, hw, -hh), frameLocalToDoc(f, hw, hh), frameLocalToDoc(f, -hw, hh)];
 }
 
 export function singleGuide(doc: Doc, ids: string[]): Guide | null {
@@ -98,6 +93,13 @@ export function selectionFrame(doc: Doc, ids: string[], hint?: { key: string; ro
     const g = doc.guides.find((x) => x.id === ids[0]);
     if (g?.type === 'ellipse' && !(g.width && g.band === 'out')) return { cx: g.cx, cy: g.cy, w: g.rx * 2, h: g.ry * 2, rot: g.rot };
     if (g?.type === 'rect' && !(g.width && g.band === 'out')) return { cx: g.cx, cy: g.cy, w: g.w, h: g.h, rot: g.rot };
+    if (g?.type === 'line') {
+      // Along the line, turned so its top faces up: the rotation knob sits above the middle.
+      let a = Math.atan2(g.y1 - g.y0, g.x1 - g.x0);
+      if (a > Math.PI / 2) a -= Math.PI;
+      else if (a <= -Math.PI / 2) a += Math.PI;
+      return { cx: (g.x0 + g.x1) / 2, cy: (g.y0 + g.y1) / 2, w: Math.hypot(g.x1 - g.x0, g.y1 - g.y0), h: g.width ?? 0, rot: a };
+    }
     const r = doc.refs.find((x) => x.id === ids[0]);
     if (r) return { cx: r.cx, cy: r.cy, w: r.w, h: r.h, rot: r.rot };
   }
@@ -174,15 +176,18 @@ export const ROT_OFFSET_PX = 30;
  * Which handles to offer. `k` is the zoom (screen px per document unit), used
  * to drop handles that would crowd each other on a small selection.
  */
-export function placeHandles(doc: Doc, ids: string[], frame: Frame, k: number): PlacedHandle[] {
+export function placeHandles(doc: Doc, ids: string[], frame: Frame, k: number, moveOnly = false): PlacedHandle[] {
   const out: PlacedHandle[] = [];
+  // "Move": only the knob for turning; the rest of it is for dragging.
+  if (moveOnly) return [{ handle: { kind: 'rot' }, p: frameLocalToDoc(frame, 0, -frame.h / 2 - ROT_OFFSET_PX / k) }];
   const g = singleGuide(doc, ids);
-  if (g?.type === 'line') {
-    guideHandles(g).forEach((p, index) => out.push({ handle: { kind: 'pt', index }, p }));
-    return out;
-  }
   const hw = frame.w / 2;
   const hh = frame.h / 2;
+  if (g?.type === 'line') {
+    guideHandles(g).forEach((p, index) => out.push({ handle: { kind: 'pt', index }, p }));
+    out.push({ handle: { kind: 'rot' }, p: frameLocalToDoc(frame, 0, -hh - ROT_OFFSET_PX / k) });
+    return out;
+  }
   const pointy = g && (g.type === 'poly' || g.type === 'curve' || g.type === 'path');
   // A polygon is stretched by its sides like a box; its points are for fine changes.
   const stretchy = g?.type === 'poly';
@@ -239,10 +244,7 @@ function toLocal(f: Frame, p: Pt, pivot: Pt): Pt {
 }
 
 function scaleAbout(f: Frame, pivot: Pt, sx: number, sy: number): Mat {
-  return mul(
-    translate(pivot.x, pivot.y),
-    mul(rotate(f.rot), mul(scale(sx, sy), mul(rotate(-f.rot), translate(-pivot.x, -pivot.y)))),
-  );
+  return mul(translate(pivot.x, pivot.y), mul(rotate(f.rot), mul(scale(sx, sy), mul(rotate(-f.rot), translate(-pivot.x, -pivot.y)))));
 }
 
 const MIN_SCALE = 0.02;

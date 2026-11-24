@@ -154,7 +154,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       let bestD = radius;
       // On a polygon, stretching wins over moving a single point where the two meet.
       const stretchy = s.selection.length === 1 && doc.guides.find((x) => x.id === s.selection[0])?.type === 'poly';
-      for (const h of placeHandles(doc, s.selection, frame, s.view.k)) {
+      for (const h of placeHandles(doc, s.selection, frame, s.view.k, s.moveOnly === selectionKey(s.selection))) {
         const sp = toScreen(s.view, h.p);
         // Otherwise point handles win ties against the box handles they may sit on.
         const bias = h.handle.kind === 'pt' ? -4 : h.handle.kind === 'mid' ? 2 : h.handle.kind === 'box' && stretchy ? -6 : 0;
@@ -345,7 +345,9 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           const sn = Math.sin(-f.rot);
           const lx = (press.startDoc.x - f.cx) * c - (press.startDoc.y - f.cy) * sn;
           const ly = (press.startDoc.x - f.cx) * sn + (press.startDoc.y - f.cy) * c;
-          if (Math.abs(lx) <= f.w / 2 && Math.abs(ly) <= f.h / 2) hit = s.selection[0];
+          // "Move": a small thing can be grabbed a little way outside its box too.
+          const pad = s.moveOnly === selectionKey(s.selection) ? (press.touch ? 24 : 14) / s.view.k : 0;
+          if (Math.abs(lx) <= f.w / 2 + pad && Math.abs(ly) <= f.h / 2 + pad) hit = s.selection[0];
         }
       }
       const single = s.selectMode === 'single' && !press.fromColor;

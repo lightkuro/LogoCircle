@@ -18,6 +18,7 @@ window.addEventListener('vite:preloadError', () => {
 (window as unknown as { __lc: unknown }).__lc = {
   doc: () => useDoc.getState().doc,
   ui: () => useUi.getState(),
+  commit: (doc: Parameters<ReturnType<typeof useDoc.getState>['commit']>[0]) => useDoc.getState().commit(doc),
   svg: (options?: Parameters<typeof docToSvg>[1]) => docToSvg(useDoc.getState().doc, options),
 };
 

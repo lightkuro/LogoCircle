@@ -211,11 +211,12 @@ async function geometric(browser, phone) {
   // A family of parallel lines: duplicate once, place it, then Repeat.
   await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
   await moveSelectionTo(page, 512, 456);
-  // On a phone Repeat is one of the Options; on a desktop it sits in the bar.
+  // On a phone Repeat is one of the Options; on a desktop it is in the Repeat list in the bar.
   for (let i = 0; i < 3; i++) {
     if (phone) await page.getByRole('button', { name: 'Options', exact: true }).click();
-    await page.getByRole('button', { name: /^Repeat/ }).click();
-    if (phone) await page.waitForTimeout(250);
+    else await page.getByRole('button', { name: 'Repeat', exact: true }).hover();
+    await page.getByRole('button', { name: /^Repeat, same spacing/ }).click();
+    await page.waitForTimeout(phone ? 250 : 120);
   }
   const ys = await page.evaluate(() => window.__lc.doc().guides.filter((g) => g.type === 'line').map((g) => Math.round(g.y0)));
   const gaps = ys.slice(1).map((y, i) => y - ys[i]);
@@ -470,8 +471,9 @@ async function controls(browser) {
   await page.evaluate((id) => window.__lc.ui().select([id]), top);
   const centre = await toScreen(page, d.guides.at(-1).cx, d.guides.at(-1).cy);
   await page.mouse.click(centre.x, centre.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: /^Order/ }).hover();
   await page.getByRole('menuitem', { name: 'Send to back' }).click();
-  check((await doc()).shapes[0].id === top, 'right-click → Send to back reorders');
+  check((await doc()).shapes[0].id === top, 'right-click → Order → Send to back reorders');
   await page.keyboard.press('Escape');
   await pick('Lines', 'Line');
   await page.waitForTimeout(500);
@@ -911,9 +913,9 @@ async function firstVisit(browser, phone) {
   await page.waitForFunction(() => window.__lc.doc().shapes.length >= 3, null, { timeout: 15000 }).catch(() => {});
   let d = await page.evaluate(() => {
     const doc = window.__lc.doc();
-    return { shapes: doc.shapes.length, word: Object.values(doc.groups)[0]?.text?.value, colors: doc.palette.length };
+    return { shapes: doc.shapes.length, words: Object.values(doc.groups).map((g) => g.text?.value), colors: doc.palette.length };
   });
-  check(d.shapes >= 3 && d.word === 'default' && d.colors === 2, `starts with a small example and two colors (${d.shapes} shapes, "${d.word}", ${d.colors} colors)`);
+  check(d.shapes >= 3 && d.words.includes('default') && d.words.includes('Create your logo with LogoCircle') && d.colors === 2, `starts with a small example, a line on top and two colors (${d.shapes} shapes, ${JSON.stringify(d.words)}, ${d.colors} colors)`);
 
   // Colors: a new one only exists once a color is picked for it; up to four in Classic; remove one again.
   const addBtn = page.getByRole('button', { name: 'Add color', exact: true });
@@ -1048,6 +1050,108 @@ async function desktopBar(browser) {
   check((await has('Erase')) && !(await has('Triangle')) && dock.x + dock.width < zoom.x, 'on a narrower screen only what fits opens out, clear of the zoom');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: join(shots, 'desktop-bar.png') });
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
+async function shapesAndMenus(browser) {
+  console.log('\nCorners, lines, Move, grouped menus, patterns, fillets');
+  const { ctx, page, errors } = await fresh(browser, false);
+  const guides = () => page.evaluate(() => window.__lc.doc().guides);
+  const menuItems = () => page.locator('.ctx-menu:not(.ctx-sub) .menu-item').allTextContents();
+
+  // A triangle's corners sit under the stretch handles: they still show, and right-click rounds one.
+  await add(page, false, 'Triangle');
+  await page.mouse.move(700, 120);
+  check((await page.locator('.handle-pt-ring').count()) === 3, "a triangle's corners show as rings around the stretch handles");
+  const tri = (await guides())[0].pts;
+  const bl = tri.reduce((a, p) => (p.y > a.y || (p.y === a.y && p.x < a.x) ? p : a));
+  const c = await toScreen(page, bl.x, bl.y);
+  await page.mouse.click(c.x, c.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Round this corner' }).click();
+  check((await page.getByRole('toolbar', { name: 'Corner rounding' }).count()) === 1, 'right-click a triangle corner: Round this corner');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+
+  // Long menus keep related choices together, beside them on hover.
+  await page.mouse.click(c.x + 20, c.y - 2);
+  const side = await toScreen(page, (tri[0].x + bl.x) / 2, (tri[0].y + bl.y) / 2);
+  await page.mouse.click(side.x, side.y, { button: 'right' });
+  const main = await menuItems();
+  check(!main.some((t) => t.startsWith('Flip sideways')) && main.some((t) => t.startsWith('Flip')), 'the right-click menu groups the flips');
+  await page.getByRole('menuitem', { name: /^Flip/ }).first().hover();
+  check((await page.locator('.ctx-sub .menu-item').allTextContents()).some((t) => t.startsWith('Flip sideways')), 'and shows them beside it on hover');
+  await page.keyboard.press('Escape');
+
+  // Move: only moving and turning, and a little room around a small thing to grab it.
+  await page.mouse.click(side.x, side.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Move' }).click();
+  check((await page.locator('.handle-box').count()) === 0 && (await page.locator('.handle-rot').count()) === 1, 'Move: no resize handles, just the knob for turning');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Delete');
+
+  // Lines: a knob to turn them, and flat ends when thick.
+  await add(page, false, 'Line');
+  check((await page.locator('.handle-rot').count()) === 1, 'a line has a knob to turn it');
+  const knob = await page.locator('.handle-rot').boundingBox();
+  const l0 = (await guides()).find((g) => g.type === 'line');
+  const mid = await toScreen(page, (l0.x0 + l0.x1) / 2, (l0.y0 + l0.y1) / 2);
+  await page.mouse.move(knob.x + knob.width / 2, knob.y + knob.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(mid.x + 120, mid.y - 120, { steps: 6 });
+  await page.mouse.up();
+  const l1 = (await guides()).find((g) => g.type === 'line');
+  check(Math.abs(l1.y1 - l1.y0) > 50, 'dragging the knob turns the line');
+  await page.getByRole('button', { name: 'Thickness' }).click();
+  await page.getByRole('slider', { name: 'Thickness' }).focus();
+  for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowRight');
+  await page.getByRole('radio', { name: 'Flat ends' }).click();
+  check((await guides()).find((g) => g.type === 'line').ends === 'flat', 'a thick line can have flat ends');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+
+  // Repeat: same spacing, or a pattern.
+  await add(page, false, 'Circle');
+  const n0 = (await guides()).length;
+  await page.getByRole('button', { name: 'Repeat', exact: true }).hover();
+  await page.getByRole('button', { name: /^Pattern/ }).click();
+  check((await guides()).length === n0 + 3 && (await page.getByRole('toolbar', { name: 'Pattern' }).count()) === 1, 'Pattern: four in a row straight away');
+  await page.getByRole('radio', { name: 'Circle' }).click();
+  check((await guides()).length === n0 + 7, 'around a circle: eight');
+  await page.getByRole('radio', { name: 'Grid' }).click();
+  check((await guides()).length === n0 + 8, 'a grid: three by three');
+  await page.keyboard.press('Escape');
+  check((await guides()).length === n0 && (await page.getByRole('toolbar', { name: 'Pattern' }).count()) === 0, 'Esc takes the pattern away');
+  await page.getByRole('button', { name: 'Repeat', exact: true }).hover();
+  await page.getByRole('button', { name: /^Pattern/ }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  check((await guides()).length === n0 + 3, 'Done keeps it');
+  await page.keyboard.press('Control+z');
+  check((await guides()).length === n0, 'as one undo step');
+  await page.screenshot({ path: join(shots, 'pattern.png') });
+
+  // A fillet where two lines meet.
+  await page.evaluate(() => {
+    const d = window.__lc.doc();
+    window.__lc.ui().set({ selection: [] });
+    const g = [
+      { id: 'fa', type: 'line', x0: 200, y0: 300, x1: 500, y1: 300, width: 0 },
+      { id: 'fb', type: 'line', x0: 500, y0: 300, x1: 500, y1: 600, width: 0 },
+    ];
+    window.__lc.commit({ ...d, guides: g });
+  });
+  const corner = await toScreen(page, 494, 306);
+  await page.mouse.click(corner.x, corner.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Round this crossing' }).click();
+  check((await page.getByRole('toolbar', { name: 'Round crossing' }).count()) === 1, 'right-click where two lines meet: Round this crossing');
+  await page.getByRole('slider', { name: 'Radius' }).focus();
+  for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowRight');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  const fl = await guides();
+  const a = fl.find((g) => g.id === 'fa');
+  check(fl.some((g) => g.type === 'edges') && a && a.x1 < 495, `an arc joins them and the lines stop where it starts (${a && a.x1.toFixed(1)})`);
+  await page.screenshot({ path: join(shots, 'fillet.png') });
   check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
   await ctx.close();
 }
@@ -1364,7 +1468,7 @@ try {
       await fn(b, false);
       await fn(b, true);
     };
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1382,6 +1486,7 @@ try {
   await mirrorAndPicking(browser);
   await desktopBar(browser);
   await help(browser);
+  await shapesAndMenus(browser);
   await textDesktop(browser);
 } catch (err) {
   if (err !== 'only') {

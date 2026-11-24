@@ -418,6 +418,16 @@ select {
   stroke-width: 2px;
   filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
 }
+/* A point under a stretch handle: a ring around it. */
+.handle-pt-ring {
+  fill: none;
+  stroke: var(--select);
+  stroke-width: 1.6px;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.9));
+}
+.handle-pt-ring.is-picked {
+  stroke-width: 2.6px;
+}
 .handle-pt.is-picked {
   fill: #fff;
   stroke: var(--select);
@@ -1997,4 +2007,12 @@ html[data-input='mouse'] .flyout,
 html[data-input='mouse'] .tool .tool-caret {
   animation: none;
   transition: none;
+}
+
+/* A right-click menu's side panel: there at once, like the lists in the bar. */
+.ctx-sub {
+  animation: none;
+}
+.ctx-menu .menu-item[data-open] {
+  background: var(--hover);
 }

@@ -5,7 +5,7 @@
 import { toast } from 'sonner';
 import { mul, scale, translate, type Mat, type Pt } from '@/geom';
 import { useDoc, getDoc, commit } from '@/store/doc';
-import { ui, useUi, remember, type Mode, type Tool } from '@/store/ui';
+import { selectionKey, ui, useUi, remember, type Mode, type Tool } from '@/store/ui';
 import { putImage, saveNow } from '@/store/persist';
 import { isPhone, isSide, isTouch } from '@/store/settings';
 import { keyLabel } from '@/keys';
@@ -15,6 +15,8 @@ import { visibleGuides } from '@/model/paint';
 import { board, groupMembers, newDoc } from '@/model/doc';
 import { guideArea } from '@/model/guides';
 import { mirrorable } from '@/model/mirror';
+import { applyPattern, defaultPattern, type PatternKind, type PatternSpec } from '@/model/pattern';
+import { applyFillet, maxFillet, type Crossing } from '@/model/fillet';
 import { uid } from '@/model/ids';
 import { chromeInsets, fitView, toDoc, zoomAt } from '@/canvas/view';
 import { regularPoints } from '@/geom';
@@ -244,6 +246,74 @@ export function setTool(tool: Tool): void {
   const next: Tool = s.tool === tool && tool !== 'arrange' ? 'arrange' : tool;
   useUi.setState({ tool: next, erasing: false, trayOpen: false, colorPanel: null, frameEdit: false, selection: next === 'arrange' ? s.selection : [] });
 }
+
+// --- Pattern: repeat the selection in a row, around a circle or in a grid ----------
+
+/** Start setting up a pattern of the selection; the copies show at once and follow every change. */
+export function startPattern(kind: PatternKind = 'row'): void {
+  const s = ui();
+  const doc = getDoc();
+  const ids = mirrorable(doc, s.selection);
+  const box = selectionBBox(doc, ids);
+  if (!ids.length || !box) {
+    toast('Select something to repeat first');
+    return;
+  }
+  useDoc.getState().hold();
+  useUi.setState({ pattern: { ids, spec: defaultPattern(kind, box), key: '' }, tool: 'arrange', menu: null, corner: null });
+  setPattern(ui().pattern!.spec);
+}
+
+export function setPattern(spec: PatternSpec): void {
+  const p = ui().pattern;
+  const st = useDoc.getState();
+  if (!p || !st.held) return;
+  const r = applyPattern(st.held, p.ids, spec);
+  st.patch(r.doc);
+  const selection = [...p.ids, ...r.ids];
+  useUi.setState({ pattern: { ...p, spec, key: selectionKey(selection) }, selection });
+}
+
+/** Keep the pattern (one undo step) or take it away again. */
+export function finishPattern(keep: boolean): void {
+  const p = ui().pattern;
+  if (!p) return;
+  useUi.setState({ pattern: null, ...(keep ? {} : { selection: p.ids }) });
+  useDoc.getState().release(keep);
+}
+
+// --- Fillet: round off where two straight outlines cross ----------------------------
+
+export function startFillet(crossing: Crossing): void {
+  const max = maxFillet(crossing);
+  if (max <= 0) return;
+  useDoc.getState().hold();
+  useUi.setState({ fillet: { crossing, r: 0, max }, tool: 'arrange', menu: null, corner: null, pattern: null, selection: [] });
+  setFillet(Math.min(max, 24 / ui().view.k));
+}
+
+export function setFillet(r: number): void {
+  const f = ui().fillet;
+  const st = useDoc.getState();
+  if (!f || !st.held) return;
+  st.patch(applyFillet(st.held, f.crossing, r));
+  useUi.setState({ fillet: { ...f, r } });
+}
+
+export function finishFillet(keep: boolean): void {
+  if (!ui().fillet) return;
+  useUi.setState({ fillet: null });
+  useDoc.getState().release(keep);
+}
+
+// A pattern or fillet ends when anything else happens: another change, undo, or a different selection.
+useDoc.subscribe((d) => {
+  if (!d.held && (ui().pattern || ui().fillet)) useUi.setState({ pattern: null, fillet: null });
+});
+useUi.subscribe((s) => {
+  if (s.pattern && s.pattern.key && (s.tool !== 'arrange' || selectionKey(s.selection) !== s.pattern.key)) finishPattern(true);
+  if (s.fillet && (s.tool !== 'arrange' || s.selection.length)) finishFillet(true);
+});
 
 /** Mirror copy: pick a line and the selection gets copies reflected across it. */
 export function startMirror(): void {

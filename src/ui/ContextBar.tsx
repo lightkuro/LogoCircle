@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   Check,
   CircleDot,
@@ -9,6 +9,7 @@ import {
   EyeOff,
   FlipVertical2,
   FlipHorizontal,
+  Grid2x2,
   FlipHorizontal2,
   Group as GroupIcon,
   Info,
@@ -27,6 +28,7 @@ import {
   Trash2,
   Undo2,
   Ungroup,
+  X,
 } from 'lucide-react';
 import { Popover } from '@base-ui/react/popover';
 import { useDoc, getDoc, commit } from '@/store/doc';
@@ -40,7 +42,12 @@ import {
   duplicateSelection,
   editFrame,
   fitBoardToArtwork,
+  finishFillet,
+  finishPattern,
   flipSelection,
+  setFillet,
+  setPattern,
+  startPattern,
   startMirror,
   groupSelection,
   pickPhoto,
@@ -52,7 +59,8 @@ import {
 } from '@/actions';
 import { board } from '@/model/doc';
 import { cornerRadius, guideBand, guideWidth, isClosedOutline, maxCornerRadius, setCornerRadius } from '@/model/guides';
-import { updateRef } from '@/model/ops';
+import { selectionBBox, updateRef } from '@/model/ops';
+import { defaultPattern, type PatternKind, type PatternSpec } from '@/model/pattern';
 import type { Band, Guide } from '@/model/types';
 import { finishPen, undoPenPoint, usePen } from '@/tools';
 import { roundCorner } from './menus';
@@ -101,10 +109,26 @@ function Chip({
 }
 
 /** A button that opens a small panel above the bar: where the less-used controls live. */
-function Menu({ label, icon, name, children, width = 248 }: { label?: string; icon: ReactNode; name: string; children: ReactNode; width?: number }) {
+function Menu({
+  label,
+  icon,
+  name,
+  children,
+  width = 248,
+  hover,
+  disabled,
+}: {
+  label?: string;
+  icon: ReactNode;
+  name: string;
+  children: ReactNode;
+  width?: number;
+  hover?: boolean;
+  disabled?: boolean;
+}) {
   return (
     <Popover.Root>
-      <Popover.Trigger className="chip" aria-label={name}>
+      <Popover.Trigger className="chip" aria-label={name} openOnHover={hover} delay={0} closeDelay={120} disabled={disabled}>
         {icon}
         {label}
       </Popover.Trigger>
@@ -204,6 +228,10 @@ function ThicknessControls({ guides }: { guides: Guide[] }) {
   const ids = new Set(guides.map((g) => g.id));
   const closed = guides.every(isClosedOutline);
   const band = guideBand(guides[0]!);
+  // Thick straight lines end rounded, or flat right at their ends.
+  const lines = guides.every((g) => g.type === 'line');
+  const first = guides[0]!;
+  const ends = first.type === 'line' && first.ends === 'flat' ? 'flat' : 'round';
   return (
     <div className="bar-menu-pad">
       <div className="text-[12px] font-semibold text-muted">Thickness</div>
@@ -217,6 +245,19 @@ function ThicknessControls({ guides }: { guides: Guide[] }) {
         onChange={(v) => live.change((doc) => ({ ...doc, guides: doc.guides.map((g) => (ids.has(g.id) ? ({ ...g, width: v } as Guide) : g)) }))}
         onCommit={live.commit}
       />
+      {lines && width > 0 && (
+        <div className="pb-2 pt-1">
+          <Segmented<'round' | 'flat'>
+            label="Ends"
+            value={ends}
+            onChange={(v) => commit({ ...getDoc(), guides: getDoc().guides.map((g) => (ids.has(g.id) && g.type === 'line' ? { ...g, ends: v } : g)), updatedAt: Date.now() })}
+            options={[
+              { value: 'round', label: 'Round ends' },
+              { value: 'flat', label: 'Flat ends' },
+            ]}
+          />
+        </div>
+      )}
       {closed && (
         <div className="pb-2 pt-1">
           <Segmented<Band>
@@ -231,6 +272,111 @@ function ThicknessControls({ guides }: { guides: Guide[] }) {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/** One labelled slider in a bar. */
+function BarSlider({ name, width = 190, ...props }: { name: string; width?: number } & Parameters<typeof Slider>[0]) {
+  return (
+    <div className="flex items-center gap-2 pl-2 pr-1" style={{ width }}>
+      <span className="whitespace-nowrap text-[12px] font-semibold text-muted">{name}</span>
+      <Slider {...props} />
+    </div>
+  );
+}
+
+/** Setting up a pattern: in a row, around a circle or in a grid; how many, and how far apart. */
+function PatternBar() {
+  const p = useUi((s) => s.pattern)!;
+  const held = useDoc((s) => s.held);
+  const phone = useIsPhone();
+  const box = useMemo(() => (held ? selectionBBox(held, p.ids) : null), [held, p.ids]);
+  const size = Math.max(1, box?.w ?? 1, box?.h ?? 1);
+  const spec = p.spec;
+  const set = (patch: Partial<PatternSpec>): void => setPattern({ ...spec, ...patch });
+  const circle = spec.kind === 'circle';
+  const kind = (
+    <Segmented<PatternKind>
+      label="Pattern"
+      value={spec.kind}
+      onChange={(k) => box && setPattern({ ...defaultPattern(k, box), ...(k === spec.kind ? spec : {}) })}
+      options={[
+        { value: 'row', label: 'Row' },
+        { value: 'circle', label: 'Circle' },
+        { value: 'grid', label: 'Grid' },
+      ]}
+    />
+  );
+  const w = phone ? 236 : 190;
+  const sliders = (
+    <>
+      <BarSlider
+        width={w}
+        name={spec.kind === 'grid' ? 'Across' : 'Count'}
+        label={spec.kind === 'grid' ? 'Across' : 'Count'}
+        min={spec.kind === 'grid' ? 1 : 2}
+        max={circle ? 36 : 24}
+        typeMax={200}
+        value={spec.count}
+        onChange={(v) => set({ count: v })}
+      />
+      {spec.kind === 'grid' && <BarSlider width={w} name="Down" label="Down" min={1} max={24} typeMax={200} value={spec.rows} onChange={(v) => set({ rows: v })} />}
+      <BarSlider
+        width={w}
+        name={circle ? 'Radius' : 'Distance'}
+        label={circle ? 'Radius' : 'Distance'}
+        min={circle ? Math.round(size * 0.3) : -Math.round(size * 0.5)}
+        max={Math.round(size * (circle ? 6 : 3))}
+        typeMax={Math.round(size * 40)}
+        value={spec.distance}
+        onChange={(v) => set({ distance: v })}
+      />
+      {spec.kind === 'row' && <BarSlider width={w} name="Angle" label="Angle" min={-180} max={180} value={spec.angle} format={(v) => `${Math.round(v)}°`} onChange={(v) => set({ angle: v })} />}
+    </>
+  );
+  const end = (
+    <>
+      <Chip tip="Cancel pattern" label={phone ? undefined : 'Cancel'} icon={<X />} onClick={() => finishPattern(false)} />
+      <Done onClick={() => finishPattern(true)} />
+    </>
+  );
+  if (phone) {
+    return (
+      <div className="glass bar rise" role="toolbar" aria-label="Pattern">
+        <Menu name="Pattern settings" icon={<SlidersHorizontal />} label="Pattern" width={268}>
+          <div className="bar-menu-pad grid gap-2">
+            {kind}
+            {sliders}
+          </div>
+        </Menu>
+        <span className="sep" />
+        {end}
+      </div>
+    );
+  }
+  return (
+    <div className="glass bar rise" role="toolbar" aria-label="Pattern">
+      <div className="pl-1" style={{ width: 210 }}>
+        {kind}
+      </div>
+      {sliders}
+      <span className="sep" />
+      {end}
+    </div>
+  );
+}
+
+/** Rounding off a crossing: how big the arc is. */
+function FilletBar() {
+  const f = useUi((s) => s.fillet)!;
+  const phone = useIsPhone();
+  return (
+    <div className="glass bar rise" role="toolbar" aria-label="Round crossing">
+      <BarSlider width={phone ? 220 : 280} name="Radius" label="Radius" min={1} max={Math.max(2, Math.floor(f.max))} value={Math.round(f.r)} onChange={setFillet} />
+      <span className="sep" />
+      <Chip tip="Cancel" label={phone ? undefined : 'Cancel'} icon={<X />} onClick={() => finishFillet(false)} />
+      <Done onClick={() => finishFillet(true)} />
     </div>
   );
 }
@@ -474,11 +620,15 @@ export function ContextBar() {
   const frameEdit = useUi((s) => s.frameEdit);
   const corner = useUi((s) => s.corner);
   const selectMode = useUi((s) => s.selectMode);
+  const pattern = useUi((s) => !!s.pattern);
+  const fillet = useUi((s) => !!s.fillet);
   const doc = useDoc((s) => s.doc);
   // re-render when Repeat becomes available
   useUi((s) => s.lastDup);
 
   if (frameEdit) return <FrameBar />;
+  if (pattern) return <PatternBar />;
+  if (fillet) return <FilletBar />;
   if (tool === 'color') return <ColorBar hint={hint} />;
   if (tool === 'pen') return <PenBar hint={hint} />;
   if (tool === 'brush') return <BrushBar />;
@@ -538,6 +688,7 @@ export function ContextBar() {
           {cornered && <Row icon={<SquareRoundCorner />} label="Round corners" onClick={() => roundCorner(cornered, -1)} />}
           {editable && <Row icon={<CopyPlus />} label="Duplicate" onClick={duplicateSelection} />}
           <Row icon={<Repeat2 />} label="Repeat, same spacing" disabled={!canRepeat()} onClick={repeatDuplicate} />
+          <Row icon={<Grid2x2 />} label="Pattern" onClick={() => startPattern()} />
           <Row icon={<FlipVertical2 />} label="Flip sideways" onClick={() => flipSelection('h')} />
           <Row icon={<FlipHorizontal2 />} label="Flip upside down" onClick={() => flipSelection('v')} />
           <Row icon={<FlipHorizontal />} label="Mirror copy" onClick={startMirror} />
@@ -569,7 +720,10 @@ export function ContextBar() {
         <Chip tip="Add to selection with each tap" label={multi ? 'Selecting' : 'Select more'} icon={<SquareDashedMousePointer />} active={multi} onClick={toggleMulti} />
       )}
       <Chip tip="Duplicate" keys={key('duplicate')} label="Duplicate" icon={<CopyPlus />} onClick={duplicateSelection} />
-      <Chip tip="Repeat: copy again, same spacing" keys={key('repeat')} label="Repeat" icon={<Repeat2 />} disabled={!canRepeat()} onClick={repeatDuplicate} />
+      <Menu name="Repeat" icon={<Repeat2 />} label="Repeat" width={236} hover={!touch}>
+        <Row icon={<Repeat2 />} label="Repeat, same spacing" disabled={!canRepeat()} onClick={repeatDuplicate} />
+        <Row icon={<Grid2x2 />} label="Pattern: row, circle, grid" onClick={() => startPattern()} />
+      </Menu>
       <Chip tip="Flip sideways" icon={<FlipVertical2 />} onClick={() => flipSelection('h')} />
       <Chip tip="Flip upside down" icon={<FlipHorizontal2 />} onClick={() => flipSelection('v')} />
       <Chip tip="Mirror copy across line" keys={key('mirror')} icon={<FlipHorizontal />} onClick={startMirror} />

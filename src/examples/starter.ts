@@ -25,15 +25,27 @@ export async function buildStarter(): Promise<Doc> {
   ];
   for (const slot of [0, 1]) {
     const arr = buildDocArrangement(doc, true);
-    const faces = spots.filter((s) => s[2] === slot).map((s) => faceAt(arr, { x: s[0], y: s[1] })).filter((f) => f >= 0);
+    const faces = spots
+      .filter((s) => s[2] === slot)
+      .map((s) => faceAt(arr, { x: s[0], y: s[1] }))
+      .filter((f) => f >= 0);
     doc = paintFaces(doc, arr, faces, slot);
   }
   try {
     const { layoutText, textShapes } = await import('@/text/layout');
-    const info = { value: 'default', fontId: 'poppins', size: 150, spacing: 0, fill: 0 };
-    const layout = await layoutText(info.value, info.fontId, info.size, info.spacing);
-    const { shapes, group } = textShapes(layout, info, translate(512 - layout.width / 2, 740));
-    doc = { ...doc, shapes: [...doc.shapes, ...shapes], groups: { ...doc.groups, [group.id]: group } };
+    // A word below the mark, and a line across the top in the second color, sized to fit the frame.
+    const word = async (value: string, size: number, fill: number, baseline: number, fit?: number): Promise<void> => {
+      let layout = await layoutText(value, 'poppins', size, 0);
+      if (fit && layout.width > 0) {
+        size = Math.round((size * fit) / layout.width);
+        layout = await layoutText(value, 'poppins', size, 0);
+      }
+      const info = { value, fontId: 'poppins', size, spacing: 0, fill };
+      const { shapes, group } = textShapes(layout, info, translate(512 - layout.width / 2, baseline));
+      doc = { ...doc, shapes: [...doc.shapes, ...shapes], groups: { ...doc.groups, [group.id]: group } };
+    };
+    await word('Create your logo with LogoCircle', 60, 1, 150, 860);
+    await word('default', 150, 0, 740);
   } catch {
     /* offline on the very first visit: the mark alone is fine */
   }

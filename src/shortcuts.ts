@@ -6,6 +6,8 @@ import {
   copySelection,
   deleteSelection,
   doneTool,
+  finishFillet,
+  finishPattern,
   groupSelection,
   ungroupSelection,
   duplicateSelection,
@@ -112,6 +114,8 @@ export function useShortcuts(): void {
           case 'Escape':
             if (s.menu) useUi.setState({ menu: null });
             else if (s.colorPanel !== null) useUi.setState({ colorPanel: null });
+            else if (s.pattern) finishPattern(false);
+            else if (s.fillet) finishFillet(false);
             else if (s.frameEdit) useUi.setState({ frameEdit: false });
             else if (s.tool !== 'arrange') doneTool();
             else if (s.selection.length) useUi.setState({ selection: [] });

@@ -4,10 +4,12 @@
  */
 import { flattenEdge, type Pt } from '@/geom';
 import { commit, getDoc, useDoc } from '@/store/doc';
-import { ui, useUi, type MenuItem } from '@/store/ui';
+import { selectionKey, ui, useUi, type MenuItem } from '@/store/ui';
 import { board } from '@/model/doc';
-import { cornerRadius, guideArea, guideCenterline, insertGuidePoint, maxCornerRadius, removeGuidePoint, setCornerRadius, togglePathNode } from '@/model/guides';
+import { cornerRadius, guideArea, guideCenterline, guideHandles, insertGuidePoint, maxCornerRadius, removeGuidePoint, setCornerRadius, togglePathNode } from '@/model/guides';
 import { updateGuide } from '@/model/ops';
+import { crossingAt, maxFillet } from '@/model/fillet';
+import { visibleGuides } from '@/model/paint';
 import type { Guide } from '@/model/types';
 import {
   openBackground,
@@ -22,6 +24,8 @@ import {
   fitBoardToArtwork,
   fitToScreen,
   flipSelection,
+  startFillet,
+  startPattern,
   startMirror,
   groupSelection,
   hasClipboard,
@@ -51,12 +55,14 @@ import {
   FlipVertical2,
   FlipHorizontal,
   FlipHorizontal2,
+  Grid2x2,
   Group as GroupIcon,
   Layers2,
   Lock,
   LockOpen,
   Maximize,
   Minus,
+  Move,
   PaintBucket,
   Pencil,
   Plus,
@@ -150,6 +156,12 @@ function pointMenu(g: Guide, h: Handle, d: Pt): MenuItem[] {
   if (h.kind === 'box') {
     // A square's corner handles round that one corner; its side handles offer all four.
     if (g.type === 'rect') items.push(...cornerItems(g, RECT_CORNER[h.at]));
+    else {
+      // A point under the stretch handle (a triangle's corners, a polygon's top): its menu, as if clicked directly.
+      const tol = 10 / ui().view.k;
+      const i = guideHandles(g).findIndex((p) => Math.hypot(p.x - d.x, p.y - d.y) <= tol);
+      if (i >= 0) return pointMenu(g, { kind: 'pt', index: i }, d);
+    }
     return items;
   }
   if (h.kind !== 'pt') return items;
@@ -225,6 +237,12 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
   if (lone && d && side !== null) {
     items.push({ label: 'Add a point here', icon: Plus, onSelect: () => patchGuide(insertGuidePoint(lone, side, d)) });
   }
+  // "Move": only moving and turning, for small things that are hard to grab.
+  if (!refs.length || shapes.length || guides.length) {
+    const key = selectionKey(s.selection);
+    const on = s.moveOnly === key;
+    items.push({ label: 'Move', icon: Move, checked: on, onSelect: () => useUi.setState({ moveOnly: on ? null : key }) });
+  }
   if (refs.length && !shapes.length && !guides.length) {
     const r = refs[0]!;
     const set = (patch: Partial<typeof r>): void =>
@@ -265,35 +283,25 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
 
   // Color: any shape, and any outline that has (or can be given) an area.
   const limit = s.mode === 'classic' ? 4 : 8;
-  doc.palette.slice(0, limit).forEach((c, i) => {
-    items.push({
-      label: `Color ${i + 1}`,
-      swatch: c,
-      divide: i === 0 && items.length > 0,
-      onSelect: () => void colorSelection(i),
-    });
-  });
+  const colors: MenuItem[] = doc.palette.slice(0, limit).map((c, i) => ({ label: `Color ${i + 1}`, swatch: c, onSelect: () => void colorSelection(i) }));
+  items.push({ label: 'Color', icon: PaintBucket, divide: items.length > 0, children: colors, onSelect: () => undefined });
 
   const one = guides.length === 1 && !shapes.length ? guides[0]! : null;
   if (one && (one.type === 'rect' || one.type === 'poly')) {
-    items.push({
-      label: 'Round all corners',
-      icon: SquareRoundCorner,
-      divide: true,
-      onSelect: () => roundCorner(one, -1),
-    });
+    const round: MenuItem = { label: 'Round all corners', icon: SquareRoundCorner, onSelect: () => roundCorner(one, -1) };
     if (anyRounded(one))
       items.push({
-        label: 'Sharpen all corners',
-        icon: Square,
-        onSelect: () => patchGuide(setCornerRadius(one, -1, 0)),
+        label: 'Corners',
+        icon: SquareRoundCorner,
+        children: [round, { label: 'Sharpen all corners', icon: Square, onSelect: () => patchGuide(setCornerRadius(one, -1, 0)) }],
+        onSelect: () => undefined,
       });
+    else items.push(round);
   }
   if (one && one.type === 'curve') {
     items.push({
       label: one.closed ? 'Open the curve' : 'Close the curve',
       icon: Spline,
-      divide: true,
       onSelect: () => patchGuide({ ...one, closed: !one.closed }),
     });
   }
@@ -305,13 +313,6 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
     divide: true,
     onSelect: duplicateSelection,
   });
-  if (canRepeat())
-    items.push({
-      label: 'Repeat, same spacing',
-      icon: Repeat2,
-      keys: key('repeat'),
-      onSelect: repeatDuplicate,
-    });
   items.push({
     label: 'Copy',
     icon: Copy,
@@ -319,22 +320,20 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
     onSelect: () => void copySelection(),
   });
   items.push({
-    label: 'Flip sideways',
-    icon: FlipVertical2,
-    onSelect: () => flipSelection('h'),
+    label: 'Repeat',
+    icon: Repeat2,
+    children: [
+      { label: 'Repeat, same spacing', icon: Repeat2, keys: key('repeat'), disabled: !canRepeat(), onSelect: repeatDuplicate },
+      { label: 'Pattern: row, circle, grid', icon: Grid2x2, onSelect: () => startPattern() },
+    ],
+    onSelect: () => undefined,
   });
-  items.push({
-    label: 'Flip upside down',
-    icon: FlipHorizontal2,
-    onSelect: () => flipSelection('v'),
-  });
-  if (guides.length || shapes.length)
-    items.push({
-      label: 'Mirror copy',
-      icon: FlipHorizontal,
-      keys: key('mirror'),
-      onSelect: startMirror,
-    });
+  const flips: MenuItem[] = [
+    { label: 'Flip sideways', icon: FlipVertical2, onSelect: () => flipSelection('h') },
+    { label: 'Flip upside down', icon: FlipHorizontal2, onSelect: () => flipSelection('v') },
+  ];
+  if (guides.length || shapes.length) flips.push({ label: 'Mirror copy', icon: FlipHorizontal, keys: key('mirror'), divide: true, onSelect: startMirror });
+  items.push({ label: 'Flip', icon: FlipVertical2, children: flips, onSelect: () => undefined });
 
   if (shapes.length) {
     const first = doc.shapes[0];
@@ -342,29 +341,15 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
     const atTop = shapes.includes(last!) && shapes.length === 1;
     const atBottom = shapes.includes(first!) && shapes.length === 1;
     items.push({
-      label: 'Bring forward',
-      icon: ArrowUp,
-      divide: true,
-      disabled: atTop,
-      onSelect: () => orderSelection('forward'),
-    });
-    items.push({
-      label: 'Send backward',
-      icon: ArrowDown,
-      disabled: atBottom,
-      onSelect: () => orderSelection('backward'),
-    });
-    items.push({
-      label: 'Bring to front',
-      icon: ArrowUpToLine,
-      disabled: atTop,
-      onSelect: () => orderSelection('front'),
-    });
-    items.push({
-      label: 'Send to back',
-      icon: ArrowDownToLine,
-      disabled: atBottom,
-      onSelect: () => orderSelection('back'),
+      label: 'Order',
+      icon: Layers2,
+      children: [
+        { label: 'Bring forward', icon: ArrowUp, disabled: atTop, onSelect: () => orderSelection('forward') },
+        { label: 'Send backward', icon: ArrowDown, disabled: atBottom, onSelect: () => orderSelection('backward') },
+        { label: 'Bring to front', icon: ArrowUpToLine, disabled: atTop, onSelect: () => orderSelection('front') },
+        { label: 'Send to back', icon: ArrowDownToLine, disabled: atBottom, onSelect: () => orderSelection('back') },
+      ],
+      onSelect: () => undefined,
     });
   }
 
@@ -508,6 +493,19 @@ export function openCanvasMenu(at: Pt, d: Pt, handle: Handle | null, hits: strin
   byTouch = touch;
   const s = ui();
   if (s.frameEdit) return open(at, frameMenu());
+  const doc = getDoc();
+  // Right on a crossing of two straight outlines: round it off, first thing in whatever menu opens.
+  const crossing = handle ? null : crossingAt(visibleGuides(doc, s.showGuides, s.showCuts), d, (touch ? 14 : 8) / s.view.k);
+  if (crossing && maxFillet(crossing) > 0) {
+    const round: MenuItem = { label: 'Round this crossing', icon: SquareRoundCorner, onSelect: () => startFillet(crossing) };
+    const withRound = (p: Pt, items: MenuItem[]): void => open(p, [round, ...items.map((it, i) => (i === 0 ? { ...it, divide: true } : it))]);
+    return openMenuWith(withRound, at, d, handle, hits, touch);
+  }
+  openMenuWith(open, at, d, handle, hits, touch);
+}
+
+function openMenuWith(open: (at: Pt, items: MenuItem[]) => void, at: Pt, d: Pt, handle: Handle | null, hits: string[], touch: boolean): void {
+  const s = ui();
   const doc = getDoc();
   if (handle && s.selection.length === 1) {
     const g = doc.guides.find((x) => x.id === s.selection[0]);

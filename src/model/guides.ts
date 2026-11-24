@@ -2,6 +2,7 @@ import {
   apply,
   applyVec,
   bboxOfPoints,
+  barChain,
   capsuleChain,
   cubicEdge,
   derivC,
@@ -207,8 +208,13 @@ export function guideArea(g: Guide): Ring[] | null {
     try {
       if (w > 0) {
         if (c.closed) rings.push(...closedBand(g, c, w, guideBand(g)));
-        else if (g.type === 'line') rings.push(capsuleChain(g.x0, g.y0, g.x1, g.y1, w).edges);
-        else rings.push(...strokeOutline(c, w).filter((x) => x.closed).map((x) => x.edges));
+        else if (g.type === 'line') rings.push((g.ends === 'flat' ? barChain : capsuleChain)(g.x0, g.y0, g.x1, g.y1, w).edges);
+        else
+          rings.push(
+            ...strokeOutline(c, w)
+              .filter((x) => x.closed)
+              .map((x) => x.edges),
+          );
         any = true;
       } else if (c.closed) {
         rings.push(c.edges);

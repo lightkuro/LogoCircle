@@ -98,6 +98,8 @@ export interface LineGuide extends GuideBase {
   width: number;
   /** A cut line: drawn dashed, has its own show/hide switch. */
   cut?: boolean;
+  /** How a thick line ends: rounded (the default) or cut off square at its ends. */
+  ends?: 'round' | 'flat';
 }
 
 /** Closed straight-sided outline: triangle, polygon, star. */

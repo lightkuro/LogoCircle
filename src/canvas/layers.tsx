@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { apply, chainsToPath, polygonToPath, ringsToPath, toCss, type Mat, type Pt } from '@/geom';
 import { withFollowers, type Arrangement } from '@/engine';
 import { useDoc } from '@/store/doc';
-import { useUi } from '@/store/ui';
+import { selectionKey, useUi } from '@/store/ui';
 import { useIsDark } from '@/store/settings';
 import { imageUrl } from '@/store/persist';
 import { board, resolveFill } from '@/model/doc';
@@ -342,6 +342,7 @@ export function SelectionOverlay() {
   const selRot = useUi((s) => s.selRot);
   const corner = useUi((s) => s.corner);
   const frameEdit = useUi((s) => s.frameEdit);
+  const moveOnly = useUi((s) => s.moveOnly);
   const mat = useDrag((s) => s.mat);
   const dragIds = useDrag((s) => s.ids);
   const override = useDrag((s) => s.guide);
@@ -357,7 +358,7 @@ export function SelectionOverlay() {
   const corners = transformFrameCorners(frame, moving ? mat : null).map((p) => toScreen(view, p));
   const isLine = selection.length === 1 && d.guides.find((g) => g.id === selection[0])?.type === 'line';
   const lockedPhoto = selection.length === 1 && !!d.refs.find((r) => r.id === selection[0])?.locked;
-  const handles = moving || lockedPhoto || mirroring ? [] : placeHandles(d, selection, frame, view.k);
+  const handles = moving || lockedPhoto || mirroring ? [] : placeHandles(d, selection, frame, view.k, moveOnly === selectionKey(selection));
   const rot = handles.find((h) => h.handle.kind === 'rot');
   const top = { x: (corners[0]!.x + corners[1]!.x) / 2, y: (corners[0]!.y + corners[1]!.y) / 2 };
   const points = corners.map((p) => `${p.x},${p.y}`).join(' ');
@@ -382,9 +383,11 @@ export function SelectionOverlay() {
               </g>
             );
           case 'pt': {
-            // Under a stretch handle (a polygon's top and bottom points), the stretch handle is what is there.
-            if (handles.some((o) => o.handle.kind === 'box' && Math.hypot(toScreen(view, o.p).x - p.x, toScreen(view, o.p).y - p.y) < 8)) return null;
             const picked = corner && corner.id === selection[0] && (corner.index === h.handle.index || corner.index < 0);
+            // Under a stretch handle (a polygon's top and bottom points, a triangle's corners) the stretch
+            // handle is what a drag gets; the point still shows, as a ring around it, and its menu is a right-click away.
+            if (handles.some((o) => o.handle.kind === 'box' && Math.hypot(toScreen(view, o.p).x - p.x, toScreen(view, o.p).y - p.y) < 8))
+              return <circle key={i} cx={p.x} cy={p.y} r={9} className={picked ? 'handle-pt-ring is-picked' : 'handle-pt-ring'} />;
             return <circle key={i} cx={p.x} cy={p.y} r={5.5} className={picked ? 'handle-pt is-picked' : 'handle-pt'} />;
           }
           case 'hin':

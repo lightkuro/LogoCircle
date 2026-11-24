@@ -759,7 +759,51 @@ export function copySelection(): boolean {
   for (const s of shapes) if (s.group && doc.groups[s.group]) groups[s.group] = doc.groups[s.group]!;
   clipboard = { guides, shapes, groups };
   pasteCount = 0;
+  copiedAt = performance.now();
   return true;
+}
+
+// --- Pasting: our own copy, or an image from elsewhere, never both ----------------
+
+/** When something was last copied here, and when the page last lost focus (where an image may have been copied). */
+let copiedAt = 0;
+let leftAt = 0;
+if (typeof window !== 'undefined') window.addEventListener('blur', () => (leftAt = performance.now()));
+let pendingPaste: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * The paste key: the browser's paste event, which can see an image on the
+ * system clipboard, decides what goes in. Without one (a key of your own,
+ * some browsers), what was copied here is pasted a moment later.
+ */
+export function pasteKey(): void {
+  if (pendingPaste) clearTimeout(pendingPaste);
+  pendingPaste = setTimeout(() => {
+    pendingPaste = null;
+    pasteClipboard();
+  }, 80);
+}
+
+/**
+ * A paste from the system: what was copied most recently goes in. Something
+ * copied here since the page last lost focus wins over an image on the
+ * system clipboard; otherwise the image does. True when it was handled.
+ */
+export function pasteFromSystem(image: File | null): boolean {
+  if (pendingPaste) {
+    clearTimeout(pendingPaste);
+    pendingPaste = null;
+  }
+  const ours = clipboard !== null && copiedAt > leftAt;
+  if (image && !ours) {
+    void addPhoto(image);
+    return true;
+  }
+  if (clipboard) {
+    pasteClipboard();
+    return true;
+  }
+  return false;
 }
 
 export const hasClipboard = (): boolean => clipboard !== null;

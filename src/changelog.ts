@@ -11,6 +11,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.14',
+    date: '24 Nov 2026',
+    changes: ['Pasting a copied shape no longer also pastes an image from the clipboard: whichever was copied last goes in'],
+  },
+  {
     version: '1.13',
     date: '24 Nov 2026',
     changes: [

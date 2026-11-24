@@ -3,7 +3,7 @@ import { Toaster } from 'sonner';
 import { Stage } from '@/canvas/Stage';
 import { useDoc } from '@/store/doc';
 import { loadCurrent, startAutosave } from '@/store/persist';
-import { openDoc, addPhoto, fitToScreen } from '@/actions';
+import { openDoc, addPhoto, fitToScreen, pasteFromSystem } from '@/actions';
 import { remember } from '@/store/ui';
 import { useDocumentAttributes, useIsDark, useLayoutKind } from '@/store/settings';
 import { useShortcuts } from '@/shortcuts';
@@ -69,11 +69,9 @@ export function App() {
   useEffect(() => {
     const onPaste = (e: ClipboardEvent): void => {
       if (isTyping(e.target)) return;
+      // our own copy or an image from elsewhere: whichever was copied last, never both
       const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
-      if (file) {
-        e.preventDefault();
-        void addPhoto(file);
-      }
+      if (pasteFromSystem(file ?? null)) e.preventDefault();
     };
     const onDrop = (e: DragEvent): void => {
       const file = [...(e.dataTransfer?.files ?? [])].find((f) => f.type.startsWith('image/'));

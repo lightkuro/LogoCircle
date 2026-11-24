@@ -14,7 +14,7 @@ import {
   fitToScreen,
   nudge,
   openPhoto,
-  pasteClipboard,
+  pasteKey,
   pickEraser,
   pickInk,
   repeatDuplicate,
@@ -75,7 +75,7 @@ const HANDLERS: Record<string, Handler> = {
     if (!copySelection()) return false;
     deleteSelection();
   },
-  paste: () => pasteClipboard(),
+  paste: () => pasteKey(),
   selectAll: () => selectAll(),
   group: () => groupSelection(),
   ungroup: () => ungroupSelection(),

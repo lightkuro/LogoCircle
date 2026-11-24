@@ -1350,6 +1350,37 @@ async function bordersAndFlips(browser) {
   await ctx.close();
 }
 
+async function pasting(browser) {
+  console.log('\nPasting: our own copy, or an image from elsewhere, never both');
+  const { ctx, page, errors } = await fresh(browser, false);
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const count = () => page.evaluate(() => ({ guides: window.__lc.doc().guides.length, refs: window.__lc.doc().refs.length }));
+  // An image on the system clipboard, as if copied from another app.
+  await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 40;
+    c.height = 30;
+    c.getContext('2d').fillRect(0, 0, 40, 30);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  });
+  // Copy a circle here, then paste: just the circle.
+  await add(page, false, 'Circle');
+  await page.keyboard.press('Control+c');
+  await page.keyboard.press('Control+v');
+  await page.waitForTimeout(300);
+  let n = await count();
+  check(n.guides === 2 && n.refs === 0, `pasting right after copying here pastes the copy, not the image as well (${n.guides} outlines, ${n.refs} photos)`);
+  // After leaving the page (where the image could have been copied), the image wins.
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.keyboard.press('Control+v');
+  await page.waitForTimeout(500);
+  n = await count();
+  check(n.guides === 2 && n.refs === 1, `after leaving the page, paste brings in the image instead (${n.guides} outlines, ${n.refs} photos)`);
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 async function mirrorAndPicking(browser) {
   console.log('\nMirror copy, one at a time, hold and drag');
   // Mirror copy, with a mouse.
@@ -1669,7 +1700,7 @@ try {
       await fn(b, false);
       await fn(b, true);
     };
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, bordersAndFlips, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, bordersAndFlips, pasting, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1691,6 +1722,7 @@ try {
   await listsAndPhoneText(browser);
   await movePoints(browser);
   await bordersAndFlips(browser);
+  await pasting(browser);
   await textDesktop(browser);
 } catch (err) {
   if (err !== 'only') {

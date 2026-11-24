@@ -159,8 +159,8 @@ function Group({
         }}
       >
         {caret && (
-          <svg className="tool-caret" data-open={open || undefined} viewBox="0 0 16 8" aria-hidden>
-            <path d="M2.5 6.2 8 1.8l5.5 4.4" />
+          <svg className="tool-caret" data-open={open || undefined} viewBox="0 0 16 6" aria-hidden>
+            <path d="M2 4.6 8 1.4l6 3.2" />
           </svg>
         )}
         {icon ?? shown.icon}

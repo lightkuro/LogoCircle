@@ -1163,14 +1163,14 @@ select {
   top: 2px;
   left: 50%;
   width: 16px;
-  height: 8px;
+  height: 6px;
   margin-left: -8px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.2px;
+  stroke-width: 1.4px;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.5;
+  opacity: 0.45;
   transition: transform 160ms var(--ease-out);
 }
 /* Lists above the dock are placed by the code, centred on their button. */
@@ -1701,8 +1701,8 @@ html[data-layout='phone'] .tool {
 .rail .tool .tool-caret {
   top: 50%;
   left: auto;
-  right: -3px;
-  margin: -4px 0 0;
+  right: -4px;
+  margin: -3px 0 0;
   transform: rotate(90deg);
 }
 .rail .tool .tool-caret[data-open] {

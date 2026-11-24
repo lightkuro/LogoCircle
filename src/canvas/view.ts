@@ -43,7 +43,7 @@ export function fitView(
 }
 
 /** Space the floating chrome takes at each edge, so content can be centred in what is left. */
-export function chromeInsets(stage: { w: number; h: number }, sidePanel = false): Insets {
-  const phone = stage.w < 640;
-  return { top: phone ? 72 : 84, right: sidePanel && !phone ? 286 : 20, bottom: phone ? 168 : 150, left: 20 };
+export function chromeInsets(stage: { w: number; h: number }, sidePanel = false, phone = stage.w < 640): Insets {
+  // Phones: the top bar and a hint above, the tools and one row of actions below.
+  return { top: phone ? 104 : 84, right: sidePanel && !phone ? 286 : 20, bottom: phone ? 150 : 150, left: 20 };
 }

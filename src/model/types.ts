@@ -80,7 +80,10 @@ export interface RectGuide extends GuideBase {
   w: number;
   h: number;
   rot: number;
+  /** Rounding of all four corners together. */
   radius: number;
+  /** Rounding per corner, when they differ: top-left, top-right, bottom-right, bottom-left in the rectangle's own frame. */
+  radii?: [number, number, number, number];
   width?: number;
   band?: Band;
 }

@@ -8,8 +8,8 @@ import { remember } from '@/store/ui';
 import { useDocumentAttributes, useIsDark } from '@/store/settings';
 import { useShortcuts } from '@/shortcuts';
 import { TopBar } from '@/ui/TopBar';
-import { Dock } from '@/ui/Dock';
-import { ContextBar } from '@/ui/ContextBar';
+import { ColorStrip, Dock } from '@/ui/Dock';
+import { ContextBar, TopHint } from '@/ui/ContextBar';
 import { TipProvider, useIsPhone } from '@/ui/primitives';
 import { Sheets } from '@/ui/Sheets';
 import { ContextMenu } from '@/ui/ContextMenu';
@@ -87,6 +87,8 @@ export function App() {
       <div className="app">
         <Stage />
         <TopBar />
+        {phone && <TopHint />}
+        {phone && <ColorStrip />}
         <div className="chrome-bottom">
           <ContextBar />
           <Dock />

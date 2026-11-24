@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { LucideIcon } from 'lucide-react';
 import type { Mat } from '@/geom';
 
 export type Mode = 'classic' | 'advanced';
@@ -21,6 +22,7 @@ export interface MenuItem {
   divide?: boolean;
   /** A color dot shown before the label. */
   swatch?: string;
+  icon?: LucideIcon;
 }
 
 export interface View {
@@ -68,6 +70,8 @@ interface UiState {
   menu: { x: number; y: number; items: MenuItem[]; touch?: boolean } | null;
   /** Which swatch has its small color panel open ('paper' for the background). */
   colorPanel: number | 'paper' | null;
+  /** Phones: the strip of colors at the side is folded down to one dot. */
+  colorsFolded: boolean;
   /** Grid spacing in document units; 0 hides the grid (Advanced). */
   grid: number;
   hintDismissed: boolean;
@@ -118,6 +122,7 @@ export const useUi = create<UiState>((set) => ({
   corner: null,
   menu: null,
   colorPanel: null,
+  colorsFolded: stored('lc.colorsFolded', '') === '1',
   grid: 0,
   hintDismissed: stored('lc.hint', '') === '1',
 

@@ -78,7 +78,7 @@ export function ContextMenu() {
               it.onSelect();
             }}
           >
-            {it.swatch && <span className="swatch-sm" style={{ background: it.swatch, width: 16, height: 16 }} />}
+            {it.swatch ? <span className="swatch-sm" style={{ background: it.swatch, width: 16, height: 16 }} /> : it.icon ? <it.icon /> : <span className="menu-gap" />}
             {it.label}
             {it.keys && <kbd>{it.keys}</kbd>}
           </button>

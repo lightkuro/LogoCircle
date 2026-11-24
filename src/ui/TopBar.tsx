@@ -1,31 +1,37 @@
-import { CircleHelp, Eye, EyeOff, Layers, Redo2, Share, Undo2 } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { CircleHelp, Ellipsis, Eye, EyeOff, Layers, Redo2, RotateCcw, Save, Share, Undo2 } from 'lucide-react';
 import { Popover } from '@base-ui/react/popover';
 import { useDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
-import { setMode } from '@/actions';
-import { IconButton, Segmented, useIsPhone } from './primitives';
+import { useIsPhone, useIsTouch } from '@/store/settings';
+import { useKeys } from '@/keys';
+import { resetToStarter, saveToDevice, setMode } from '@/actions';
+import { IconButton, Segmented } from './primitives';
 import { LogoMark } from './icons';
-
-const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
-export const MOD = mac ? '⌘' : 'Ctrl+';
 
 /** A one-glance explanation, with the way to more. */
 function HelpButton() {
+  const touch = useIsTouch();
+  const tap = touch ? 'Tap' : 'Click';
   return (
     <Popover.Root>
       <Popover.Trigger className="ib" aria-label="How it works">
         <CircleHelp />
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Positioner side="bottom" align="start" sideOffset={12} style={{ zIndex: 30 }}>
+        <Popover.Positioner side="bottom" align="start" sideOffset={12} collisionPadding={8} style={{ zIndex: 30 }}>
           <Popover.Popup className="pop" style={{ width: 300, padding: '14px 16px 12px' }}>
             <div className="text-[15px] font-semibold tracking-[-0.01em]">Draw outlines, then color in</div>
             <ol className="m-0 mt-2 list-decimal space-y-1 pl-5 text-[13.5px] leading-snug text-muted">
               <li>Add circles, shapes and lines. Overlap them freely.</li>
-              <li>Tap a color, then tap the areas between the outlines.</li>
+              <li>
+                {tap} a color, then {tap.toLowerCase()} the areas between the outlines.
+              </li>
               <li>Hide the outlines and export.</li>
             </ol>
-            <p className="mb-0 mt-2 text-[13px] leading-snug text-muted">Select something and tap a color to color it directly. Right-click (or press and hold) anything for more.</p>
+            <p className="mb-0 mt-2 text-[13px] leading-snug text-muted">
+              Select something and {tap.toLowerCase()} a color to color it directly. {touch ? 'Press and hold' : 'Right-click'} anything for more.
+            </p>
             <div className="mt-2 flex flex-wrap gap-1">
               <Popover.Close className="chip" style={{ background: 'var(--sunken)' }} onClick={() => useUi.setState({ sheet: 'gallery', galleryTab: 'examples' })}>
                 See examples
@@ -41,8 +47,42 @@ function HelpButton() {
   );
 }
 
+function Item({ icon, label, keys, onClick, disabled, tone }: { icon: ReactNode; label: string; keys?: string; onClick: () => void; disabled?: boolean; tone?: 'danger' }) {
+  return (
+    <Popover.Close className="menu-item" data-tone={tone} disabled={disabled} onClick={onClick}>
+      {icon}
+      {label}
+      {keys && <kbd>{keys}</kbd>}
+    </Popover.Close>
+  );
+}
+
+/** The three dots: what is not needed at every moment. On phones that includes Redo and Export. */
+function MoreButton({ phone, canRedo }: { phone: boolean; canRedo: boolean }) {
+  return (
+    <Popover.Root>
+      <Popover.Trigger className="ib" aria-label="More options">
+        <Ellipsis />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner side="bottom" align="end" sideOffset={12} collisionPadding={8} style={{ zIndex: 30 }}>
+          <Popover.Popup className="pop bar-menu" style={{ width: 252 }}>
+            {phone && <Item icon={<Redo2 />} label="Redo" disabled={!canRedo} onClick={() => useDoc.getState().redo()} />}
+            <Item icon={<Save />} label="Save" onClick={() => void saveToDevice()} />
+            {phone && <Item icon={<Share />} label="Export" onClick={() => useUi.setState({ sheet: 'export' })} />}
+            <div className="menu-sep" />
+            <Item icon={<RotateCcw />} label="Reset to the default design" onClick={() => void resetToStarter()} />
+            <p className="bar-menu-note">Your work saves by itself as you go. Save is there for peace of mind.</p>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
 export function TopBar() {
   const phone = useIsPhone();
+  const key = useKeys();
   const canUndo = useDoc((s) => s.past.length > 0);
   const canRedo = useDoc((s) => s.future.length > 0);
   const name = useDoc((s) => s.doc.name);
@@ -87,19 +127,16 @@ export function TopBar() {
       )}
 
       <div className="glass bar">
-        <IconButton label="Undo" keys={`${MOD}Z`} disabled={!canUndo} onClick={() => useDoc.getState().undo()}>
+        <IconButton label="Undo" keys={key('undo')} disabled={!canUndo} onClick={() => useDoc.getState().undo()}>
           <Undo2 />
         </IconButton>
-        <IconButton label="Redo" keys={mac ? '⇧⌘Z' : 'Ctrl+Y'} disabled={!canRedo} onClick={() => useDoc.getState().redo()}>
-          <Redo2 />
-        </IconButton>
+        {!phone && (
+          <IconButton label="Redo" keys={key('redo')} disabled={!canRedo} onClick={() => useDoc.getState().redo()}>
+            <Redo2 />
+          </IconButton>
+        )}
         <span className="sep" />
-        <IconButton
-          label={showGuides ? 'Hide outlines' : 'Show outlines'}
-          keys="H"
-          active={!showGuides}
-          onClick={() => set({ showGuides: !showGuides, selection: [] })}
-        >
+        <IconButton label={showGuides ? 'Hide outlines' : 'Show outlines'} keys={key('outlines')} active={!showGuides} onClick={() => set({ showGuides: !showGuides, selection: [] })}>
           {showGuides ? <Eye /> : <EyeOff />}
         </IconButton>
         {phone && mode === 'advanced' && (
@@ -107,10 +144,13 @@ export function TopBar() {
             <Layers />
           </IconButton>
         )}
-        <button type="button" className="btn ml-1" data-variant="primary" onClick={() => set({ sheet: 'export' })}>
-          <Share />
-          {!phone && 'Export'}
-        </button>
+        {!phone && (
+          <button type="button" className="btn ml-1" data-variant="primary" onClick={() => set({ sheet: 'export' })}>
+            <Share />
+            Export
+          </button>
+        )}
+        <MoreButton phone={phone} canRedo={canRedo} />
       </div>
     </div>
   );

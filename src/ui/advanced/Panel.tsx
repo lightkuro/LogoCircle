@@ -34,7 +34,7 @@ import { useDoc, getDoc, commit } from '@/store/doc';
 import { useUi } from '@/store/ui';
 import { board, resolveFill } from '@/model/doc';
 import { selectionBBox, updateGuide } from '@/model/ops';
-import { isClosedGuide } from '@/model/guides';
+import { isClosedGuide, setCornerRadius } from '@/model/guides';
 import type { Doc, Fill, Guide } from '@/model/types';
 import { editFrame, fillSelectedOutlines, fitToScreen, setBoard } from '@/actions';
 import {
@@ -229,7 +229,7 @@ function Inspector() {
                 setTurn(0);
               }}
             />
-            {rect && <NumField label="Radius" value={rect.radius} onCommit={(v) => patchGuide({ ...rect, radius: Math.max(0, v) })} />}
+            {rect && <NumField label="Radius" value={rect.radius} onCommit={(v) => patchGuide(setCornerRadius(rect, -1, v))} />}
           </div>
         </Section>
       )}

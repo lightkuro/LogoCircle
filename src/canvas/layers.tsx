@@ -3,6 +3,7 @@ import { apply, chainsToPath, polygonToPath, ringsToPath, toCss, type Mat, type 
 import { withFollowers, type Arrangement } from '@/engine';
 import { useDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
+import { useIsDark } from '@/store/settings';
 import { imageUrl } from '@/store/persist';
 import { board, resolveFill } from '@/model/doc';
 import { guideCenterline, guideChains, guideWidth } from '@/model/guides';
@@ -118,22 +119,77 @@ export function ShapesLayer() {
 // Guides (construction outlines)
 // ---------------------------------------------------------------------------
 
-const GuideItem = memo(function GuideItem({ guide, selected, quiet }: { guide: Guide; selected: boolean; quiet: boolean }) {
+/** Is a color dark enough that a black line on it gets lost? */
+function isDark(color: string | null | undefined): boolean {
+  if (!color) return false;
+  let h = color.trim().replace('#', '');
+  if (h.length === 3) h = h.replace(/./g, (c) => c + c);
+  if (!/^[0-9a-f]{6}$/i.test(h)) return false;
+  const lin = (i: number): number => {
+    const v = parseInt(h.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(0) + 0.7152 * lin(2) + 0.0722 * lin(4) < 0.1;
+}
+
+/** One guide's halo, or its line. The two are drawn in separate passes so the halos can be masked. */
+const GuideItem = memo(function GuideItem({ guide, selected, quiet, part }: { guide: Guide; selected: boolean; quiet: boolean; part: 'halo' | 'line' }) {
   const override = useDrag((s) => (s.guide?.id === guide.id ? s.guide : null));
   const mat = useDrag((s) => (s.ids?.has(guide.id) ? s.mat : null));
   const g = override ?? guide;
   const d = useMemo(() => chainsToPath(guideChains(g)), [g]);
-  const spine = useMemo(() => (guideWidth(g) > 0 ? chainsToPath(guideCenterline(g)) : null), [g]);
+  const spine = useMemo(() => (part === 'line' && guideWidth(g) > 0 ? chainsToPath(guideCenterline(g)) : null), [g, part]);
   if (g.hidden) return null;
   const cut = g.type === 'line' && g.cut;
   return (
     <g transform={mat ? toCss(mat) : undefined} className={`guide${selected ? ' is-selected' : quiet ? ' is-quiet' : ''}${cut ? ' is-cut' : ''}`}>
-      <path d={d} className="guide-halo" />
-      <path d={d} className="guide-line" />
+      {part === 'halo' ? <path d={d} className="guide-halo" /> : <path d={d} className="guide-line" />}
       {spine && <path d={spine} className="guide-spine" />}
     </g>
   );
 });
+
+const FAR = 100000;
+
+const MaskShape = memo(function MaskShape({ shape, dark }: { shape: Shape; dark: boolean }) {
+  const live = useDrag((s) => (s.shapeRings && shape.id in s.shapeRings ? s.shapeRings[shape.id] : undefined));
+  const rings = live === undefined ? shape.rings : live;
+  const d = useMemo(() => (rings ? ringsToPath(rings) : ''), [rings]);
+  const mat = useDrag((s) => (s.ids?.has(shape.id) ? s.mat : null));
+  if (shape.hidden || !d) return null;
+  return <path d={d} transform={mat ? toCss(mat) : undefined} fill={dark ? '#fff' : '#000'} />;
+});
+
+/**
+ * Where the canvas is dark. Outlines are black; over these places they get a
+ * light halo so they stay readable, and nowhere else.
+ */
+function DarkMask() {
+  const shapes = useDoc((s) => s.doc.shapes);
+  const palette = useDoc((s) => s.doc.palette);
+  const paper = useDoc((s) => s.doc.paper);
+  const art = useDoc((s) => s.doc.artboard);
+  const refs = useDoc((s) => s.doc.refs);
+  const liveBoard = useDrag((s) => s.board);
+  const darkUi = useIsDark();
+  const b = liveBoard ?? board({ artboard: art });
+  // A photo that has not been faded much may well be dark; treat it as such.
+  const photo = (above: boolean): React.ReactNode =>
+    refs
+      .filter((r) => !r.hidden && !!r.above === above && r.opacity > 0.65)
+      .map((r) => <rect key={r.id} x={r.cx - r.w / 2} y={r.cy - r.h / 2} width={r.w} height={r.h} fill="#fff" transform={r.rot ? `rotate(${(r.rot * 180) / Math.PI} ${r.cx} ${r.cy})` : undefined} />);
+  return (
+    <mask id="lc-dark" maskUnits="userSpaceOnUse" x={-FAR} y={-FAR} width={FAR * 2} height={FAR * 2}>
+      <rect x={-FAR} y={-FAR} width={FAR * 2} height={FAR * 2} fill={darkUi ? '#fff' : '#000'} />
+      <rect x={b.x} y={b.y} width={b.w} height={b.h} fill={isDark(paper) ? '#fff' : '#000'} />
+      {photo(false)}
+      {shapes.map((s) => (
+        <MaskShape key={s.id} shape={s} dark={isDark(resolveFill({ palette }, s.fill))} />
+      ))}
+      {photo(true)}
+    </mask>
+  );
+}
 
 export function GuidesLayer() {
   const guides = useDoc((s) => s.doc.guides);
@@ -142,9 +198,18 @@ export function GuidesLayer() {
   const showCuts = useUi((s) => s.showCuts);
   const quiet = useUi((s) => s.tool === 'color');
   if (!show) return null;
+  const list = guides.filter((g) => !(g.type === 'line' && g.cut && !showCuts));
   return (
     <g>
-      {guides.map((g) => (g.type === 'line' && g.cut && !showCuts ? null : <GuideItem key={g.id} guide={g} selected={selection.includes(g.id)} quiet={quiet} />))}
+      <DarkMask />
+      <g mask="url(#lc-dark)">
+        {list.map((g) => (
+          <GuideItem key={g.id} guide={g} selected={selection.includes(g.id)} quiet={quiet} part="halo" />
+        ))}
+      </g>
+      {list.map((g) => (
+        <GuideItem key={g.id} guide={g} selected={selection.includes(g.id)} quiet={quiet} part="line" />
+      ))}
     </g>
   );
 }
@@ -194,10 +259,14 @@ export function SceneOverlays() {
   const draft = useDrag((s) => s.draft);
   const draftWidth = useDrag((s) => s.draftWidth);
   const dashed = useDrag((s) => s.draftDashed);
+  const trim = useDrag((s) => s.trim);
+  const trimWidth = useDrag((s) => s.trimWidth);
   const ink = useUi((s) => s.ink);
   const palette = useDoc((s) => s.doc.palette);
   return (
     <g style={{ pointerEvents: 'none' }}>
+      {trim && trimWidth > 0 && <path d={trim} className="trim-band" strokeWidth={trimWidth} />}
+      {trim && <path d={trim} className="trim-hot" />}
       {lines.map((l, i) => (
         <line key={i} x1={l.a.x} y1={l.a.y} x2={l.b.x} y2={l.b.y} className="snap-line" />
       ))}
@@ -292,13 +361,19 @@ export function SelectionOverlay() {
           }
           case 'mid':
             return <circle key={i} cx={p.x} cy={p.y} r={3.2} className="handle-mid" />;
-          default:
-            return <circle key={i} cx={p.x} cy={p.y} r={5} className="handle-box" />;
+          default: {
+            const at = h.handle.kind === 'box' ? RECT_CORNER[h.handle.at] : undefined;
+            const picked = corner && corner.id === selection[0] && at !== undefined && (corner.index === at || corner.index < 0) && d.guides.find((x) => x.id === corner.id)?.type === 'rect';
+            return <circle key={i} cx={p.x} cy={p.y} r={picked ? 6 : 5} className={picked ? 'handle-box is-picked' : 'handle-box'} />;
+          }
         }
       })}
     </g>
   );
 }
+
+/** A rectangle's corners, in the order their rounding is stored. */
+const RECT_CORNER: Partial<Record<string, number>> = { nw: 0, ne: 1, se: 2, sw: 3 };
 
 /** While the export frame is being adjusted: everything outside it dims, and it gets handles. */
 function BoardOverlay() {

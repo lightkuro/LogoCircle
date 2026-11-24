@@ -1,5 +1,5 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Search, Upload, X } from 'lucide-react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ALargeSmall, ChevronDown, Search, Type, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import '@/styles/text.css';
 import { ringsToPath } from '@/geom';
@@ -10,6 +10,7 @@ import { commitText } from '@/actions';
 import { DEFAULT_FONT, FONTS, FONT_KINDS, type FontDef, type FontKind } from '@/text/fonts';
 import { addCustomFont, cssFontLoaded, cssFontReady, customFonts, cssFamily, isCustomFont, removeCustomFont, restoreCustomFonts } from '@/text/load';
 import type { Layout } from '@/text/layout';
+import { useIsPhone } from '@/store/settings';
 import { Sheet, Slider } from '../primitives';
 
 /** What the previews say until a word has been typed. */
@@ -107,8 +108,8 @@ const FontTile = memo(function FontTile({
   );
 });
 
-/** The word as it will land on the canvas, on the canvas's own background. */
-function Preview({ value, fontId, spacing, color, paper }: { value: string; fontId: string; spacing: number; color: string; paper: string | null }) {
+/** The word as it will land on the canvas, on the canvas's own background. Bigger sizes show bigger. */
+function Preview({ value, fontId, spacing, size, color, paper }: { value: string; fontId: string; spacing: number; size: number; color: string; paper: string | null }) {
   const [layout, setLayout] = useState<Layout | null>(null);
   useEffect(() => {
     let alive = true;
@@ -127,12 +128,143 @@ function Preview({ value, fontId, spacing, color, paper }: { value: string; font
   const w = Math.max(40, layout?.width ?? 200);
   const asc = layout?.ascent ?? 100;
   const desc = layout?.descent ?? -25;
+  // From a third of the box at the smallest size to all of it at the largest on the slider.
+  const k = 0.34 + 0.66 * Math.max(0, Math.min(1, (size - 40) / 440));
   return (
     <div className={`tx-preview${paper ? '' : ' tx-checker'}`} style={paper ? { background: paper } : undefined} data-paper={paper ?? 'none'}>
-      <svg viewBox={`${-6} ${-asc} ${w + 12} ${asc - desc}`} aria-label="Preview">
-        <path d={d} fill={color} opacity={value.trim() ? 1 : 0.3} />
+      <svg viewBox={`${-6} ${-asc} ${w + 12} ${asc - desc}`} style={{ height: `${Math.round(k * 100)}%` }} aria-label="Preview">
+        <path d={d} fill={color} />
       </svg>
     </div>
+  );
+}
+
+/** How much of the bottom of the screen the on-screen keyboard is covering. */
+function useKeyboardInset(active: boolean): number {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!active || !vv) return void setInset(0);
+    const update = (): void => setInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, [active]);
+  return inset;
+}
+
+/**
+ * Phones: a panel that takes the lower half of the screen and leaves the
+ * canvas in view. Pull it up (or tap its grip) for the whole thing; pull it
+ * down to put it away.
+ */
+function HalfPanel({
+  open,
+  title,
+  onClose,
+  expanded,
+  onExpanded,
+  top,
+  children,
+  bodyRef,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  expanded: boolean;
+  onExpanded: (v: boolean) => void;
+  top: ReactNode;
+  children: ReactNode;
+  bodyRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const [mounted, setMounted] = useState(open);
+  const [shown, setShown] = useState(false);
+  const [pull, setPull] = useState<number | null>(null); // height in px while a finger is dragging the grip
+  const panel = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ y: number; h: number; moved: boolean } | null>(null);
+  const keyboard = useKeyboardInset(mounted);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const id = requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)));
+      return () => cancelAnimationFrame(id);
+    }
+    setShown(false);
+    const t = setTimeout(() => setMounted(false), 320);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  if (!mounted) return null;
+  const end = (e: React.PointerEvent): void => {
+    const d = drag.current;
+    drag.current = null;
+    setPull(null);
+    if (!d) return;
+    const dy = e.clientY - d.y;
+    if (!d.moved) onExpanded(!expanded); // a tap on the grip
+    else if (dy < -36) onExpanded(true);
+    else if (dy > 36) expanded ? onExpanded(false) : onClose();
+  };
+  return (
+    <>
+      <div className="txp-away" data-shown={shown || undefined} onPointerDown={onClose} />
+      <div
+        ref={panel}
+        className="txp"
+        role="dialog"
+        aria-label={title}
+        data-shown={shown || undefined}
+        data-expanded={expanded || undefined}
+        data-pulling={pull !== null || undefined}
+        style={{ bottom: keyboard, ...(pull !== null ? { height: pull } : null), ...(keyboard ? { maxHeight: `calc(100dvh - ${keyboard}px - 8px)` } : null) }}
+      >
+        <div
+          className="txp-handle"
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            drag.current = { y: e.clientY, h: panel.current?.offsetHeight ?? 0, moved: false };
+          }}
+          onPointerMove={(e) => {
+            const d = drag.current;
+            if (!d) return;
+            const dy = e.clientY - d.y;
+            if (Math.abs(dy) > 6) d.moved = true;
+            if (d.moved) setPull(Math.max(120, Math.min(window.innerHeight * 0.94, d.h - dy)));
+          }}
+          onPointerUp={end}
+          onPointerCancel={() => {
+            drag.current = null;
+            setPull(null);
+          }}
+        >
+          <button type="button" className="txp-grip" aria-label={expanded ? 'Make the panel smaller' : 'Show everything'} aria-expanded={expanded} />
+          <div className="txp-head">
+            <span className="sheet-title">{title}</span>
+            <button type="button" className="ib" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={onClose}>
+              <X />
+            </button>
+          </div>
+        </div>
+        <div className="txp-top">{top}</div>
+        <div className="txp-body" ref={bodyRef}>
+          {children}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -156,6 +288,11 @@ export function TextSheet() {
   const [kind, setKind] = useState<FontKind | 'all'>('all');
   const input = useRef<HTMLInputElement>(null);
   const file = useRef<HTMLInputElement>(null);
+  const phone = useIsPhone();
+  const [expanded, setExpanded] = useState(false);
+  const body = useRef<HTMLDivElement>(null);
+  const fontsAt = useRef<HTMLDivElement>(null);
+  const sizeAt = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -167,15 +304,28 @@ export function TextSheet() {
     setFill(existing?.fill ?? (typeof ink === 'number' && ink < palette.length ? ink : 0));
     setQuery('');
     setKind('all');
+    setExpanded(false);
     // A font from the long list stays in sight when the sheet reopens.
     setMore(MORE.some((f) => f.id === font));
     setMine(customFonts());
     void restoreCustomFonts().then(setMine);
+    // On a phone the keyboard would cover the panel: it waits for a tap on the field.
+    if (phone) return;
     const t = setTimeout(() => input.current?.focus(), 120);
     return () => clearTimeout(t);
     // Only when the sheet opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, target]);
+
+  /** Open the whole panel and bring one of its sections to the top. */
+  const showSection = (at: React.RefObject<HTMLDivElement | null>): void => {
+    setExpanded(true);
+    setTimeout(() => {
+      const el = at.current;
+      const box = body.current;
+      if (el && box) box.scrollTo({ top: el.offsetTop - box.offsetTop, behavior: 'smooth' });
+    }, 60);
+  };
 
   const pick = (id: string): void => {
     setFontId(id);
@@ -187,11 +337,13 @@ export function TextSheet() {
   };
 
   const close = (): void => useUi.setState({ sheet: null, textTarget: null });
+  // Nothing typed? Then it says "Test": a word to place now and change later.
+  const text = value.trim() ? value : PLACEHOLDER;
   const submit = async (): Promise<void> => {
-    if (!value.trim() || busy) return;
+    if (busy) return;
     setBusy(true);
     try {
-      const ok = await commitText({ value, fontId, size, spacing, fill }, target);
+      const ok = await commitText({ value: text, fontId, size, spacing, fill }, target);
       if (ok) close();
     } catch {
       toast.error('That font could not be loaded. Check your connection and try again.');
@@ -232,27 +384,37 @@ export function TextSheet() {
 
   const safeFill = typeof fill === 'number' && fill >= palette.length ? 0 : fill;
 
-  return (
-    <Sheet open={open} onClose={close} title={existing ? 'Edit text' : 'Add text'} place="left">
-      <div className="tx-top">
-        <Preview value={value} fontId={fontId} spacing={spacing} color={resolveFill({ palette }, safeFill)} paper={paper} />
-        <input
-          ref={input}
-          className="field mt-2.5"
-          placeholder="Type a word"
-          value={value}
-          maxLength={40}
-          enterKeyHint="done"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          aria-label="Text"
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void submit()}
-        />
-      </div>
+  const title = existing ? 'Edit text' : 'Add text';
+  const add = (
+    <button type="button" className="btn" data-variant="primary" data-size={phone ? undefined : 'lg'} style={phone ? { height: 46, flexShrink: 0 } : { width: '100%' }} disabled={busy} onClick={() => void submit()}>
+      {existing ? 'Update' : phone ? 'Add' : 'Add to canvas'}
+    </button>
+  );
+  const field = (
+    <input
+      ref={input}
+      className="field"
+      placeholder={PLACEHOLDER}
+      value={value}
+      maxLength={40}
+      enterKeyHint="done"
+      autoCapitalize="none"
+      autoCorrect="off"
+      spellCheck={false}
+      aria-label="Text"
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter') return;
+        if (phone) e.currentTarget.blur();
+        else void submit();
+      }}
+    />
+  );
+  const preview = <Preview value={value} fontId={fontId} spacing={spacing} size={size} color={resolveFill({ palette }, safeFill)} paper={paper} />;
 
-      <div className="tx-row" style={{ marginTop: 4 }}>
+  const fonts = (
+    <>
+      <div className="tx-row" style={{ marginTop: 4 }} ref={fontsAt}>
         <span className="label">Font</span>
         <button type="button" className="tx-pill" onClick={() => file.current?.click()}>
           <Upload />
@@ -282,7 +444,7 @@ export function TextSheet() {
 
       <button type="button" className="tx-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>
         <span>
-          More fonts <small>· {MORE.length} to choose from</small>
+          More fonts <small>{MORE.length} to choose from</small>
         </span>
         <ChevronDown />
       </button>
@@ -322,39 +484,96 @@ export function TextSheet() {
               ))}
             </div>
           ) : (
-            <p className="tx-empty">No font by that name here. “Your font” adds one from a file.</p>
+            <p className="tx-empty">No font by that name here. Your font adds one from a file.</p>
           )}
         </>
       )}
+    </>
+  );
 
+  const sliders = (
+    <div ref={sizeAt}>
       <div className="label">Size</div>
       <Slider label="Size" min={40} max={480} step={2} typeMax={1200} value={size} onChange={setSize} format={(v) => String(Math.round(v))} />
       <div className="label">Letter spacing</div>
-      <Slider
-        label="Letter spacing"
-        min={-8}
-        max={40}
-        typeMax={200}
-        value={Math.round(spacing * 100)}
-        onChange={(v) => setSpacing(v / 100)}
-        format={(v) => String(Math.round(v))}
-      />
+      <Slider label="Letter spacing" min={-8} max={40} typeMax={200} value={Math.round(spacing * 100)} onChange={(v) => setSpacing(v / 100)} format={(v) => String(Math.round(v))} />
+    </div>
+  );
 
-      <div className="label">Color</div>
-      <div className="tx-colors" role="group" aria-label="Color">
-        {palette.map((c, i) => (
-          <button key={i} type="button" className="tx-color" aria-pressed={safeFill === i} aria-label={`Color ${i + 1}`} onClick={() => setFill(i)}>
-            <span className="tx-color-dot" style={{ background: c }} />
-            <span aria-hidden>{i + 1}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="tx-foot">
-        <button type="button" className="btn w-full" data-variant="primary" data-size="lg" disabled={!value.trim() || busy} onClick={() => void submit()}>
-          {existing ? 'Update' : 'Add to canvas'}
+  const colors = (
+    <div className="tx-colors" role="group" aria-label="Color">
+      {palette.map((c, i) => (
+        <button key={i} type="button" className="tx-color" aria-pressed={safeFill === i} aria-label={`Color ${i + 1}`} onClick={() => setFill(i)}>
+          <span className="tx-color-dot" style={{ background: c }} />
+          <span aria-hidden>{i + 1}</span>
         </button>
+      ))}
+    </div>
+  );
+
+  if (phone) {
+    const fontName = [...mine, ...FONTS].find((f) => f.id === fontId)?.name ?? 'Font';
+    return (
+      <HalfPanel
+        open={open}
+        title={title}
+        onClose={close}
+        expanded={expanded}
+        onExpanded={setExpanded}
+        bodyRef={body}
+        top={
+          <>
+            {preview}
+            <div className="txp-entry">
+              {field}
+              {add}
+            </div>
+          </>
+        }
+      >
+        {expanded ? (
+          <>
+            {fonts}
+            {sliders}
+            <div className="label">Color</div>
+            {colors}
+          </>
+        ) : (
+          <>
+            <div className="txp-big">
+              <button type="button" className="txp-bigbtn" onClick={() => showSection(fontsAt)}>
+                <Type />
+                <span>
+                  <b>Fonts</b>
+                  <small>{fontName}</small>
+                </span>
+              </button>
+              <button type="button" className="txp-bigbtn" onClick={() => showSection(sizeAt)}>
+                <ALargeSmall />
+                <span>
+                  <b>Size and spacing</b>
+                  <small>{Math.round(size)}</small>
+                </span>
+              </button>
+            </div>
+            {colors}
+          </>
+        )}
+      </HalfPanel>
+    );
+  }
+
+  return (
+    <Sheet open={open} onClose={close} title={title} place="left">
+      <div className="tx-top">
+        {preview}
+        <div className="mt-2.5">{field}</div>
       </div>
+      {fonts}
+      {sliders}
+      <div className="label">Color</div>
+      {colors}
+      <div className="tx-foot">{add}</div>
     </Sheet>
   );
 }

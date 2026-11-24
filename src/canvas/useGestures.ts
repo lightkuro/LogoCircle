@@ -1,4 +1,4 @@
-import { buzz } from '@/store/settings';
+import { buzz, settings } from '@/store/settings';
 import { useEffect, type RefObject } from 'react';
 import { polygonToPath, translate, windingOfPolygon, type BBox, type Mat, type Pt, type Ring } from '@/geom';
 import { faceAt, type Arrangement } from '@/engine';
@@ -70,6 +70,8 @@ type Gesture =
   | { kind: 'box'; frame: Frame; handle: Handle; ids: Set<string>; startDoc: Pt; mat: Mat }
   | { kind: 'pt'; guide: Guide; index: number; current: Guide; part: 'pt' | 'in' | 'out' }
   | { kind: 'pan'; start: Pt; view: { x: number; y: number; k: number } }
+  /** Right mouse button held: a click opens the menu, a drag does the other of pan / box-select. */
+  | { kind: 'right'; start: Pt; startDoc: Pt; client: Pt }
   | { kind: 'marquee'; startDoc: Pt; additive: boolean }
   | { kind: 'lasso'; pts: Pt[]; additive: boolean }
   | { kind: 'paint'; faces: Set<number>; last: Pt }
@@ -211,7 +213,6 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
     };
 
     const onDown = (e: PointerEvent): void => {
-      if (e.pointerType === 'mouse' && e.button === 2) return; // the context menu takes it from here
       (document.activeElement as HTMLElement | null)?.blur?.();
       if (ui().menu) useUi.setState({ menu: null });
       if (ui().colorPanel !== null) useUi.setState({ colorPanel: null });
@@ -219,6 +220,13 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       const p = local(e);
       pointers.set(e.pointerId, p);
       const s = ui();
+
+      if (e.pointerType === 'mouse' && e.button === 2) {
+        // Decided on the way: let go without moving for the menu, drag for the other of pan / box-select.
+        cancel();
+        g = { kind: 'right', start: p, startDoc: toDoc(s.view, p), client: { x: e.clientX, y: e.clientY } };
+        return;
+      }
 
       if (pointers.size === 2) {
         // A second finger always means pan/zoom; whatever one finger started is undone.
@@ -363,9 +371,14 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         g = { kind: 'move', startDoc: press.startDoc, ids: followSet(doc, movable), box: selectionBBox(doc, movable), mat: translate(0, 0) };
         return;
       }
-      // Empty canvas: a plain drag pans, with mouse or finger. Shift-drag draws a selection box.
-      if (press.shift && !press.touch) g = { kind: 'marquee', startDoc: press.startDoc, additive: true };
-      else g = { kind: 'pan', start: press.start, view: s.view };
+      // Empty canvas. A finger pans. A mouse does what Settings says: pan (the right button
+      // then box-selects) or box-select (the right button then pans). Shift-drag always box-selects.
+      if (press.touch) g = { kind: 'pan', start: press.start, view: s.view };
+      else if (press.shift) g = { kind: 'marquee', startDoc: press.startDoc, additive: true };
+      else if (settings().dragEmpty === 'select') {
+        if (press.fromColor) useUi.setState({ tool: 'arrange', erasing: false });
+        g = { kind: 'marquee', startDoc: press.startDoc, additive: false };
+      } else g = { kind: 'pan', start: press.start, view: s.view };
     };
 
     const onMove = (e: PointerEvent): void => {
@@ -433,6 +446,12 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         const slop = g.touch ? TOUCH_SLOP : MOUSE_SLOP;
         if (Math.hypot(p.x - g.start.x, p.y - g.start.y) < slop) return;
         beginDrag(g);
+      }
+      if (g.kind === 'right') {
+        if (Math.hypot(p.x - g.start.x, p.y - g.start.y) < MOUSE_SLOP + 2) return;
+        // Box-selecting only makes sense while arranging; with a tool in hand the right button just pans.
+        const select = settings().dragEmpty === 'pan' && s.tool === 'arrange' && !s.frameEdit;
+        g = select ? { kind: 'marquee', startDoc: g.startDoc, additive: e.shiftKey } : { kind: 'pan', start: g.start, view: s.view };
       }
 
       const d = toDoc(s.view, p);
@@ -627,6 +646,14 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       g = { kind: 'none' };
       const doc = getDoc();
 
+      if (cur.kind === 'right') {
+        // The right button went down and up in one place: the menu for whatever is there.
+        if (drawTools[s.tool]) return;
+        if (s.tool === 'color') useUi.setState({ tool: 'arrange', erasing: false });
+        openMenu(cur.client, cur.start, false);
+        return;
+      }
+
       switch (cur.kind) {
         case 'press':
           if (s.frameEdit) break;
@@ -741,6 +768,10 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
 
     const onContext = (e: MouseEvent): void => {
       e.preventDefault();
+      // The right mouse button is followed from press to release above (some systems fire this
+      // event on the press, some on the release), and a held finger opens its own menu.
+      if (e.button === 2 || (e as PointerEvent).pointerType === 'touch') return;
+      // What is left: the keyboard's menu key, or Ctrl-click on a Mac.
       const s = ui();
       if (drawTools[s.tool]) return;
       if (s.tool === 'color') useUi.setState({ tool: 'arrange', erasing: false });

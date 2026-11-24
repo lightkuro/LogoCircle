@@ -86,6 +86,13 @@ export async function allKeys(): Promise<string[]> {
 let timer: ReturnType<typeof setTimeout> | undefined;
 let thumbOf: ((doc: Doc) => string) | undefined;
 
+/** Save the current document right now, without waiting for the autosave. */
+export async function saveNow(): Promise<void> {
+  clearTimeout(timer);
+  const doc = useDoc.getState().doc;
+  await saveDoc(doc, thumbOf ? thumbOf(doc) : '');
+}
+
 /** Save the current document shortly after every change. */
 export function startAutosave(makeThumb: (doc: Doc) => string): () => void {
   thumbOf = makeThumb;

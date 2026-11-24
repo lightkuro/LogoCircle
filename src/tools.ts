@@ -7,8 +7,10 @@ import { commit, getDoc } from '@/store/doc';
 import { ui, useUi } from '@/store/ui';
 import { addGuide, addShapes } from '@/model/ops';
 import { guideCenterline } from '@/model/guides';
-import type { CurveGuide, PathGuide, PathNode, Shape } from '@/model/types';
-import { cutAlong } from '@/model/cut';
+import type { CurveGuide, Guide, PathGuide, PathNode, Shape } from '@/model/types';
+import { cutAlong, pieceAt, trimPiece, type Piece } from '@/model/cut';
+import { visibleGuides } from '@/model/paint';
+import { isTouch } from '@/store/settings';
 import { toast } from 'sonner';
 import { uid } from '@/model/ids';
 import { registerDrawTool } from '@/canvas/useGestures';
@@ -231,25 +233,59 @@ registerDrawTool('draw', {
 });
 
 // ---------------------------------------------------------------------------
-// Cut: drag a line across things to separate them along it
+// Cut: tap a piece of an outline to remove it (it ends at the crossings on
+// either side), or drag a line across things to slice them along it
 // ---------------------------------------------------------------------------
 
 let cutFrom: Pt | null = null;
 let cutTo: Pt | null = null;
+let slicing = false;
+let hot: Piece | null = null;
+
+// The outlines on screen, kept as one array per document so the pieces are worked out once.
+let shownFor: { src: Guide[]; cuts: boolean; list: Guide[] } | null = null;
+function shownOutlines(): Guide[] {
+  const s = ui();
+  if (!s.showGuides) return [];
+  const doc = getDoc();
+  if (!shownFor || shownFor.src !== doc.guides || shownFor.cuts !== s.showCuts) {
+    shownFor = { src: doc.guides, cuts: s.showCuts, list: visibleGuides(doc, true, s.showCuts) };
+  }
+  return shownFor.list;
+}
+
+function showHot(piece: Piece | null): void {
+  if (piece === hot && (piece !== null) === (useDrag.getState().trim !== null)) return;
+  hot = piece;
+  if (!piece) return void useDrag.getState().set({ trim: null, trimWidth: 0 });
+  let d = '';
+  piece.pts.forEach((p, i) => (d += `${i ? 'L' : 'M'}${fmt(p.x)} ${fmt(p.y)}`));
+  useDrag.getState().set({ trim: d, trimWidth: piece.reach * 2 });
+}
 
 function showCut(): void {
-  if (!cutFrom || !cutTo) return void useDrag.getState().set({ draft: null, draftDashed: false });
+  if (!cutFrom || !cutTo || !slicing) return void useDrag.getState().set({ draft: null, draftDashed: false });
   useDrag.getState().set({ draft: `M${fmt(cutFrom.x)} ${fmt(cutFrom.y)}L${fmt(cutTo.x)} ${fmt(cutTo.y)}`, draftWidth: 0, draftDashed: true });
 }
 
 registerDrawTool('cut', {
-  down(p) {
+  hover(p) {
+    showHot(pieceAt(shownOutlines(), p, 7 / ui().view.k));
+  },
+  down(p, e) {
     cutFrom = p;
     cutTo = p;
-    showCut();
+    slicing = false;
+    showHot(pieceAt(shownOutlines(), p, (e.pointerType === 'touch' ? 16 : 7) / ui().view.k));
   },
   move(p, e) {
     if (!cutFrom) return;
+    // A press that travels is a slice, not a tap on a piece.
+    if (!slicing && dist(p, cutFrom) > (e.pointerType === 'touch' ? 12 : 6) / ui().view.k) {
+      slicing = true;
+      showHot(null);
+    }
+    if (!slicing) return;
     let q = p;
     if (e.shiftKey) {
       // hold Shift for a cut at a clean angle
@@ -263,10 +299,31 @@ registerDrawTool('cut', {
   up() {
     const a = cutFrom;
     const b = cutTo;
+    const piece = hot;
+    const sliced = slicing;
     cutFrom = cutTo = null;
-    useDrag.getState().set({ draft: null, draftDashed: false });
-    if (!a || !b || dist(a, b) < 6 / ui().view.k) return;
+    slicing = false;
+    hot = null;
+    useDrag.getState().set({ draft: null, draftDashed: false, trim: null, trimWidth: 0 });
     const doc = getDoc();
+    const tap = isTouch() ? 'Tap' : 'Click';
+    if (!sliced) {
+      if (!piece) {
+        toast('Nothing to cut there', { description: `${tap} a piece of an outline to remove it, or drag a line across a shape to slice it.` });
+        return;
+      }
+      let next = doc;
+      try {
+        next = trimPiece(doc, shownOutlines(), piece);
+      } catch {
+        next = doc;
+      }
+      if (next === doc) return;
+      buzz(8);
+      commit(next);
+      return;
+    }
+    if (!a || !b) return;
     let next = doc;
     try {
       next = cutAlong(doc, a, b, { outlines: ui().showGuides });
@@ -283,29 +340,8 @@ registerDrawTool('cut', {
   },
   cancel() {
     cutFrom = cutTo = null;
-    useDrag.getState().set({ draft: null, draftDashed: false });
+    slicing = false;
+    hot = null;
+    useDrag.getState().set({ draft: null, draftDashed: false, trim: null, trimWidth: 0 });
   },
 });
-
-// Leaving the pen with a path half-drawn keeps what was drawn.
-useUi.subscribe((s, prev) => {
-  if (prev.tool === 'pen' && s.tool !== 'pen' && nodes.length) finishPen(false);
-});
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('keydown', (e) => {
-    if (ui().tool !== 'pen') return;
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      finishPen(false);
-    } else if (e.key === 'Escape') {
-      e.stopImmediatePropagation();
-      if (nodes.length) finishPen(false);
-      else useUi.setState({ tool: 'arrange' });
-    } else if ((e.key === 'Backspace' || e.key === 'Delete') && nodes.length) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      undoPenPoint();
-    }
-  }, true);
-}

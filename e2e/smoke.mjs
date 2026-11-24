@@ -72,15 +72,20 @@ async function fresh(browser, phone, { starter = false } = {}) {
   return { ctx, page, errors };
 }
 
-const GROUPS = { Line: 'Lines', Curve: 'Lines', Draw: 'Lines', Square: 'Shapes', Triangle: 'Shapes', Polygon: 'Shapes', Star: 'Shapes' };
+const GROUPS = { Circle: 'Shapes', Square: 'Shapes', Triangle: 'Shapes', Polygon: 'Shapes', Star: 'Shapes', Line: 'Lines', Curve: 'Lines', Draw: 'Lines', Brush: 'Lines' };
 
 /** Add an outline (or pick a tool) through the dock. Some live behind a group button. */
 async function add(page, _phone, name) {
   const group = GROUPS[name];
   if (!group) return page.getByRole('button', { name, exact: true }).click();
+  return fromGroup(page, group, name);
+}
+
+/** Open one of the dock's groups (hovering does it) and choose from its list. */
+async function fromGroup(page, group, item) {
   await page.getByRole('button', { name: group, exact: true }).hover();
   await page.waitForTimeout(320);
-  await page.getByRole('menuitem', { name: new RegExp(`^${name}`) }).click();
+  await page.getByRole('menuitem', { name: new RegExp(`^${item}`) }).click();
 }
 
 /** Put the color in hand for coloring areas (with nothing selected, or it would color the selection instead). */
@@ -145,7 +150,8 @@ async function photoToLogo(browser, phone) {
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Photo', exact: true }).click()]);
+  // Photo has its own button on a desktop and sits under More on a phone; either way it offers a file or the clipboard.
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), fromGroup(page, phone ? 'More' : 'Photo', 'Choose a photo')]);
   await chooser.setFiles({ name: 'cat.png', mimeType: 'image/png', buffer: Buffer.from(png) });
   await page.waitForFunction(() => window.__lc.doc().refs.length === 1);
   check((await state(page)).refs === 1, 'photo placed');
@@ -198,10 +204,12 @@ async function geometric(browser, phone) {
   // A family of parallel lines: duplicate once, place it, then Repeat.
   await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
   await moveSelectionTo(page, 512, 456);
-  const repeat = page.getByRole('button', { name: /^Repeat/ });
-  await repeat.click();
-  await repeat.click();
-  await repeat.click();
+  // On a phone Repeat is one of the Options; on a desktop it sits in the bar.
+  for (let i = 0; i < 3; i++) {
+    if (phone) await page.getByRole('button', { name: 'Options', exact: true }).click();
+    await page.getByRole('button', { name: /^Repeat/ }).click();
+    if (phone) await page.waitForTimeout(250);
+  }
   const ys = await page.evaluate(() => window.__lc.doc().guides.filter((g) => g.type === 'line').map((g) => Math.round(g.y0)));
   const gaps = ys.slice(1).map((y, i) => y - ys[i]);
   check(ys.length === 5 && gaps.every((g) => Math.abs(g - gaps[0]) <= 1), `Repeat made evenly spaced lines (${ys.join(', ')})`);
@@ -234,7 +242,7 @@ async function wordmark(browser, phone) {
   const { ctx, page, errors } = await fresh(browser, phone);
   await add(page, phone, 'Text');
   await page.getByLabel('Text', { exact: true }).fill('bird');
-  await page.getByRole('button', { name: 'Add to canvas' }).click();
+  await page.getByRole('button', { name: /^Add( to canvas)?$/ }).click();
   await page.waitForFunction(() => window.__lc.doc().shapes.length === 4);
   let s = await state(page);
   check(s.shapes === 4 && s.groups === 1 && s.selection === 4, 'four letters, one word, selected together');
@@ -304,7 +312,7 @@ async function wordmark(browser, phone) {
 async function touch(browser) {
   console.log('\nTouch gestures (phone)');
   const { ctx, page, errors } = await fresh(browser, true);
-  await page.getByRole('button', { name: 'Circle', exact: true }).click();
+  await add(page, true, 'Circle');
   await pickColor(page, 1);
   const c = await page.evaluate(() => {
     const g = window.__lc.doc().guides[0];
@@ -389,8 +397,8 @@ async function controls(browser) {
   let v1 = (await ui()).view;
   check(Math.abs(v1.x - v0.x) > 30 && Math.abs(v1.y - v0.y) > 20, 'dragging empty canvas with the left button pans');
   await page.keyboard.press('Control+0');
-  await btn('Circle').click();
-  await btn('Circle').click();
+  await pick('Shapes', 'Circle');
+  await page.keyboard.press('o'); // and once by its key
   await page.keyboard.press('Escape');
   await page.keyboard.down('Shift');
   await drag(page, [150, 150], [900, 900]);
@@ -433,7 +441,7 @@ async function controls(browser) {
   check(curve?.type === 'curve' && curve.pts.length >= 3 && curve.pts.length <= 14, `Draw turns a wobbly line into a smooth curve with few points (${curve?.pts?.length})`);
   await btn('Done').click();
   check((await ui()).tool === 'arrange', 'Done leaves the tool');
-  await btn('Brush').click();
+  await pick('Lines', 'Brush');
   check((await page.getByRole('slider', { name: 'Brush size' }).getAttribute('max')) === '60', 'the brush slider tops out at 60');
   await page.getByLabel('Brush size value').fill('90');
   await page.getByLabel('Brush size value').press('Enter');
@@ -443,11 +451,11 @@ async function controls(browser) {
   await drag(page, [300, 250], [700, 300]);
   d = await doc();
   check(d.shapes.length === 1 && d.shapes[0].fill === 0, 'the brush paints a stroke in Classic');
-  await btn('Brush').click();
-  check((await ui()).tool === 'arrange', 'clicking the active tool again switches it off');
+  await pick('Lines', 'Brush');
+  check((await ui()).tool === 'arrange', 'choosing the active tool again switches it off');
 
   // Coloring a selection, ordering, thickness, kept rotation
-  await btn('Circle').click();
+  await pick('Shapes', 'Circle');
   await btn('Color 2').click();
   d = await doc();
   check(d.shapes.length === 2 && Boolean(d.shapes[1].from?.area), 'clicking a color with a closed outline selected fills it');
@@ -499,8 +507,9 @@ async function controls(browser) {
 
   // Examples keep to their own colors
   for (const name of ['Leaf', 'Sunset', 'Fish', 'Orbit', 'moon']) {
-    await btn('Menu').click();
-    await page.getByRole('button', { name: /^Examples/ }).click();
+    // the question mark in the top bar (its popover has a button of the same name)
+    await page.locator('.chrome-top').getByRole('button', { name: 'How it works' }).click();
+    await page.getByRole('button', { name: 'See examples' }).click();
     await page.getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
     await page.waitForFunction((n) => window.__lc.doc().name === n, name);
     const ex = await doc();
@@ -508,6 +517,194 @@ async function controls(browser) {
     check(ex.shapes.length > 0 && [...used].every((f) => Number.isInteger(f) && f < ex.palette.length) && used.size === ex.palette.length, `the ${name} example uses each of its ${ex.palette.length} colors`);
   }
   await page.screenshot({ path: join(shots, 'controls-desktop.png') });
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
+/** Corner rounding, trimming, the mouse scheme, settings and the three-dots menu (desktop). */
+async function refinements(browser) {
+  console.log('\nCorners, trimming, settings (desktop)');
+  const { ctx, page, errors } = await fresh(browser, false);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  const doc = () => page.evaluate(() => window.__lc.doc());
+  const ui = () =>
+    page.evaluate(() => {
+      const u = window.__lc.ui();
+      return { tool: u.tool, sel: u.selection.length, view: u.view, menu: !!u.menu, sheet: u.sheet };
+    });
+  const mouseDrag = async (a, b, button) => {
+    const p = await toScreen(page, a[0], a[1]);
+    const q = await toScreen(page, b[0], b[1]);
+    await page.mouse.move(p.x, p.y);
+    await page.mouse.down({ button });
+    await page.mouse.move((p.x + q.x) / 2, (p.y + q.y) / 2, { steps: 4 });
+    await page.mouse.move(q.x, q.y, { steps: 4 });
+    await page.mouse.up({ button });
+  };
+
+  // One corner of a square, by right-clicking it; then the amount, with the slider's number.
+  await add(page, false, 'Square');
+  let sq = (await doc()).guides.at(-1);
+  const corner = await toScreen(page, sq.cx + sq.w / 2, sq.cy - sq.h / 2);
+  await page.mouse.click(corner.x, corner.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Round this corner' }).click();
+  sq = (await doc()).guides.at(-1);
+  check(Array.isArray(sq.radii) && sq.radii[1] > 0 && sq.radii[0] === 0 && sq.radii[2] === 0 && sq.radii[3] === 0, `right-click → Round this corner rounds only that corner (${JSON.stringify(sq.radii)})`);
+  await page.getByLabel('Corner rounding value').fill('25');
+  await page.getByLabel('Corner rounding value').press('Enter');
+  check((await doc()).guides.at(-1).radii[1] === 25, 'the amount of rounding can be set');
+  await btn('Done').click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
+
+  // Cut: clicking a piece of an outline removes just that piece.
+  await add(page, false, 'Circle');
+  await moveSelectionTo(page, 512, 512);
+  await add(page, false, 'Line');
+  await moveSelectionTo(page, 512, 512);
+  await page.keyboard.press('Escape');
+  const before = await doc();
+  const ln = before.guides.find((g) => g.type === 'line');
+  const circle = before.guides.find((g) => g.type === 'ellipse');
+  check(ln.x0 < circle.cx - circle.rx && ln.x1 > circle.cx + circle.rx, 'the line crosses the whole circle');
+  await btn('Cut').click();
+  const mid = await toScreen(page, 512, 512);
+  await page.mouse.move(mid.x - 3, mid.y);
+  await page.mouse.move(mid.x, mid.y);
+  check((await page.locator('.trim-hot').count()) === 1, 'hovering shows the piece that would go');
+  await page.mouse.click(mid.x, mid.y);
+  let d = await doc();
+  const lines = d.guides.filter((g) => g.type === 'line');
+  check(lines.length === 2 && d.guides.some((g) => g.type === 'ellipse'), `clicking the line inside the circle leaves its two outer pieces (${lines.length})`);
+  const top = await toScreen(page, circle.cx, circle.cy - circle.ry);
+  await page.mouse.click(top.x, top.y);
+  d = await doc();
+  check(d.guides.filter((g) => g.type === 'edges').length === 1 && !d.guides.some((g) => g.type === 'ellipse'), 'clicking half of the circle leaves the other half');
+  await btn('Done').click();
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
+
+  // The right mouse button: a click opens the menu, a drag box-selects.
+  await add(page, false, 'Circle');
+  await page.keyboard.press('Escape');
+  await mouseDrag([100, 100], [950, 950], 'right');
+  let u = await ui();
+  check(u.sel === 1 && !u.menu, 'dragging with the right button box-selects, with no menu');
+  await page.keyboard.press('Escape');
+  const empty = await toScreen(page, 60, 60);
+  await page.mouse.click(empty.x, empty.y, { button: 'right' });
+  check((await ui()).menu, 'a right-click still opens the menu');
+  await page.keyboard.press('Escape');
+
+  // Settings: reached from the menu; keys can be changed; the mouse buttons can be swapped.
+  await btn('Menu').click();
+  check((await page.getByRole('button', { name: /^Examples/ }).count()) === 0 && (await page.getByRole('button', { name: /^How it works/ }).count()) <= 1, 'the menu no longer lists the help pages');
+  await page.getByRole('button', { name: /^Settings/ }).click();
+  await page.getByRole('button', { name: /^Shortcut for Circle/ }).click();
+  await page.keyboard.press('k');
+  await page.getByRole('radio', { name: /Left drag selects a box/ }).click();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__lc.ui().sheet === null);
+  await page.waitForTimeout(300);
+  const n0 = (await doc()).guides.length;
+  await page.keyboard.press('o');
+  check((await doc()).guides.length === n0, 'after rebinding, the old key does nothing');
+  await page.keyboard.press('k');
+  check((await doc()).guides.length === n0 + 1, 'and the new key adds a circle');
+  await page.keyboard.press('Escape');
+  await mouseDrag([100, 100], [950, 950], 'left');
+  check((await ui()).sel === 2, 'with the buttons swapped, a left drag box-selects');
+  await page.keyboard.press('Escape');
+  const v0 = (await ui()).view;
+  await mouseDrag([100, 100], [300, 250], 'right');
+  check(Math.abs((await ui()).view.x - v0.x) > 30, 'and a right drag moves the view');
+  await page.evaluate(() => window.__lc.ui().set({ sheet: 'settings' }));
+  await page.getByRole('radio', { name: 'Mobile' }).click();
+  check((await page.evaluate(() => document.documentElement.dataset.layout)) === 'phone', 'Layout: Mobile gives the phone interface on a big screen');
+  await page.getByRole('button', { name: 'Reset all settings' }).click();
+  check((await page.evaluate(() => document.documentElement.dataset.layout)) === 'desktop', 'Reset all settings undoes it');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__lc.ui().sheet === null);
+  await page.waitForTimeout(300);
+
+  // The three dots: Save, and back to the default design (which Undo reverses).
+  await btn('More options').click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Saved', { exact: true }).waitFor();
+  check(true, 'Save confirms that the logo is stored');
+  const mine = (await doc()).guides.length;
+  await btn('More options').click();
+  await page.getByRole('button', { name: 'Reset to the default design' }).click();
+  await page.waitForFunction(() => Object.values(window.__lc.doc().groups).some((g) => g.text?.value === 'default'));
+  check(true, 'Reset brings the default design back');
+  await page.keyboard.press('Control+z');
+  check((await doc()).guides.length === mine && !(await doc()).shapes.length, 'and Undo returns what was there');
+  await page.screenshot({ path: join(shots, 'refinements-desktop.png') });
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
+/** The phone layout: one bar of tools, colors at the side, the text panel on the lower half. */
+async function phoneLayout(browser) {
+  console.log('\nPhone layout and text panel');
+  const { ctx, page, errors } = await fresh(browser, true);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  const vh = page.viewportSize().height;
+  const tools = await page.getByRole('toolbar', { name: 'Tools' }).boundingBox();
+  const last = await btn('Select').boundingBox();
+  check(Math.abs(last.x + last.width - (tools.x + tools.width)) < 12, 'Select sits at the right end of the tools');
+  check((await page.getByRole('toolbar').count()) === 2, 'with nothing selected there is one bar of tools and the colors at the side');
+  const strip = await page.getByRole('toolbar', { name: 'Colors' }).boundingBox();
+  check(strip.x < 20 && strip.height > strip.width * 2, 'the colors run down the left edge');
+  await btn('Hide the colors').click();
+  check((await page.getByRole('toolbar', { name: 'Colors' }).count()) === 0, 'and fold away');
+  await btn('Show the colors').click();
+
+  // Text: half the screen at most, more on request, and "Test" when nothing is typed.
+  await btn('Text').click();
+  await page.waitForTimeout(600);
+  const panel = page.getByRole('dialog', { name: 'Add text' });
+  check((await panel.boundingBox()).height <= vh * 0.51, 'the text panel takes at most half the screen');
+  check(await page.evaluate(() => document.activeElement?.tagName !== 'INPUT'), 'without calling up the keyboard');
+  await page.getByRole('button', { name: /^Fonts/ }).click();
+  await page.waitForTimeout(600);
+  check((await panel.boundingBox()).height > vh * 0.85, 'Fonts opens the whole panel');
+  const y0 = (await page.getByLabel('Preview').boundingBox()).y;
+  await page.locator('.txp-body').evaluate((el) => el.scrollTo(0, 900));
+  await page.waitForTimeout(150);
+  check(Math.abs((await page.getByLabel('Preview').boundingBox()).y - y0) < 1, 'the preview stays in place while the rest scrolls');
+  const h0 = (await page.getByLabel('Preview').boundingBox()).height;
+  await page.getByLabel('Size value').fill('460');
+  await page.getByLabel('Size value').press('Enter');
+  await page.waitForTimeout(150);
+  check((await page.getByLabel('Preview').boundingBox()).height > h0 * 1.2, 'and shows the size as it changes');
+  await btn('Add').click();
+  await page.waitForFunction(() => window.__lc.ui().sheet === null);
+  check((await page.evaluate(() => Object.values(window.__lc.doc().groups)[0]?.text?.value)) === 'Test', 'adding with nothing typed places the word Test');
+  await page.waitForTimeout(450);
+
+  // A selection: a couple of buttons, the rest under Options. A tool: its hint at the top, Done at the bottom.
+  const bar = page.getByRole('toolbar', { name: 'Selection' });
+  check((await bar.getByRole('button').count()) <= 3, 'a selection shows at most three buttons');
+  const barBox = await bar.boundingBox();
+  check(barBox.x >= 0 && barBox.x + barBox.width <= page.viewportSize().width, 'and its bar fits the screen without scrolling');
+  await page.keyboard.press('Escape');
+  await btn('Cut').click();
+  const hint = await page.locator('.hint-pill').boundingBox();
+  const done = await btn('Done').boundingBox();
+  check(hint.y < vh * 0.25 && done.y > vh * 0.6, 'a tool puts its hint at the top and Done at the bottom');
+  check(/^Tap /.test(await page.locator('.hint-pill').innerText()), 'the hint speaks of tapping, not clicking');
+  await btn('Done').click();
+
+  // Photo lives under More, with a way to paste one.
+  await btn('More').click();
+  check((await page.getByRole('menuitem', { name: 'Choose a photo' }).count()) === 1 && (await page.getByRole('menuitem', { name: 'Paste a photo' }).count()) === 1, 'More offers choosing or pasting a photo');
+  await page.keyboard.press('Escape');
+  await btn('More options').click();
+  check((await page.getByRole('button', { name: 'Redo' }).count()) === 1 && (await page.getByRole('button', { name: 'Export' }).count()) === 1, 'the three dots hold Redo, Save and Export');
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: join(shots, 'phone-layout.png') });
   check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
   await ctx.close();
 }
@@ -538,8 +735,9 @@ async function firstVisit(browser, phone) {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+a');
   await page.keyboard.press('Delete');
-  await page.getByRole('button', { name: 'Circle', exact: true }).click();
-  await page.getByRole('button', { name: 'Thickness' }).click();
+  await add(page, phone, 'Circle');
+  // On a phone, thickness is one of the Options; on a desktop it has its own button.
+  await page.getByRole('button', { name: phone ? 'Options' : 'Thickness', exact: true }).click();
   await page.getByLabel('Thickness value').fill('40');
   await page.getByLabel('Thickness value').press('Enter');
   await page.keyboard.press('Escape');
@@ -556,7 +754,12 @@ async function firstVisit(browser, phone) {
   await page.mouse.click(sp.x, sp.y, { button: 'right' });
   await page.getByRole('menuitem', { name: /Adjust the export frame/ }).click();
   await drag(page, [1024, 1024], [900, 700]);
-  await page.getByRole('button', { name: '16:9', exact: true }).click();
+  if (phone) {
+    // On a phone the frame's size and shapes are behind one button.
+    await page.getByRole('button', { name: 'Frame size and shape' }).click();
+    await page.getByRole('button', { name: 'Wide 16 : 9' }).click();
+    await page.keyboard.press('Escape');
+  } else await page.getByRole('button', { name: '16:9', exact: true }).click();
   const b = await page.evaluate(() => window.__lc.doc().artboard);
   check(Math.abs(b.w / b.h - 16 / 9) < 0.02 && b.w !== 1024, `the export frame resizes and takes a 16:9 shape (${b.w} × ${b.h})`);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
@@ -569,7 +772,8 @@ async function firstVisit(browser, phone) {
 
 // ---------------------------------------------------------------------------
 
-const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', cwd: join(here, '..') });
+// Vite is started directly rather than through npx, so that stopping it stops the server itself.
+const server = spawn(process.execPath, [join(here, '..', 'node_modules', 'vite', 'bin', 'vite.js'), 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', cwd: join(here, '..') });
 let browser;
 try {
   await waitForServer();
@@ -581,6 +785,8 @@ try {
     await firstVisit(browser, phone);
   }
   await controls(browser);
+  await refinements(browser);
+  await phoneLayout(browser);
   await touch(browser);
 } catch (err) {
   console.error(err);

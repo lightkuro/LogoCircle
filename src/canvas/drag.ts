@@ -34,11 +34,14 @@ interface DragState {
   board: { x: number; y: number; w: number; h: number } | null;
   /** Where a finger has been held still long enough (screen px): shows a ring. */
   hold: Pt | null;
+  /** The piece of outline the Cut tool would remove, as path data, and its thickness. */
+  trim: string | null;
+  trimWidth: number;
   set: (patch: Partial<DragState>) => void;
   reset: () => void;
 }
 
-const EMPTY: Pick<DragState, 'ids' | 'mat' | 'guide' | 'paint' | 'hover' | 'marquee' | 'snapLines' | 'loupe' | 'draft' | 'draftWidth' | 'draftDashed' | 'shapeRings' | 'board' | 'hold'> = {
+const EMPTY: Pick<DragState, 'ids' | 'mat' | 'guide' | 'paint' | 'hover' | 'marquee' | 'snapLines' | 'loupe' | 'draft' | 'draftWidth' | 'draftDashed' | 'shapeRings' | 'board' | 'hold' | 'trim' | 'trimWidth'> = {
   ids: null,
   mat: null,
   guide: null,
@@ -53,6 +56,8 @@ const EMPTY: Pick<DragState, 'ids' | 'mat' | 'guide' | 'paint' | 'hover' | 'marq
   shapeRings: null,
   board: null,
   hold: null,
+  trim: null,
+  trimWidth: 0,
 };
 
 export const useDrag = create<DragState>((set) => ({

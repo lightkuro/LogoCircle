@@ -124,12 +124,16 @@ function SliderNumber({ value, min, max, format, label, onSet }: { value: number
       onChange={(e) => setText(e.target.value)}
       onBlur={apply}
       onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === 'Enter') e.currentTarget.blur();
         if (e.key === 'Escape') {
+          // Esc abandons what was typed. With nothing typed it is left alone, so it can close whatever panel this is in.
+          const typed = text !== null && text !== String(value);
           setText(null);
           e.currentTarget.blur();
+          if (typed) e.stopPropagation();
+          return;
         }
+        e.stopPropagation();
+        if (e.key === 'Enter') e.currentTarget.blur();
       }}
     />
   );

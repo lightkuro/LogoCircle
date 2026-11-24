@@ -14,6 +14,7 @@ import {
   lineEdge,
   rectChain,
   reverseRing,
+  ringArea,
   roundedPolygonChain,
   splineChain,
   transformEdge,
@@ -25,7 +26,7 @@ import {
   type Ring,
 } from '@/geom';
 import { booleanOp, strokeOutline } from '@/engine';
-import type { Band, Guide, PathGuide, PathNode } from './types';
+import type { Band, Guide, PathGuide, PathNode, RectGuide } from './types';
 
 const centerCache = new WeakMap<Guide, Chain[]>();
 const areaCache = new WeakMap<Guide, Ring[] | null>();
@@ -59,7 +60,7 @@ export function guideCenterline(g: Guide): Chain[] {
       out = [ellipseChain(g.cx, g.cy, g.rx, g.ry, g.rot)];
       break;
     case 'rect':
-      out = [rectChain(g.cx, g.cy, g.w, g.h, g.rot, g.radius)];
+      out = [rectOutline(g)];
       break;
     case 'line':
       out = [lineChain(g.x0, g.y0, g.x1, g.y1)];
@@ -95,6 +96,29 @@ export function isClosedOutline(g: Guide): boolean {
   return guideCenterline(g).some((c) => c.closed);
 }
 
+/**
+ * A rectangle's outline, grown by `grow` on every side (negative shrinks it).
+ * Rounded corners grow with it, as the band of a thick outline needs.
+ */
+export function rectOutline(g: RectGuide, grow = 0): Chain {
+  const w = g.w + grow * 2;
+  const h = g.h + grow * 2;
+  const round = (r: number): number => (r > 0 ? Math.max(0, r + grow) : 0);
+  if (!g.radii) return rectChain(g.cx, g.cy, w, h, g.rot, round(g.radius));
+  const cr = Math.cos(g.rot);
+  const sr = Math.sin(g.rot);
+  const P = (x: number, y: number): Pt => ({ x: g.cx + x * cr - y * sr, y: g.cy + x * sr + y * cr });
+  return roundedPolygonChain([P(-w / 2, -h / 2), P(w / 2, -h / 2), P(w / 2, h / 2), P(-w / 2, h / 2)], g.radii.map(round));
+}
+
+/** Rough length of a chain, for judging whether a band came out whole. */
+function chainLength(c: Chain): number {
+  const pts = flattenChain(c, 0.5);
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+  return len;
+}
+
 /** Rings of a band along a closed outline: the outline itself and its offset copy. */
 function closedBand(g: Guide, center: Chain, w: number, band: Band): Ring[] {
   const inner = band === 'in' ? w : band === 'mid' ? w / 2 : 0;
@@ -106,18 +130,67 @@ function closedBand(g: Guide, center: Chain, w: number, band: Band): Ring[] {
     return rings;
   }
   if (g.type === 'rect') {
-    const rings: Ring[] = [rectChain(g.cx, g.cy, g.w + outer * 2, g.h + outer * 2, g.rot, g.radius > 0 ? g.radius + outer : 0).edges];
-    if (g.w - inner * 2 > 0.5 && g.h - inner * 2 > 0.5) {
-      rings.push(reverseRing(rectChain(g.cx, g.cy, g.w - inner * 2, g.h - inner * 2, g.rot, Math.max(0, g.radius - inner)).edges));
-    }
+    const rings: Ring[] = [rectOutline(g, outer).edges];
+    if (g.w - inner * 2 > 0.5 && g.h - inner * 2 > 0.5) rings.push(reverseRing(rectOutline(g, -inner).edges));
     return rings;
   }
   // Anything else: a stroke centred on the outline, kept only on the wanted side.
-  const stroke = strokeOutline(center, band === 'mid' ? w : w * 2)
+  if (band === 'mid') return centredBand(center, w);
+  return sidedBand(center, w, band) ?? centredBand(center, w);
+}
+
+function centredBand(center: Chain, w: number): Ring[] {
+  return strokeOutline(center, w)
     .filter((c) => c.closed)
     .map((c) => c.edges);
-  if (band === 'mid') return stroke;
-  return booleanOp(band === 'in' ? 'intersect' : 'subtract', stroke, [center.edges]);
+}
+
+/**
+ * A band on one side of a closed outline, or null when that cannot be built:
+ * some outlines have no usable inside (they cross themselves, or are too tight
+ * for the thickness). The caller then lays the band on both sides instead.
+ */
+function sidedBand(center: Chain, w: number, band: 'in' | 'out'): Ring[] | null {
+  try {
+    const stroke = centredBand(center, w * 2);
+    const sided = booleanOp(band === 'in' ? 'intersect' : 'subtract', stroke, [center.edges]);
+    const got = sided.reduce((a, r) => a + ringArea(r, 0.5), 0);
+    const whole = chainLength(center) * w;
+    return sided.length && Math.abs(got) > whole * 0.35 ? sided : null;
+  } catch {
+    return null;
+  }
+}
+
+const spineCache = new WeakMap<Guide, Chain[]>();
+
+/**
+ * The line a thick outline is thick around: the middle of its band. For a
+ * band laid inside or outside a closed outline that is not the outline itself
+ * but its copy half a thickness in (or out). Pieces cut from an outline are
+ * made along this line, so they keep exactly the band they had.
+ */
+export function bandSpine(g: Guide): Chain[] {
+  const hit = spineCache.get(g);
+  if (hit) return hit;
+  const w = guideWidth(g);
+  const band = guideBand(g);
+  const out = guideCenterline(g).map((c): Chain => {
+    if (!(w > 0) || !c.closed || band === 'mid') return c;
+    const half = band === 'in' ? -w / 2 : w / 2;
+    if (g.type === 'ellipse') return g.rx + half > 0.5 && g.ry + half > 0.5 ? ellipseChain(g.cx, g.cy, g.rx + half, g.ry + half, g.rot) : c;
+    if (g.type === 'rect') return g.w + half * 2 > 0.5 && g.h + half * 2 > 0.5 ? rectOutline(g, half) : c;
+    if (!sidedBand(c, w, band)) return c; // the band fell back to both sides
+    const rings = sidedBand(c, w / 2, band);
+    if (!rings || rings.length !== 2) return c;
+    // Of the half band's two edges one is the outline; the other is the middle line.
+    const [a, b] = rings as [Ring, Ring];
+    const bigger = Math.abs(ringArea(a, 0.5)) >= Math.abs(ringArea(b, 0.5)) ? a : b;
+    const edges = band === 'out' ? bigger : bigger === a ? b : a;
+    return { edges, closed: true };
+  });
+  spineCache.set(g, out);
+  return out;
 }
 
 /**
@@ -243,9 +316,15 @@ export function transformGuide(g: Guide, m: Mat): Guide {
         const cr = Math.cos(g.rot);
         const sr = Math.sin(g.rot);
         const P = (x: number, y: number): Pt => apply(m, { x: g.cx + x * cr - y * sr, y: g.cy + x * sr + y * cr });
-        return { id: g.id, type: 'poly', pts: [P(-hw, -hh), P(hw, -hh), P(hw, hh), P(-hw, hh)], hidden: g.hidden, locked: g.locked, width, band: g.band };
+        const rr = g.radii ?? (g.radius > 0 ? [g.radius, g.radius, g.radius, g.radius] : undefined);
+        return { id: g.id, type: 'poly', pts: [P(-hw, -hh), P(hw, -hh), P(hw, hh), P(-hw, hh)], radii: rr && [...rr], hidden: g.hidden, locked: g.locked, group: g.group, width, band: g.band };
       }
-      return { ...g, cx: c.x, cy: c.y, w: g.w * lu, h: g.h * lv, rot: Math.atan2(u.y, u.x), radius: g.radius * Math.min(lu, lv), width };
+      const grow = Math.min(lu, lv);
+      // Mirrored: the corners swap top for bottom in the rectangle's own frame.
+      const mirrored = u.x * v.y - u.y * v.x < 0;
+      const r = g.radii;
+      const radii: RectGuide['radii'] = r && (mirrored ? [r[3] * grow, r[2] * grow, r[1] * grow, r[0] * grow] : [r[0] * grow, r[1] * grow, r[2] * grow, r[3] * grow]);
+      return { ...g, cx: c.x, cy: c.y, w: g.w * lu, h: g.h * lv, rot: Math.atan2(u.y, u.x), radius: g.radius * grow, radii, width };
     }
     case 'line': {
       const a = apply(m, { x: g.x0, y: g.y0 });
@@ -445,19 +524,27 @@ export function maxCornerRadius(g: Guide, index: number): number {
   return Math.min(Math.hypot(a.x - v.x, a.y - v.y), Math.hypot(b.x - v.x, b.y - v.y)) / 2;
 }
 
+/** A corner's rounding. Index −1 asks about all corners together (the largest). */
 export function cornerRadius(g: Guide, index: number): number {
-  if (g.type === 'rect') return g.radius;
-  if (g.type === 'poly') return g.radii?.[index] ?? 0;
+  if (g.type === 'rect') return g.radii ? (index < 0 ? Math.max(...g.radii) : (g.radii[index] ?? 0)) : g.radius;
+  if (g.type === 'poly') return index < 0 ? Math.max(0, ...(g.radii ?? [0])) : (g.radii?.[index] ?? 0);
   return 0;
 }
 
-/** Round one corner of a polygon (or all corners of a rectangle, which rounds evenly). */
+/** Round one corner (index −1: every corner alike). Rectangle corners count from the top-left, clockwise. */
 export function setCornerRadius(g: Guide, index: number, r: number): Guide {
-  if (g.type === 'rect') return { ...g, radius: Math.max(0, r) };
+  const v = Math.max(0, r);
+  if (g.type === 'rect') {
+    if (index < 0) return { ...g, radius: v, radii: undefined };
+    const radii: [number, number, number, number] = g.radii ? [...g.radii] : [g.radius, g.radius, g.radius, g.radius];
+    radii[index] = v;
+    const same = radii.every((x) => Math.abs(x - radii[0]) < 1e-9);
+    return same ? { ...g, radius: radii[0], radii: undefined } : { ...g, radius: Math.max(...radii), radii };
+  }
   if (g.type !== 'poly') return g;
   const radii = g.pts.map((_, i) => g.radii?.[i] ?? 0);
-  if (index < 0) radii.fill(Math.max(0, r));
-  else radii[index] = Math.max(0, r);
+  if (index < 0) radii.fill(v);
+  else radii[index] = v;
   return { ...g, radii: radii.some((x) => x > 0) ? radii : undefined };
 }
 

@@ -6,10 +6,12 @@ Make a logo by drawing simple outlines and coloring in the areas between them. R
 
 1. **Outlines.** Add circles, shapes, lines and curves. They are construction guides: overlap them freely, and trace over a reference photo if you like.
 2. **Color.** Tap a color, then tap or drag across the areas the outlines enclose. Neighbouring areas of the same color merge into one shape. Or select an outline and tap a color to color it directly; give it thickness first and it colors as a ring or a stroke.
-3. **Refine.** Erase areas, or Cut straight through shapes and outlines to split them. A fill follows its outlines when they are moved or reshaped. Words work the same way: put an outline over a letter, then erase or recolor what it cuts.
+3. **Refine.** Erase areas. With Cut, tap a piece of an outline between two crossings to remove it, or drag a line across shapes to slice them. A fill follows its outlines when they are moved or reshaped. Words work the same way: put an outline over a letter, then erase or recolor what it cuts.
 4. **Export.** Hide the outlines to see the logo, adjust the export frame, then download SVG or PNG.
 
-Right-click (or press and hold) anything for what can be done with it.
+Right-click (or press and hold) anything for what can be done with it: round a single corner, edit a word, change the order, group.
+
+Phones get their own layout (one bar of tools, colors down the side, panels on the lower half of the screen) and only touch wording; desktops get mouse and keyboard wording. Settings, in the LogoCircle menu, can force either layout, switch between light and dark, swap what the left and right mouse buttons do on empty canvas, and change any keyboard shortcut.
 
 Two modes share one document:
 

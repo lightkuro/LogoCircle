@@ -6,7 +6,9 @@ import { toast } from 'sonner';
 import { mul, scale, translate, type Mat, type Pt } from '@/geom';
 import { useDoc, getDoc, commit } from '@/store/doc';
 import { ui, useUi, remember, type Mode, type Tool } from '@/store/ui';
-import { putImage } from '@/store/persist';
+import { putImage, saveNow } from '@/store/persist';
+import { isPhone, isTouch } from '@/store/settings';
+import { keyLabel } from '@/keys';
 import { CLASSIC_COLORS, type Doc, type Guide, type RefImage, type Shape } from '@/model/types';
 import { addColor, addGuide, addRef, applyPalette, duplicateItems, removeColor, removeItems, selectionBBox, transformItems, contentBBox } from '@/model/ops';
 import { visibleGuides } from '@/model/paint';
@@ -18,7 +20,7 @@ import { regularPoints } from '@/geom';
 
 export type AddKind = 'circle' | 'line' | 'rect' | 'triangle' | 'curve' | 'polygon' | 'star';
 
-const insets = () => chromeInsets(ui().stage, ui().mode === 'advanced');
+const insets = () => chromeInsets(ui().stage, ui().mode === 'advanced', isPhone());
 
 /** The document point in the middle of the visible canvas. */
 export function viewCenter(): Pt {
@@ -525,6 +527,54 @@ export function pickPhoto(): void {
     if (f) void addPhoto(f);
   };
   input.click();
+}
+
+/** The Photo button: with a photo already placed it shows that photo's controls, otherwise it asks for one. */
+export function openPhoto(): void {
+  const doc = getDoc();
+  const ref = doc.refs[doc.refs.length - 1];
+  if (ref && ui().mode === 'classic') useUi.setState({ tool: 'arrange', erasing: false, selection: [ref.id], trayOpen: false, colorPanel: null });
+  else pickPhoto();
+}
+
+/** Bring in the picture that is on the clipboard. */
+export async function pastePhoto(): Promise<void> {
+  const fail = (): void => {
+    const extra = isTouch() ? '' : ` ${keyLabel('paste') ?? 'Ctrl+V'} also pastes one straight onto the canvas.`;
+    toast('No picture to paste', { description: `Copy a picture first, then try again.${extra}` });
+  };
+  try {
+    if (!navigator.clipboard?.read) return fail();
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((t) => t.startsWith('image/'));
+      if (type) return void (await addPhoto(await item.getType(type)));
+    }
+    fail();
+  } catch {
+    fail();
+  }
+}
+
+// --- saving and starting over ---------------------------------------------------
+
+/** Everything saves by itself; this is the button for peace of mind. */
+export async function saveToDevice(): Promise<void> {
+  try {
+    await saveNow();
+    toast('Saved', { description: 'It is in My logos, on this device.' });
+  } catch {
+    toast('Could not save', { description: 'This browser is not letting the app store anything right now.' });
+  }
+}
+
+/** Put the starting design back. One step, so Undo returns what was there. */
+export async function resetToStarter(): Promise<void> {
+  const fresh = await import('@/examples/starter').then((m) => m.buildStarter());
+  const doc = getDoc();
+  commit({ ...fresh, id: doc.id, name: doc.name, createdAt: doc.createdAt, updatedAt: Date.now() });
+  useUi.setState({ selection: [], tool: 'arrange', erasing: false, selectMode: 'move', showGuides: true, showCuts: true, frameEdit: false, colorPanel: null, menu: null, ink: 0, sheet: null, lastDup: null });
+  fitToScreen();
+  toast('Back to the default design', { description: 'Undo brings your logo back.', action: { label: 'Undo', onClick: () => useDoc.getState().undo() } });
 }
 
 // --- text -----------------------------------------------------------------------

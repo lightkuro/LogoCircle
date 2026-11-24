@@ -2,44 +2,47 @@ import { useUi } from '@/store/ui';
 import { useIsTouch, useSettings } from '@/store/settings';
 import { COMMANDS, GROUPS, combosFor, formatCombo } from '@/keys';
 import { Sheet } from '../primitives';
+import { HowItWorksAnimation } from '../HowItWorks';
 
 type Rows = [string, string][];
 
 const steps = (tap: string, hold: string): Rows => [
-  ['Outlines', 'Add circles, shapes, lines and curves. They are only guides: move, resize and overlap them freely. Trace over a photo if you like.'],
-  ['Color', `${tap} a color, then ${tap.toLowerCase()} or drag across the areas the outlines make. Neighbouring areas of the same color join into one shape. Or select an outline and ${tap.toLowerCase()} a color to color it directly.`],
-  ['Refine', `Under Cut: Cut removes the piece of an outline you ${tap.toLowerCase()}, between two crossings, or slices shapes along a line you drag; Erase clears areas. Show cut lines brings removed pieces back. A fill follows its outlines when you move them. Words work the same way.`],
-  ['Export', 'Hide the outlines to see the result, adjust the frame size if you need to, then export a clean SVG or PNG. Everything stays on this device; nothing is uploaded.'],
-  ['More', `${hold} anything for what can be done with it: round one corner, edit a word, change the order, group, and more.`],
+  ['Outlines', 'Add circles, shapes, lines, curves. They are guides only: move, resize, overlap freely. Trace over photo if wanted.'],
+  ['Color', `${tap} color, then ${tap.toLowerCase()} or drag across areas. Same-color neighbours join into one shape. Or select outline and ${tap.toLowerCase()} color to fill it.`],
+  ['Trim', `Cut: ${tap.toLowerCase()} segment to remove, drag to slice shape. Erase clears areas. Cut lines shows removed segments to restore. Fills follow their outlines. Words work the same.`],
+  ['Export', 'Hide outlines to see result. Adjust frame size if needed. Export SVG or PNG. Everything stays on this device.'],
+  ['More', `${hold} anything for options: round one corner, edit word, reorder, group.`],
 ];
 
 const TOUCH: Rows = [
-  ['Move something', 'Drag it'],
-  ['Move the view', 'Drag empty space, or use two fingers'],
-  ['Zoom', 'Pinch with two fingers'],
-  ['Menu for anything', 'Press and hold, then let go'],
-  ['Select a box of things', 'Press and hold, then drag'],
-  ['Select several one by one', 'Select, then One at a time, and tap each'],
-  ['Mirror a copy', 'Select it, then More, Mirror copy, and tap a line'],
-  ['Edit a word', 'Double-tap it'],
-  ['Round one corner', 'Press and hold the corner'],
-  ['Color the selection', 'Tap a color'],
+  ['Move item', 'Drag'],
+  ['Move view', 'Drag empty space or use two fingers'],
+  ['Zoom', 'Pinch'],
+  ['Menu for anything', 'Press and hold, then release'],
+  ['Box select', 'Press and hold, then drag'],
+  ['Select several', 'Select › One at a time, tap each'],
+  ['Mirror copy', 'Select, then More › Mirror copy, tap line'],
+  ['Edit word', 'Double-tap'],
+  ['Round one corner', 'Press and hold corner'],
+  ['Color selection', 'Tap color'],
 ];
 
 const mouse = (leftPans: boolean): Rows => [
-  ['Move something', 'Drag it'],
-  ['Move the view', leftPans ? 'Drag empty space' : 'Drag with the right button'],
-  ['Select a box of things', leftPans ? 'Drag with the right button, or Shift and drag' : 'Drag empty space'],
-  ['Move the view from anywhere', 'Hold Space, or use the middle button, and drag'],
+  ['Move item', 'Drag'],
+  ['Move view', leftPans ? 'Drag empty space' : 'Right-drag'],
+  ['Box select', leftPans ? 'Right-drag or Shift-drag' : 'Drag empty space'],
+  ['Move view from anywhere', 'Space-drag or middle-drag'],
   ['Zoom', 'Scroll wheel'],
   ['Menu for anything', 'Right-click'],
-  ['Select', 'Click. Click again for what is underneath.'],
-  ['Select several one by one', 'Shift and click'],
-  ['Mirror a copy', 'Select it, press M, and click a line'],
-  ['Edit a word', 'Double-click it'],
-  ['Round one corner', 'Right-click the corner'],
-  ['Color the selection', 'Click a color'],
-  ['Remove a point', 'Double-click the point'],
+  ['Select', 'Click. Click again for item underneath.'],
+  ['Select several', 'Shift-click'],
+  ['Mirror copy', 'Select, press M, click line'],
+  ['Edit word', 'Double-click'],
+  ['Round one corner', 'Right-click corner'],
+  ['Color selection', 'Click color'],
+  ['Remove point', 'Double-click point'],
+  ['Expand bar', 'Click or drag tab at end of bar'],
+  ['Pin tool to bar', 'Right-click tool'],
 ];
 
 function Table({ rows }: { rows: Rows }) {
@@ -69,7 +72,7 @@ function useKeyRows(): Rows {
       if (combos.length) rows.push([c.label, combos.map(formatCombo).join(' or ')]);
     }
   }
-  rows.push(['Nudge the selection', 'Arrow keys (Shift for bigger steps)'], ['Step back out of a tool or a selection', 'Esc'], ['Move the view', 'Hold Space and drag']);
+  rows.push(['Nudge selection', 'Arrow keys (Shift: bigger steps)'], ['Leave tool or selection', 'Esc'], ['Move view', 'Hold Space and drag']);
   return rows;
 }
 
@@ -81,33 +84,42 @@ export function HelpSheet() {
   const list = steps(touch ? 'Tap' : 'Click', touch ? 'Press and hold' : 'Right-click');
   return (
     <Sheet open={open} onClose={() => useUi.setState({ sheet: null })} title="Guide" place="top-left">
-      <ol className="m-0 list-none p-0">
-        {list.map(([t, d], i) => (
-          <li key={t} className="flex gap-3 py-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-              {i + 1}
-            </span>
-            <span>
-              <span className="block text-[15px] font-semibold">{t}</span>
-              <span className="block text-[13.5px] leading-snug text-muted">{d}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-      {touch ? (
-        <>
-          <div className="label">Touch</div>
-          <Table rows={TOUCH} />
-        </>
-      ) : (
-        <>
-          <div className="label">Mouse</div>
-          <Table rows={mouse(leftPans)} />
-          <div className="label">Keyboard</div>
-          <Table rows={keys} />
-          <p className="mb-0 mt-2 text-[12.5px] leading-snug text-muted">Keys and the mouse buttons can be changed in Settings, in the LogoCircle menu.</p>
-        </>
-      )}
+      <div className="guide-sheet">
+        <HowItWorksAnimation />
+        <ol className="guide-steps m-0 list-none p-0">
+          {list.map(([t, d], i) => (
+            <li key={t} className="flex gap-3 py-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                {i + 1}
+              </span>
+              <span>
+                <span className="block text-[15px] font-semibold">{t}</span>
+                <span className="block text-[13.5px] leading-snug text-muted">{d}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        {touch ? (
+          <>
+            <div className="label">Touch</div>
+            <Table rows={TOUCH} />
+          </>
+        ) : (
+          <>
+            <div className="guide-tables">
+              <div>
+                <div className="label">Mouse</div>
+                <Table rows={mouse(leftPans)} />
+              </div>
+              <div>
+                <div className="label">Keyboard</div>
+                <Table rows={keys} />
+              </div>
+            </div>
+            <p className="mb-0 mt-2 text-[12.5px] leading-snug text-muted">Change keys and mouse buttons in Settings (LogoCircle menu).</p>
+          </>
+        )}
+      </div>
     </Sheet>
   );
 }

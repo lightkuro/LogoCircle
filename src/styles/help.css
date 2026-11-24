@@ -1,0 +1,631 @@
+/* ------------------------------------------------------------------------
+   Help: the popover behind the question mark, and the Guide's animation
+   ------------------------------------------------------------------------ */
+
+:root {
+  --hiw-paper: #f5f1e8;
+  --hiw-line: #1c1c20;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --hiw-paper: #2b2b30;
+    --hiw-line: #ececef;
+  }
+}
+:root[data-theme='dark'] {
+  --hiw-paper: #2b2b30;
+  --hiw-line: #ececef;
+}
+
+/* --- Popover: grows with the screen, everything inside in em ------------- */
+
+.help-pop {
+  width: min(clamp(280px, 26vw, 520px), calc(100vw - 16px));
+  padding: 1.05em 1.1em 1em;
+  font-size: clamp(14px, calc(0.5rem + 0.55vw), 18px);
+}
+.help-pop-title {
+  font-size: 1.05em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.hiw-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 0.7em;
+}
+/* the captions sit under the three pictures */
+.help-steps {
+  display: grid;
+  grid-template-columns: 100fr 18fr 100fr 18fr 100fr;
+  margin: 0.45em 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.86em;
+  line-height: 1.25;
+  text-align: center;
+}
+.help-steps li:nth-child(2) {
+  grid-column: 3;
+}
+.help-steps li:nth-child(3) {
+  grid-column: 5;
+}
+.help-steps b {
+  display: block;
+  margin-bottom: 0.1em;
+  color: var(--muted);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+.help-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45em;
+  margin-top: 0.95em;
+}
+.help-action.chip {
+  justify-content: center;
+  height: 2.6em;
+  padding: 0 0.8em;
+  border-radius: 0.8em;
+  background: var(--sunken);
+  font-size: 0.9em;
+  gap: 0.45em;
+}
+.help-action svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+@media (hover: hover) and (pointer: fine) {
+  .help-action.chip:hover {
+    background: var(--hover);
+  }
+}
+
+/* --- Shared pieces of the pictures --------------------------------------- */
+
+.hiw-paper {
+  fill: var(--hiw-paper);
+  stroke: var(--border);
+}
+.hiw-line {
+  fill: none;
+  stroke: var(--hiw-line);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.hiw-trimmed {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 4.4;
+  opacity: 0.75;
+}
+.hiw-arrow {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --- Guide: the animation -------------------------------------------------- */
+
+.hiw-anim-wrap {
+  margin: 2px auto 6px;
+  max-width: 440px;
+}
+.hiw-anim {
+  display: block;
+  width: 100%;
+  height: auto;
+  --hiw-dur: 7s;
+}
+.hiw-anim .hiw-line {
+  stroke-width: 2.2;
+}
+.hiw-anim * {
+  animation-duration: var(--hiw-dur);
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+  animation-timing-function: var(--ease-in-out);
+}
+/* fills and the pointer scale about their own middle */
+.hiw-fill,
+.hiw-logo,
+.hiw-dot,
+.hiw-ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* outlines draw themselves in, then hide at the end */
+.hiw-a-circle,
+.hiw-a-outA,
+.hiw-a-chord,
+.hiw-a-outB {
+  stroke-dasharray: 1 2;
+}
+.hiw-a-circle {
+  stroke-linecap: butt;
+  animation-name: hiw-circle;
+}
+@keyframes hiw-circle {
+  0%,
+  5% {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  6% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+  17% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  76% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  82%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+.hiw-a-chord {
+  animation-name: hiw-chord;
+}
+@keyframes hiw-chord {
+  0%,
+  19.8% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+    animation-timing-function: linear;
+  }
+  26.2% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  76% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  82%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+/* the ends: drawn with the line, then trimmed (red for a moment, then gone) */
+.hiw-a-outA {
+  animation-name: hiw-outA;
+}
+@keyframes hiw-outA {
+  0%,
+  18% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+    stroke: var(--hiw-line);
+    animation-timing-function: linear;
+  }
+  19.8% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    stroke: var(--hiw-line);
+  }
+  45% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    stroke: var(--hiw-line);
+  }
+  46% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    stroke: var(--danger);
+  }
+  48% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    stroke: var(--danger);
+  }
+  51%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+    stroke: var(--danger);
+  }
+}
+.hiw-a-outB {
+  animation-name: hiw-outB;
+}
+@keyframes hiw-outB {
+  0%,
+  26.2% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+    stroke: var(--hiw-line);
+    animation-timing-function: linear;
+  }
+  28% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    stroke: var(--hiw-line);
+  }
+  34% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    stroke: var(--hiw-line);
+  }
+  35% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    stroke: var(--danger);
+  }
+  37% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    stroke: var(--danger);
+  }
+  40%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+    stroke: var(--danger);
+  }
+}
+
+/* areas: colored with a small pop, then the finished logo settles */
+.hiw-fill {
+  opacity: 1;
+}
+.hiw-fill-top {
+  animation-name: hiw-fill-top;
+}
+@keyframes hiw-fill-top {
+  0%,
+  56% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  93% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  98%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+.hiw-fill-bottom {
+  animation-name: hiw-fill-bottom;
+}
+@keyframes hiw-fill-bottom {
+  0%,
+  65% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  69% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  93% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  98%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+.hiw-logo {
+  animation-name: hiw-logo;
+}
+@keyframes hiw-logo {
+  0%,
+  81% {
+    transform: scale(1);
+  }
+  85% {
+    transform: scale(1.04);
+  }
+  89%,
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* the pointer: along the line as it is drawn, then a tap for each step */
+.hiw-pointer {
+  opacity: 0;
+  animation-name: hiw-pointer;
+}
+@keyframes hiw-pointer {
+  0% {
+    transform: translate(272px, 150px);
+    opacity: 0;
+  }
+  4% {
+    transform: translate(272px, 150px);
+    opacity: 1;
+  }
+  16%,
+  18% {
+    transform: var(--s);
+    opacity: 1;
+    animation-timing-function: linear;
+  }
+  28% {
+    transform: var(--e);
+    opacity: 1;
+  }
+  32%,
+  37% {
+    transform: var(--m2);
+    opacity: 1;
+  }
+  43%,
+  48% {
+    transform: var(--m1);
+    opacity: 1;
+  }
+  53%,
+  58% {
+    transform: var(--t);
+    opacity: 1;
+  }
+  62%,
+  68% {
+    transform: var(--b);
+    opacity: 1;
+  }
+  74% {
+    transform: translate(272px, 150px);
+    opacity: 1;
+  }
+  78%,
+  100% {
+    transform: translate(272px, 150px);
+    opacity: 0;
+  }
+}
+.hiw-dot {
+  fill: var(--hiw-line);
+  stroke: var(--hiw-paper);
+  stroke-width: 2;
+  opacity: 0.85;
+  animation-name: hiw-press;
+}
+@keyframes hiw-press {
+  0%,
+  33.5%,
+  36.5%,
+  44.5%,
+  47.5%,
+  55.5%,
+  58.5%,
+  64.5%,
+  67.5%,
+  100% {
+    transform: scale(1);
+  }
+  35%,
+  46%,
+  57%,
+  66% {
+    transform: scale(0.78);
+  }
+}
+.hiw-ripple {
+  fill: none;
+  stroke: var(--hiw-line);
+  stroke-width: 1.5;
+  opacity: 0;
+  animation-name: hiw-ripple;
+  animation-timing-function: var(--ease-out);
+}
+@keyframes hiw-ripple {
+  0%,
+  34.9% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  35% {
+    opacity: 0.5;
+    transform: scale(0.4);
+  }
+  39%,
+  45.9% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+  46% {
+    opacity: 0.5;
+    transform: scale(0.4);
+  }
+  50%,
+  56.9% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+  57% {
+    opacity: 0.5;
+    transform: scale(0.4);
+  }
+  61%,
+  65.9% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+  66% {
+    opacity: 0.5;
+    transform: scale(0.4);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+
+/* the step names under the animation light up in turn */
+.hiw-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--muted);
+}
+.hiw-steps span {
+  position: relative;
+  padding-top: 7px;
+  opacity: 0.45;
+  animation-duration: 7s;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+}
+.hiw-steps span::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 18%;
+  right: 18%;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.hiw-steps span:nth-child(1) {
+  animation-name: hiw-step-1;
+}
+.hiw-steps span:nth-child(2) {
+  animation-name: hiw-step-2;
+}
+.hiw-steps span:nth-child(3) {
+  animation-name: hiw-step-3;
+}
+.hiw-steps span:nth-child(4) {
+  animation-name: hiw-step-4;
+}
+@keyframes hiw-step-1 {
+  0%,
+  3% {
+    opacity: 0.45;
+    color: var(--muted);
+  }
+  5%,
+  29% {
+    opacity: 1;
+    color: var(--text);
+  }
+  31%,
+  100% {
+    opacity: 0.45;
+    color: var(--muted);
+  }
+}
+@keyframes hiw-step-2 {
+  0%,
+  30% {
+    opacity: 0.45;
+    color: var(--muted);
+  }
+  32%,
+  50% {
+    opacity: 1;
+    color: var(--text);
+  }
+  52%,
+  100% {
+    opacity: 0.45;
+    color: var(--muted);
+  }
+}
+@keyframes hiw-step-3 {
+  0%,
+  51% {
+    opacity: 0.45;
+    color: var(--muted);
+  }
+  53%,
+  71% {
+    opacity: 1;
+    color: var(--text);
+  }
+  73%,
+  100% {
+    opacity: 0.45;
+    color: var(--muted);
+  }
+}
+@keyframes hiw-step-4 {
+  0%,
+  72% {
+    opacity: 0.45;
+    color: var(--muted);
+  }
+  74%,
+  95% {
+    opacity: 1;
+    color: var(--text);
+  }
+  97%,
+  100% {
+    opacity: 0.45;
+    color: var(--muted);
+  }
+}
+
+/* Reduced motion: no loop, just the finished logo. */
+@media (prefers-reduced-motion: reduce) {
+  .hiw-anim *,
+  .hiw-steps span {
+    animation: none !important;
+  }
+  .hiw-a-circle,
+  .hiw-a-outA,
+  .hiw-a-chord,
+  .hiw-a-outB,
+  .hiw-pointer {
+    opacity: 0;
+  }
+  .hiw-steps span:last-child {
+    opacity: 1;
+    color: var(--text);
+  }
+}
+
+/* --- Guide: uses the room when the panel is dragged wider ---------------- */
+
+.guide-sheet {
+  container-type: inline-size;
+}
+.guide-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  column-gap: 20px;
+}
+.guide-tables {
+  display: grid;
+  grid-template-columns: 1fr;
+  column-gap: 16px;
+  align-items: start;
+}
+@container (min-width: 600px) {
+  .guide-tables {
+    grid-template-columns: 1fr 1fr;
+  }
+}

@@ -23,7 +23,7 @@ const { chromium, devices } = pw;
 const here = dirname(fileURLToPath(import.meta.url));
 const shots = process.env.E2E_SHOTS || join(here, 'shots');
 mkdirSync(shots, { recursive: true });
-const PORT = 4179;
+const PORT = Number(process.env.E2E_PORT) || 4179;
 const URL = `http://localhost:${PORT}/`;
 
 let failures = 0;
@@ -1188,6 +1188,64 @@ async function mirrorAndPicking(browser) {
   }
 }
 
+async function help(browser) {
+  console.log('\nHelp popover and Guide');
+  const { ctx, page, errors } = await fresh(browser, false);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  const popWidth = async () => {
+    await btn('Help').click();
+    await page.waitForTimeout(350);
+    const w = (await page.locator('.help-pop').boundingBox()).width;
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    return w;
+  };
+  const wide = await popWidth();
+  await page.setViewportSize({ width: 1024, height: 800 });
+  const narrow = await popWidth();
+  check(wide > narrow + 60, `the help popover grows with the screen (${Math.round(narrow)} → ${Math.round(wide)} px)`);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await btn('Help').click();
+  await page.waitForTimeout(350);
+  check((await page.getByRole('img', { name: 'Add shapes, trim, color areas' }).count()) === 1, 'it shows the idea as a picture');
+  check((await btn('Guide').locator('svg').count()) === 1 && (await btn('Examples').locator('svg').count()) === 1, 'Guide and Examples have icons');
+  await page.screenshot({ path: join(shots, 'help-popover.png') });
+  await btn('Guide').click();
+  await page.waitForTimeout(400);
+  const guide = page.getByRole('dialog', { name: 'Guide' });
+  check((await guide.getByRole('img', { name: /^Animation/ }).count()) === 1, 'the Guide opens on a short animation');
+  const running = await page.evaluate(() => document.getAnimations().filter((a) => a.effect?.target?.closest?.('.hiw-anim')).length);
+  check(running >= 8, `and it plays (${running} parts moving)`);
+  // Its right edge drags it wider; the width is kept for next time.
+  const before = (await guide.boundingBox()).width;
+  const edge = await guide.locator('.panel-edge').boundingBox();
+  await page.mouse.move(edge.x + edge.width / 2, edge.y + edge.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + edge.width / 2 + 150, edge.y + edge.height / 2, { steps: 5 });
+  await page.mouse.move(edge.x + edge.width / 2 + 300, edge.y + edge.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const after = (await guide.boundingBox()).width;
+  check(Math.abs(after - before - 300) < 12, `dragging the Guide's edge widens it (${Math.round(before)} → ${Math.round(after)} px)`);
+  const side = await page.evaluate(() => {
+    const t = [...document.querySelectorAll('.guide-tables > div')].map((d) => d.getBoundingClientRect());
+    return t.length === 2 && Math.abs(t[0].top - t[1].top) < 2 && t[1].left > t[0].right;
+  });
+  check(side, 'when wide, the mouse and keyboard tables sit side by side');
+  await page.screenshot({ path: join(shots, 'help-guide-wide.png') });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await btn('Help').click();
+  await page.waitForTimeout(300);
+  await btn('Guide').click();
+  await page.waitForTimeout(400);
+  check(Math.abs((await guide.boundingBox()).width - after) < 2, 'and stays that wide when opened again');
+  await guide.locator('.panel-edge').dblclick();
+  await page.waitForTimeout(100);
+  check(Math.abs((await guide.boundingBox()).width - before) < 2, 'a double-click on the edge puts it back');
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 // ---------------------------------------------------------------------------
 
 // Vite is started directly rather than through npx, so that stopping it stops the server itself.
@@ -1198,7 +1256,7 @@ try {
   browser = await chromium.launch();
   if (process.env.E2E_ONLY) {
     // E2E_ONLY=touch,controls runs just those flows
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1215,6 +1273,7 @@ try {
   await touch(browser);
   await mirrorAndPicking(browser);
   await desktopBar(browser);
+  await help(browser);
 } catch (err) {
   if (err !== 'only') {
     console.error(err);

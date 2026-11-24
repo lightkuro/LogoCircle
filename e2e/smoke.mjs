@@ -1004,7 +1004,7 @@ async function desktopBar(browser) {
   await btn('More').hover();
   await page.waitForTimeout(30);
   const more = page.getByRole('menu', { name: 'More' });
-  check((await more.count()) === 1 && (await more.evaluate((el) => getComputedStyle(el).animationName)) === 'none', 'hovering a tool button shows its list at once, unanimated');
+  check((await more.count()) === 1 && (await more.evaluate((el) => getComputedStyle(el).animationName)) !== 'none', 'hovering a tool button shows its list at once, with its short appear animation');
   const bg = await btn('Text').evaluate((el) => getComputedStyle(el).transitionProperty);
   check(!bg.includes('background'), `tool buttons change on hover without a fade (${bg})`);
   await page.mouse.move(700, 300);
@@ -1299,6 +1299,53 @@ async function movePoints(browser) {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   check((await page.locator('.handle-mid').count()) === 0, 'and Settings can switch them off');
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
+async function bordersAndFlips(browser) {
+  console.log('\nText borders, Flip list, narrow menu');
+  const { ctx, page, errors } = await fresh(browser, false);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  await page.setViewportSize({ width: 1600, height: 900 });
+  // The LogoCircle menu stays compact on a big screen.
+  await btn('Menu').click();
+  await page.waitForTimeout(300);
+  check((await page.getByRole('dialog', { name: 'LogoCircle' }).boundingBox()).width <= 370, 'the LogoCircle menu stays narrow on a big screen');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  // A border around text, from the text panel.
+  await btn('Text').click();
+  await page.waitForTimeout(400);
+  await page.getByRole('textbox', { name: 'Text', exact: true }).fill('Edge');
+  await page.getByRole('slider', { name: 'Border' }).focus();
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowRight');
+  await btn('Border black').click();
+  await page.waitForTimeout(600);
+  check((await page.locator('.text-preview').getAttribute('paint-order')) === 'stroke', 'the word on the canvas shows its border while typing');
+  await btn('Add to canvas').click();
+  await page.waitForTimeout(800);
+  let s0 = await page.evaluate(() => window.__lc.doc().shapes[0]);
+  check(s0.stroke?.outside && s0.stroke.color === '#000000' && s0.stroke.width === 12, `text gets a border around its letters (${JSON.stringify(s0.stroke)})`);
+  check((await page.evaluate(() => window.__lc.svg())).includes('paint-order="stroke"'), 'and the exported SVG draws it behind the letters');
+  // And from the selection bar, for anything selected.
+  await btn('Border').click();
+  await page.getByRole('button', { name: 'Border color 2' }).click();
+  s0 = await page.evaluate(() => window.__lc.doc().shapes[0]);
+  check(s0.stroke?.color === 1, 'the selection bar changes the border too');
+  await page.keyboard.press('Escape');
+  // Hollow letters: just the outline.
+  await page.evaluate(() => window.__lc.ui().set({ sheet: 'text', textTarget: Object.keys(window.__lc.doc().groups)[0] }));
+  await page.waitForTimeout(400);
+  await btn('Hollow').click();
+  await btn('Update').click();
+  await page.waitForTimeout(800);
+  s0 = await page.evaluate(() => window.__lc.doc().shapes[0]);
+  check(s0.fill === null && s0.stroke && !s0.stroke.outside, 'Hollow leaves just the outline of the letters');
+  // The flips share one list in the bar.
+  await btn('Flip').hover();
+  await page.waitForTimeout(200);
+  check((await page.getByRole('button', { name: 'Flip sideways' }).count()) === 1 && (await page.getByRole('button', { name: 'Mirror copy' }).count()) === 1, 'Flip opens on hover: sideways, upside down, mirror copy');
   check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
   await ctx.close();
 }
@@ -1622,7 +1669,7 @@ try {
       await fn(b, false);
       await fn(b, true);
     };
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, bordersAndFlips, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1643,6 +1690,7 @@ try {
   await shapesAndMenus(browser);
   await listsAndPhoneText(browser);
   await movePoints(browser);
+  await bordersAndFlips(browser);
   await textDesktop(browser);
 } catch (err) {
   if (err !== 'only') {

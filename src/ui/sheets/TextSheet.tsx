@@ -9,6 +9,7 @@ import { ui, useUi } from '@/store/ui';
 import { buildText, commitText, placeText, viewCenter, type BuiltText, type TextInput } from '@/actions';
 import { clearTextPreview, useTextPreview } from '@/canvas/textPreview';
 import type { TextStyle } from '@/text/styles';
+import type { Border } from '@/model/types';
 import type { Layout } from '@/text/layout';
 import { FontSettings, rememberedStyle, rememberStyle } from './FontSettings';
 import { DEFAULT_FONT, FONTS, FONT_KINDS, type FontDef, type FontKind } from '@/text/fonts';
@@ -105,7 +106,25 @@ const FontTile = memo(function FontTile({ def, word, active, onPick, onRemove }:
 });
 
 /** The word as it will land on the canvas, on the canvas's own background. Bigger sizes show bigger. */
-function Preview({ value, fontId, spacing, size, color, paper, style }: { value: string; fontId: string; spacing: number; size: number; color: string; paper: string | null; style: TextStyle }) {
+function Preview({
+  value,
+  fontId,
+  spacing,
+  size,
+  color,
+  paper,
+  style,
+  border,
+}: {
+  value: string;
+  fontId: string;
+  spacing: number;
+  size: number;
+  color: string;
+  paper: string | null;
+  style: TextStyle;
+  border?: { width: number; color: string; hollow?: boolean };
+}) {
   const [layout, setLayout] = useState<Layout | null>(null);
   const styleKey = JSON.stringify(style);
   useEffect(() => {
@@ -127,12 +146,22 @@ function Preview({ value, fontId, spacing, size, color, paper, style }: { value:
   const w = Math.max(40, layout?.width ?? 200);
   const asc = layout?.ascent ?? 100;
   const desc = layout?.descent ?? -25;
+  // the preview is laid out at size 100: the border shrinks to match, and gets room around the word
+  const bw = border ? (border.width * 100) / Math.max(1, size) : 0;
+  const pad = 6 + bw;
   // From half the box at the smallest size to all of it at the largest on the slider.
   const k = 0.5 + 0.5 * Math.max(0, Math.min(1, (size - 40) / 440));
   return (
     <div className={`tx-preview${paper ? '' : ' tx-checker'}`} style={paper ? { background: paper } : undefined} data-paper={paper ?? 'none'}>
-      <svg viewBox={`${-6} ${-asc} ${w + 12} ${asc - desc}`} style={{ height: `${Math.round(k * 100)}%` }} aria-label="Preview">
-        <path d={d} fill={color} />
+      <svg viewBox={`${-pad} ${-asc - bw} ${w + pad * 2} ${asc - desc + bw * 2}`} style={{ height: `${Math.round(k * 100)}%` }} aria-label="Preview">
+        <path
+          d={d}
+          fill={border?.hollow ? 'none' : color}
+          stroke={border ? border.color : undefined}
+          strokeWidth={border ? (border.hollow ? bw : bw * 2) : undefined}
+          strokeLinejoin="round"
+          paintOrder={border && !border.hollow ? 'stroke' : undefined}
+        />
       </svg>
     </div>
   );
@@ -286,6 +315,8 @@ export function TextSheet() {
   const [size, setSize] = useState(220);
   const [spacing, setSpacing] = useState(0);
   const [fill, setFill] = useState<number | string>(0);
+  // a border around the letters: 0 wide is none
+  const [border, setBorder] = useState<Border>({ width: 0, fill: 1 });
   // weight, italic and OpenType features of the chosen font
   const [style, setStyleState] = useState<TextStyle>({});
   const [busy, setBusy] = useState(false);
@@ -311,6 +342,7 @@ export function TextSheet() {
     setSize(existing?.size ?? 220);
     setSpacing(existing?.spacing ?? 0);
     setFill(existing?.fill ?? (typeof ink === 'number' && ink < palette.length ? ink : 0));
+    setBorder(existing?.border ?? { width: 0, fill: palette.length > 1 ? 1 : '#ffffff' });
     setStyleState(existing ? { weight: existing.weight, italic: existing.italic, features: existing.features ?? [] } : rememberedStyle(font));
     clearTextPreview();
     latest.current = null;
@@ -354,7 +386,18 @@ export function TextSheet() {
   // Nothing typed? Then it says "Test": a word to place now and change later.
   const text = value.trim() ? value : PLACEHOLDER;
   const safeFill = typeof fill === 'number' && fill >= palette.length ? 0 : fill;
-  const params: TextInput = { value: text, fontId, size, spacing, fill: safeFill, weight: style.weight, italic: style.italic, features: style.features };
+  const borderFill = typeof border.fill === 'number' && border.fill >= palette.length ? 0 : border.fill;
+  const params: TextInput = {
+    value: text,
+    fontId,
+    size,
+    spacing,
+    fill: safeFill,
+    weight: style.weight,
+    italic: style.italic,
+    features: style.features,
+    border: border.width > 0 ? { ...border, fill: borderFill } : undefined,
+  };
   const inputKey = JSON.stringify([params, target]);
 
   // The word is drawn on the canvas as it is typed, and lands when the panel closes.
@@ -449,7 +492,11 @@ export function TextSheet() {
           // a newer change has started since: this one is out of date
           if (!alive) return;
           latest.current = built ? { key, built } : null;
-          useTextPreview.setState(built ? { d: built.shapes.map((sh) => ringsToPath(sh.rings)).join(''), fill: built.group.text!.fill, hide: built.replaces } : { d: null, hide: null });
+          useTextPreview.setState(
+            built
+              ? { d: built.shapes.map((sh) => ringsToPath(sh.rings)).join(''), fill: built.shapes[0]?.fill ?? null, stroke: built.shapes[0]?.stroke ?? null, hide: built.replaces }
+              : { d: null, stroke: null, hide: null },
+          );
           reveal(built);
         },
         () => undefined,
@@ -473,6 +520,7 @@ export function TextSheet() {
       existing.size === size &&
       existing.spacing === spacing &&
       existing.fill === safeFill &&
+      JSON.stringify(existing.border ?? null) === JSON.stringify(params.border ?? null) &&
       existing.weight === style.weight &&
       !!existing.italic === !!style.italic &&
       same(existing.features, style.features)
@@ -586,7 +634,18 @@ export function TextSheet() {
     />
   );
 
-  const preview = <Preview value={value} fontId={fontId} spacing={spacing} size={size} color={resolveFill({ palette }, safeFill)} paper={paper} style={style} />;
+  const preview = (
+    <Preview
+      value={value}
+      fontId={fontId}
+      spacing={spacing}
+      size={size}
+      color={resolveFill({ palette }, safeFill)}
+      paper={paper}
+      style={style}
+      border={params.border ? { width: params.border.width, color: resolveFill({ palette }, params.border.fill), hollow: params.border.hollow } : undefined}
+    />
+  );
 
   const ownFont = (
     <span className="tx-own">
@@ -708,6 +767,48 @@ export function TextSheet() {
     </div>
   );
 
+  // A border: how wide (none at 0), its color (the colors, or white or black), and hollow letters.
+  const BORDER_EXTRA: { fill: string; name: string }[] = [
+    { fill: '#ffffff', name: 'White' },
+    { fill: '#000000', name: 'Black' },
+  ];
+  const borderControls = (
+    <div className="tx-border" role="group" aria-label="Border">
+      <div className="txp-slider">
+        <span>Border</span>
+        <Slider label="Border" min={0} max={40} typeMax={200} value={border.width} onChange={(v) => setBorder({ ...border, width: v })} format={(v) => (v === 0 ? 'None' : String(Math.round(v)))} />
+      </div>
+      {border.width > 0 && (
+        <div className="tx-border-row">
+          <div className="tx-colors" role="group" aria-label="Border color">
+            {palette.map((c, i) => (
+              <button key={i} type="button" className="tx-color" aria-pressed={borderFill === i} aria-label={`Border color ${i + 1}`} onClick={() => setBorder({ ...border, fill: i })}>
+                <span className="tx-color-dot" style={{ background: c }} />
+                <span aria-hidden>{i + 1}</span>
+              </button>
+            ))}
+            {BORDER_EXTRA.map((x) => (
+              <button
+                key={x.fill}
+                type="button"
+                className="tx-color"
+                aria-pressed={borderFill === x.fill}
+                aria-label={`Border ${x.name.toLowerCase()}`}
+                onClick={() => setBorder({ ...border, fill: x.fill })}
+              >
+                <span className="tx-color-dot" style={{ background: x.fill }} />
+                <span aria-hidden>{x.name[0]}</span>
+              </button>
+            ))}
+          </div>
+          <button type="button" className="tx-pill" aria-pressed={!!border.hollow} onClick={() => setBorder({ ...border, hollow: !border.hollow })}>
+            Hollow
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   if (upright) {
     return (
       <HalfPanel
@@ -743,7 +844,16 @@ export function TextSheet() {
           </>
         }
       >
-        {page === 'font' ? fonts : page === 'size' ? sliders : colors}
+        {page === 'font' ? (
+          fonts
+        ) : page === 'size' ? (
+          sliders
+        ) : (
+          <>
+            {colors}
+            {borderControls}
+          </>
+        )}
       </HalfPanel>
     );
   }
@@ -772,6 +882,7 @@ export function TextSheet() {
             </div>
           </div>
           {colors}
+          {borderControls}
           {add}
         </div>
       </div>

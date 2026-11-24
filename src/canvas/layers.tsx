@@ -85,6 +85,7 @@ const ShapeItem = memo(function ShapeItem({ shape, fill, stroke, ghost }: { shap
         strokeWidth={shape.stroke?.width}
         strokeLinejoin={shape.stroke?.join ?? 'round'}
         strokeLinecap={shape.stroke?.cap ?? 'round'}
+        paintOrder={shape.stroke?.outside ? 'stroke' : undefined}
         opacity={shape.opacity}
       />
       {ghost && <path d={d} className="ghost" />}
@@ -123,9 +124,21 @@ export function ShapesLayer() {
 export function TextPreviewLayer() {
   const d = useTextPreview((s) => s.d);
   const fill = useTextPreview((s) => s.fill);
+  const stroke = useTextPreview((s) => s.stroke);
   const palette = useDoc((s) => s.doc.palette);
   if (!d) return null;
-  return <path d={d} fill={resolveFill({ palette }, fill)} className="text-preview" style={{ pointerEvents: 'none' }} />;
+  return (
+    <path
+      d={d}
+      fill={resolveFill({ palette }, fill)}
+      stroke={stroke ? resolveFill({ palette }, stroke.color) : undefined}
+      strokeWidth={stroke?.width}
+      strokeLinejoin="round"
+      paintOrder={stroke?.outside ? 'stroke' : undefined}
+      className="text-preview"
+      style={{ pointerEvents: 'none' }}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------

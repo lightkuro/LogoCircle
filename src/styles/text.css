@@ -668,3 +668,16 @@
   font-size: 13px;
   color: var(--muted);
 }
+
+/* A border around the letters */
+.tx-border {
+  display: grid;
+  gap: 8px;
+}
+.tx-border-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}

@@ -24,6 +24,7 @@ import {
   Square,
   SquareDashed,
   SquareDashedMousePointer,
+  SquareSquare,
   SquareRoundCorner,
   Trash2,
   Undo2,
@@ -61,7 +62,8 @@ import { board } from '@/model/doc';
 import { cornerRadius, guideBand, guideWidth, isClosedOutline, maxCornerRadius, setCornerRadius } from '@/model/guides';
 import { selectionBBox, updateRef } from '@/model/ops';
 import { defaultPattern, type PatternKind, type PatternSpec } from '@/model/pattern';
-import type { Band, Guide } from '@/model/types';
+import type { Band, Fill, Guide, Shape } from '@/model/types';
+import { borderStroke } from '@/model/border';
 import { finishPen, undoPenPoint, usePen } from '@/tools';
 import { roundCorner } from './menus';
 import { Segmented, Slider, Tip } from './primitives';
@@ -274,6 +276,63 @@ function ThicknessControls({ guides }: { guides: Guide[] }) {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A border around the selected shapes (letters included): how wide it shows,
+ * and its color. Drawn behind each shape, so the shapes keep their size.
+ */
+function BorderControls({ shapes }: { shapes: Shape[] }) {
+  const live = useLiveEdit();
+  const palette = useDoc((s) => s.doc.palette);
+  const first = shapes[0]!;
+  const width = first.stroke ? Math.round(first.stroke.outside ? first.stroke.width / 2 : first.stroke.width) : 0;
+  const color: Fill = first.stroke?.color ?? (palette.length > 1 ? 1 : '#ffffff');
+  const ids = new Set(shapes.map((s) => s.id));
+  const set = (w: number, c: Fill): void =>
+    live.change((doc) => {
+      const groups = { ...doc.groups };
+      // a whole word keeps its border when it is retyped
+      for (const g of Object.values(doc.groups)) {
+        if (!g.text) continue;
+        const members = doc.shapes.filter((s) => s.group === g.id);
+        if (members.length && members.every((s) => ids.has(s.id)))
+          groups[g.id] = { ...g, text: { ...g.text, border: w > 0 ? { width: w, fill: c, hollow: members[0]!.fill === null || undefined } : undefined } };
+      }
+      return {
+        ...doc,
+        groups,
+        shapes: doc.shapes.map((s) => (!ids.has(s.id) ? s : w <= 0 ? { ...s, stroke: undefined } : { ...s, stroke: borderStroke({ width: w, fill: c, hollow: s.fill === null }) })),
+        updatedAt: Date.now(),
+      };
+    });
+  const swatches: { fill: Fill; color: string; name: string }[] = [
+    ...palette.map((c, i) => ({ fill: i as Fill, color: c, name: `Color ${i + 1}` })),
+    { fill: '#ffffff', color: '#ffffff', name: 'White' },
+    { fill: '#000000', color: '#000000', name: 'Black' },
+  ];
+  return (
+    <div className="bar-menu-pad">
+      <div className="text-[12px] font-semibold text-muted">Border</div>
+      <Slider label="Border" min={0} max={40} typeMax={200} value={width} format={(v) => (v === 0 ? 'None' : String(v))} onChange={(v) => set(v, color)} onCommit={live.commit} />
+      <div className="basic-grid" style={{ paddingTop: 4 }} role="group" aria-label="Border color">
+        {swatches.map((x) => (
+          <button
+            key={String(x.fill)}
+            type="button"
+            className="basic-dot"
+            style={{ background: x.color }}
+            aria-label={`Border ${x.name.toLowerCase()}`}
+            data-active={(width > 0 && color === x.fill) || undefined}
+            onClick={() => {
+              set(Math.max(width, 4), x.fill);
+              live.commit();
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -687,6 +746,12 @@ export function ContextBar() {
               <div className="menu-sep" />
             </>
           )}
+          {shapes.length > 0 && (
+            <>
+              <BorderControls shapes={shapes} />
+              <div className="menu-sep" />
+            </>
+          )}
           {cornered && <Row icon={<SquareRoundCorner />} label="Round corners" onClick={() => roundCorner(cornered, -1)} />}
           {editable && <Row icon={<CopyPlus />} label="Duplicate" onClick={duplicateSelection} />}
           <Row icon={<Repeat2 />} label="Repeat, same spacing" disabled={!canRepeat()} onClick={repeatDuplicate} />
@@ -726,9 +791,16 @@ export function ContextBar() {
         <Row icon={<Repeat2 />} label="Repeat, same spacing" disabled={!canRepeat()} onClick={repeatDuplicate} />
         <Row icon={<Grid2x2 />} label="Pattern: row, circle, grid" onClick={() => startPattern()} />
       </Menu>
-      <Chip tip="Flip sideways" icon={<FlipVertical2 />} onClick={() => flipSelection('h')} />
-      <Chip tip="Flip upside down" icon={<FlipHorizontal2 />} onClick={() => flipSelection('v')} />
-      <Chip tip="Mirror copy across line" keys={key('mirror')} icon={<FlipHorizontal />} onClick={startMirror} />
+      {shapes.length > 0 && (
+        <Menu name="Border" icon={<SquareSquare />} label="Border" width={268}>
+          <BorderControls shapes={shapes} />
+        </Menu>
+      )}
+      <Menu name="Flip" icon={<FlipVertical2 />} label="Flip" width={236} hover={!touch}>
+        <Row icon={<FlipVertical2 />} label="Flip sideways" onClick={() => flipSelection('h')} />
+        <Row icon={<FlipHorizontal2 />} label="Flip upside down" onClick={() => flipSelection('v')} />
+        <Row icon={<FlipHorizontal />} label="Mirror copy" onClick={startMirror} />
+      </Menu>
       {selection.length > 1 && !grouped && <Chip tip="Group: move as one" keys={key('group')} label="Group" icon={<GroupIcon />} onClick={groupSelection} />}
       {grouped && !group?.text && <Chip tip="Ungroup" keys={key('ungroup')} label="Ungroup" icon={<Ungroup />} onClick={ungroupSelection} />}
       <span className="sep" />

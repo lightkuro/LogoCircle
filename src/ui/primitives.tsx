@@ -315,6 +315,7 @@ export function Sheet({
   place = 'center',
   name,
   note,
+  narrow,
 }: {
   open: boolean;
   /** `reason` says how: 'close-press' for the X, 'escape-key', 'outside-press' for a click elsewhere. */
@@ -333,6 +334,8 @@ export function Sheet({
   name?: string;
   /** A quiet line after the title. */
   note?: ReactNode;
+  /** A short panel (a few rows): keeps its compact width on big screens. */
+  narrow?: boolean;
 }) {
   // Upright phones get a sheet from the bottom; a phone on its side has the room for a side panel.
   const kind = useLayoutKind();
@@ -374,7 +377,7 @@ export function Sheet({
     <Dialog.Root open={open} onOpenChange={(o, details) => !o && onClose(details.reason)}>
       <Dialog.Portal>
         <Dialog.Backdrop className="backdrop" data-clear={place !== 'center' || undefined} />
-        <Dialog.Popup className="dialog" data-wide={wide || undefined} data-place={place} style={resizable && width ? { width } : undefined}>
+        <Dialog.Popup className="dialog" data-wide={wide || undefined} data-narrow={narrow || undefined} data-place={place} style={resizable && width ? { width } : undefined}>
           {head(Dialog.Title, Dialog.Close)}
           <div className="sheet-body">{children}</div>
           {resizable && <PanelEdge side={place === 'top-right' ? 'left' : 'right'} width={width} onWidth={setWidth} />}

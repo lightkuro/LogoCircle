@@ -7,7 +7,7 @@
  * preview tile for it scrolls into view, or when it is used on the canvas.
  * This file is generated from a list (name, weight, kind); keep it that way.
  */
-import paperMono from './vendor/paper-mono/PaperMono-Regular.woff?url&no-inline';
+import paperMono from './vendor/paper-mono/PaperMono-SemiBold.woff?url&no-inline';
 import f0a from '@fontsource/poppins/files/poppins-latin-700-normal.woff?url&no-inline';
 import f0b from '@fontsource/poppins/files/poppins-latin-ext-700-normal.woff?url&no-inline';
 import f1a from '@fontsource/montserrat/files/montserrat-latin-800-normal.woff?url&no-inline';
@@ -172,8 +172,8 @@ export const FONT_KINDS: { kind: Exclude<FontKind, 'custom'>; label: string }[] 
 
 export const FONTS: FontDef[] = [
   { id: 'poppins', name: 'Poppins', kind: 'sans', urls: [f0a, f0b], weight: 700, popular: true },
-  // Paper Mono by Paper (paper.design), SIL OFL 1.1; the Regular weight, Latin and extended Latin in one file.
-  { id: 'paper-mono', name: 'Paper Mono', kind: 'mono', urls: [paperMono], weight: 400, popular: true },
+  // Paper Mono by Paper (paper.design), SIL OFL 1.1: Semibold by default (its other weights are in styleTable.ts), Latin and extended Latin in one file.
+  { id: 'paper-mono', name: 'Paper Mono', kind: 'mono', urls: [paperMono], weight: 600, popular: true },
   { id: 'montserrat', name: 'Montserrat', kind: 'sans', urls: [f1a, f1b], weight: 800, popular: true },
   { id: 'inter', name: 'Inter', kind: 'sans', urls: [f2a, f2b], weight: 800, popular: true },
   { id: 'outfit', name: 'Outfit', kind: 'sans', urls: [f3a, f3b], weight: 700, popular: true },

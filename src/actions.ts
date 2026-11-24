@@ -9,7 +9,7 @@ import { selectionKey, ui, useUi, remember, type Mode, type Tool } from '@/store
 import { putImage, saveNow } from '@/store/persist';
 import { isPhone, isSide, isTouch } from '@/store/settings';
 import { keyLabel } from '@/keys';
-import { CLASSIC_COLORS, type Doc, type Group, type Guide, type RefImage, type Shape } from '@/model/types';
+import { CLASSIC_COLORS, type Border, type Doc, type Group, type Guide, type RefImage, type Shape } from '@/model/types';
 import { addGuide, addRef, applyPalette, duplicateItems, removeColor, removeItems, selectionBBox, transformItems, contentBBox } from '@/model/ops';
 import { visibleGuides } from '@/model/paint';
 import { board, groupMembers, newDoc } from '@/model/doc';
@@ -683,6 +683,7 @@ export interface TextInput {
   weight?: number;
   italic?: boolean;
   features?: string[];
+  border?: Border;
 }
 
 /** A word laid out where it will land, ready to go on the canvas. */
@@ -714,6 +715,7 @@ export async function buildText(input: TextInput, target: string | null, center?
     ...(input.weight !== undefined ? { weight: input.weight } : null),
     ...(input.italic ? { italic: true } : null),
     ...(features ? { features } : null),
+    ...(input.border && input.border.width > 0 ? { border: input.border } : null),
   };
   const existing = target ? getDoc().groups[target] : undefined;
   if (existing?.text) return { ...textShapes(layout, info, existing.text.m, existing.id), replaces: existing.id, missing: layout.missing };

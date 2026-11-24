@@ -38,6 +38,7 @@ export function MenuSheet() {
       onClose={close}
       title="LogoCircle"
       place="top-left"
+      narrow
       note={
         <>
           – a{' '}

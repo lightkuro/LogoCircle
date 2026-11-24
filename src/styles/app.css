@@ -990,6 +990,10 @@ select {
   bottom: 96px;
   max-height: none;
 }
+/* A short panel keeps its compact width on big screens. */
+.dialog[data-narrow] {
+  width: min(360px, calc(100vw - 20px));
+}
 /* The inner edge of a side panel: drag to make it wider. */
 .panel-edge {
   position: absolute;
@@ -2062,11 +2066,6 @@ html[data-input='mouse'] .ib,
 html[data-input='mouse'] .menu-item,
 html[data-input='mouse'] .swatch {
   transition-property: transform;
-}
-html[data-input='mouse'] .flyout,
-html[data-input='mouse'] .tool .tool-caret {
-  animation: none;
-  transition: none;
 }
 
 /* A right-click menu's side panel: there at once, like the lists in the bar. */

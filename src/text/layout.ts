@@ -2,6 +2,7 @@ import type { Font, PathCommand } from 'opentype.js';
 import { cubicEdge, lineEdge, transformRings, type Edge, type Mat, type Ring } from '@/geom';
 import { normalizeRings } from '@/engine';
 import type { Fill, Group, Shape, TextInfo } from '@/model/types';
+import { borderStroke } from '@/model/border';
 import { uid } from '@/model/ids';
 import { loadFont } from './load';
 import { shape } from './gsub';
@@ -150,11 +151,14 @@ export async function layoutText(value: string, fontId: string, size: number, sp
 
 /** The shapes (one per letter) and the group for a word, placed by `m`. */
 export function textShapes(layout: Layout, info: Omit<TextInfo, 'pristine' | 'm'>, m: Mat, groupId = uid('w')): { shapes: Shape[]; group: Group } {
-  const fill: Fill = info.fill;
+  const b = info.border && info.border.width > 0 ? info.border : null;
+  const fill: Fill | null = b?.hollow ? null : info.fill;
+  const stroke = b ? borderStroke(b) : undefined;
   const shapes: Shape[] = layout.glyphs.map((g) => ({
     id: uid('s'),
     rings: transformRings(g.rings, m),
     fill,
+    ...(stroke ? { stroke } : null),
     group: groupId,
     name: g.char,
   }));

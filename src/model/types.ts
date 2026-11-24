@@ -8,6 +8,15 @@ export interface Stroke {
   width: number;
   join?: 'round' | 'miter' | 'bevel';
   cap?: 'round' | 'butt' | 'square';
+  /** Drawn behind the fill, so only its outer half shows: a border around the shape. */
+  outside?: boolean;
+}
+
+/** A border around letters: how wide it shows, its color, and whether the letters are left unfilled. */
+export interface Border {
+  width: number;
+  fill: Fill;
+  hollow?: boolean;
 }
 
 /** A painted, exported shape. */
@@ -171,6 +180,8 @@ export interface TextInfo {
   weight?: number;
   italic?: boolean;
   features?: string[];
+  /** A border around the letters (absent: none). */
+  border?: Border;
   /** Maps the freshly laid-out word to where it sits on the canvas. */
   m: Mat;
   /** Still exactly as typed (no letter moved, cut or recolored)? Then it can be retyped. */

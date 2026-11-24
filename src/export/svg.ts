@@ -37,9 +37,7 @@ export function docToSvg(doc: Doc, options: Partial<SvgOptions> = {}): string {
   const w = o.size ?? box.w;
   const h = (w * box.h) / box.w;
   const out: string[] = [];
-  out.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(box.x, d)} ${fmt(box.y, d)} ${fmt(box.w, d)} ${fmt(box.h, d)}" width="${fmt(w, 2)}" height="${fmt(h, 2)}">`,
-  );
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(box.x, d)} ${fmt(box.y, d)} ${fmt(box.w, d)} ${fmt(box.h, d)}" width="${fmt(w, 2)}" height="${fmt(h, 2)}">`);
   out.push(`<title>${esc(doc.name)}</title>`);
   if (o.background && doc.paper) {
     out.push(`<rect x="${fmt(box.x, d)}" y="${fmt(box.y, d)}" width="${fmt(box.w, d)}" height="${fmt(box.h, d)}" fill="${doc.paper}"/>`);
@@ -50,6 +48,7 @@ export function docToSvg(doc: Doc, options: Partial<SvgOptions> = {}): string {
     if (s.stroke && s.stroke.width > 0) {
       attrs.push(`stroke="${resolveFill(doc, s.stroke.color)}"`, `stroke-width="${fmt(s.stroke.width, d)}"`);
       attrs.push(`stroke-linejoin="${s.stroke.join ?? 'round'}"`, `stroke-linecap="${s.stroke.cap ?? 'round'}"`);
+      if (s.stroke.outside) attrs.push('paint-order="stroke"');
     }
     if (s.opacity !== undefined && s.opacity < 1) attrs.push(`opacity="${fmt(s.opacity, 3)}"`);
     out.push(`<path ${attrs.join(' ')}/>`);

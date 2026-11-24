@@ -15,7 +15,9 @@ describe('font weights and italics', () => {
     const mono = FONTS.find((f) => f.id === 'paper-mono')!;
     expect(fontWeights(mono)).toEqual([300, 400, 500, 600, 700, 800]);
     expect(hasItalic(mono)).toBe(false);
-    expect(styleUrls(mono, 400, false)).toBeNull(); // the default file
+    expect(mono.weight).toBe(600);
+    expect(styleUrls(mono, 600, false)).toBeNull(); // the default file: Semibold
+    expect(styleUrls(mono, 400, false)!.join()).toMatch(/PaperMono-Regular/);
     expect(styleUrls(mono, 700, false)!.join()).toMatch(/PaperMono-Bold/);
   });
 

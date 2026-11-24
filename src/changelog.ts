@@ -11,6 +11,17 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.13',
+    date: '24 Nov 2026',
+    changes: [
+      'Borders around text: width, color, or hollow letters; also for anything selected',
+      'Paper Mono starts in Semibold',
+      'Flip, Flip upside down and Mirror copy share one list in the bar',
+      'Lists in the bar show with a short animation again; the last one goes at once',
+      'The LogoCircle menu stays compact on big screens',
+    ],
+  },
+  {
     version: '1.12',
     date: '24 Nov 2026',
     changes: [

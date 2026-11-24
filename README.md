@@ -85,7 +85,7 @@ The region engine is the core. Each outline keeps its exact curve, so a shape co
 
 68 fonts are bundled through [Fontsource](https://fontsource.org) and fetched only when used. They are licensed under the SIL Open Font License, except Luckiest Guy, Roboto Slab and Yellowtail, which are Apache 2.0. You can also load your own TTF, OTF or WOFF file; it stays on your device.
 
-The color sets named after well-known brands are just colors: no logos or other brand assets are included.
+The color sets (Burger, Deer, Taco and so on) are just colors in the spirit of familiar brands: no names, logos or other brand assets are used.
 
 ## License
 

@@ -299,15 +299,8 @@ function ToolBar({ name, hint, children }: { name: string; hint: string | null; 
 }
 
 function ColorBar({ hint }: { hint: string | null }) {
-  const paper = useDoc((s) => s.doc.paper);
   return (
     <ToolBar name="Color" hint={hint}>
-      <Tip label="Paper color">
-        <button type="button" className="chip" data-swatch onClick={() => useUi.setState((s) => ({ colorPanel: s.colorPanel === 'paper' ? null : 'paper' }))}>
-          <span className={`swatch-sm ${paper ? '' : 'swatch-clear'}`} style={paper ? { background: paper } : undefined} />
-          Paper
-        </button>
-      </Tip>
       <Done />
     </ToolBar>
   );

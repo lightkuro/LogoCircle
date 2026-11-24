@@ -8,18 +8,19 @@ export interface PaletteDef {
 }
 
 /**
- * Color sets borrowed from well-known brands. A brand with one signature
- * color is paired with black or white so every set has at least two.
+ * Color sets in the spirit of well-known brands, named for what they suggest
+ * rather than after the brands. A set built on one signature color is paired
+ * with black or white so every set has at least two.
  */
 export const PALETTES: PaletteDef[] = [
-  { name: "McDonald's", colors: ['#da291c', '#ffc72c'] },
-  { name: 'John Deere', colors: ['#367c2b', '#ffde00'] },
-  { name: 'Taco Bell', colors: ['#702082', '#ef1897', '#fee100'] },
-  { name: 'Google', colors: ['#4285f4', '#ea4335', '#fbbc05', '#34a853'] },
-  { name: 'Starbucks', colors: ['#00704a', '#000000'] },
-  { name: 'Apple', colors: ['#000000', '#a2aaad'] },
-  { name: 'Ford', colors: ['#003478', '#ffffff'] },
-  { name: 'Coca-Cola', colors: ['#f40009', '#ffffff'] },
+  { name: 'Burger', colors: ['#da291c', '#ffc72c'] },
+  { name: 'Deer', colors: ['#367c2b', '#ffde00'] },
+  { name: 'Taco', colors: ['#702082', '#ef1897', '#fee100'] },
+  { name: 'Software', colors: ['#4285f4', '#ea4335', '#fbbc05', '#34a853'] },
+  { name: 'Coffee', colors: ['#00704a', '#000000'] },
+  { name: 'Pear', colors: ['#000000', '#a2aaad'] },
+  { name: 'Cars', colors: ['#003478', '#ffffff'] },
+  { name: 'Soda', colors: ['#f40009', '#ffffff'] },
 ];
 
 /** A few plain colors for quick picking. */
@@ -33,7 +34,9 @@ export function nextColor(palette: string[]): string {
   return BASIC_COLORS.find((c) => !have.has(c)) ?? '#000000';
 }
 
-export const PAPERS: (string | null)[] = ['#ffffff', '#f5f1e8', '#111111', null];
+/** The background a new logo starts on: a warm, paper-like off-white. */
+export const DEFAULT_PAPER = '#f5f1e8';
+export const PAPERS: (string | null)[] = [DEFAULT_PAPER, '#ffffff', '#111111', null];
 
 /** The export frame as a plain rectangle. */
 export function board(doc: Pick<Doc, 'artboard'>): { x: number; y: number; w: number; h: number } {
@@ -48,7 +51,7 @@ export function newDoc(name = 'Untitled logo'): Doc {
     id: uid('d'),
     name,
     artboard: { w: ARTBOARD, h: ARTBOARD },
-    paper: '#ffffff',
+    paper: DEFAULT_PAPER,
     palette: [...DEFAULT_PALETTE],
     guides: [],
     shapes: [],

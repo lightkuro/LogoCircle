@@ -224,7 +224,7 @@ function canvasMenu(): MenuItem[] {
   }
   items.push({ label: 'Adjust the export frame', icon: Crop, divide: true, onSelect: () => editFrame(true) });
   items.push({ label: 'Fit the frame to the artwork', icon: Scaling, disabled: !doc.shapes.length, onSelect: fitBoardToArtwork });
-  items.push({ label: 'Paper color', icon: PaintBucket, onSelect: () => useUi.setState({ colorPanel: 'paper' }) });
+  items.push({ label: 'Background color', icon: PaintBucket, onSelect: () => useUi.setState({ colorPanel: 'paper' }) });
   items.push({ label: 'Zoom to fit', icon: Maximize, keys: key('fit'), divide: true, onSelect: () => fitToScreen() });
   if (useDoc.getState().past.length) items.push({ label: 'Undo', icon: Undo2, keys: key('undo'), onSelect: () => useDoc.getState().undo() });
   return items;

@@ -151,7 +151,7 @@ async function photoToLogo(browser, phone) {
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
   // Photo has its own button on a desktop and sits under More on a phone; either way it offers a file or the clipboard.
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), fromGroup(page, phone ? 'More' : 'Photo', 'Choose a photo')]);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), fromGroup(page, 'More', 'Choose a photo')]);
   await chooser.setFiles({ name: 'cat.png', mimeType: 'image/png', buffer: Buffer.from(png) });
   await page.waitForFunction(() => window.__lc.doc().refs.length === 1);
   check((await state(page)).refs === 1, 'photo placed');

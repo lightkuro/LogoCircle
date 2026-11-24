@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import {
   Brush,
   ChevronLeft,
-  ChevronUp,
   Circle,
   ClipboardPaste,
   Crop,
@@ -10,7 +9,6 @@ import {
   Eye,
   Hand,
   Hexagon,
-  Image as ImageIcon,
   ImagePlus,
   Lasso,
   Maximize,
@@ -18,6 +16,7 @@ import {
   MousePointer2,
   MousePointerClick,
   PenTool,
+  PaintBucket,
   Pencil,
   Plus,
   Scissors,
@@ -73,14 +72,12 @@ function Single({ entry }: { entry: Entry }) {
 function Group({
   label,
   entries,
-  align,
   icon,
   caret,
   out = 'up',
 }: {
   label: string;
   entries: Entry[];
-  align?: 'start' | 'end';
   icon?: ReactNode;
   caret?: boolean;
   /** Which way the list opens: up from a bar along the bottom, or sideways from a rail down an edge. */
@@ -91,15 +88,20 @@ function Group({
   const [last, setLast] = useState(0);
   const wrap = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
-  const [top, setTop] = useState<number | null>(null);
+  const [at, setAt] = useState<number | null>(null);
 
-  // Sideways lists sit level with their button, kept inside the screen.
+  // A list is centred on its button (above it, or level with it out of a rail), and kept on the screen.
   useLayoutEffect(() => {
-    if (!open || out === 'up' || !list.current || !wrap.current) return setTop(null);
+    if (!open || !list.current || !wrap.current) return setAt(null);
     const b = wrap.current.getBoundingClientRect();
-    const h = list.current.offsetHeight;
-    const want = b.top + b.height / 2 - h / 2;
-    setTop(Math.max(8, Math.min(want, window.innerHeight - h - 8)) - b.top);
+    const pad = 8;
+    if (out === 'up') {
+      const w = list.current.offsetWidth;
+      setAt(Math.max(pad, Math.min(b.left + b.width / 2 - w / 2, window.innerWidth - w - pad)) - b.left);
+    } else {
+      const h = list.current.offsetHeight;
+      setAt(Math.max(pad, Math.min(b.top + b.height / 2 - h / 2, window.innerHeight - h - pad)) - b.top);
+    }
   }, [open, out, entries.length]);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const activeIndex = entries.findIndex((e) => e.active);
@@ -156,7 +158,11 @@ function Group({
           else setOpen(!open);
         }}
       >
-        {caret && <ChevronUp className="tool-caret" data-open={open || undefined} aria-hidden />}
+        {caret && (
+          <svg className="tool-caret" data-open={open || undefined} viewBox="0 0 16 8" aria-hidden>
+            <path d="M2.5 6.2 8 1.8l5.5 4.4" />
+          </svg>
+        )}
         {icon ?? shown.icon}
         <span>{label}</span>
       </button>
@@ -164,11 +170,10 @@ function Group({
         <div
           ref={list}
           className="pop flyout"
-          data-align={align}
           data-out={out}
           role="menu"
           aria-label={label}
-          style={out === 'up' ? undefined : { top: top ?? 0, visibility: top === null ? 'hidden' : undefined }}
+          style={{ [out === 'up' ? 'left' : 'top']: at ?? 0, visibility: at === null ? 'hidden' : undefined }}
         >
           {entries.map((e, i) => (
             <div key={e.id}>
@@ -259,7 +264,6 @@ function Colors() {
             <span className="swatch-dot flex items-center justify-center" style={{ background: 'var(--sunken)', boxShadow: 'inset 0 0 0 1px var(--border-strong)' }}>
               <Plus style={{ width: 15, height: 15 }} />
             </span>
-            <span className="swatch-num">Add</span>
           </button>
         </Tip>
       )}
@@ -353,7 +357,8 @@ function useEntries() {
   // Phones: the things reached for less often share one button.
   const more: Entry[] = [
     ...photos,
-    { id: 'frame', label: 'Export frame', icon: <Crop />, run: () => editFrame(true), divide: true },
+    { id: 'paper', label: 'Background color', icon: <PaintBucket />, run: () => useUi.setState({ colorPanel: 'paper' }), divide: true },
+    { id: 'frame', label: 'Export frame', icon: <Crop />, run: () => editFrame(true) },
     { id: 'fit', label: 'Zoom to fit', icon: <Maximize />, run: () => fitToScreen() },
   ];
 
@@ -363,7 +368,7 @@ function useEntries() {
 export function Dock() {
   const phone = useIsPhone();
   const side = useIsSide();
-  const { key, selects, shapes, lines, cuts, photos, more } = useEntries();
+  const { key, selects, shapes, lines, cuts, more } = useEntries();
   const text: Entry = { id: 'text', label: 'Text', keys: key('text'), icon: <Type />, run: openText };
 
   if (side) {
@@ -382,10 +387,9 @@ export function Dock() {
   return (
     <div className="glass dock" role="toolbar" aria-label="Tools">
       <Single entry={text} />
-      <Group label="Shapes" entries={shapes} align="start" caret />
+      <Group label="Shapes" entries={shapes} caret />
       <Group label="Lines" entries={lines} caret />
       <Group label="Cut" entries={cuts} caret />
-      {!phone && <Group label="Photo" entries={photos} icon={<ImageIcon />} />}
       {!phone && (
         <>
           <span className="sep" />
@@ -393,8 +397,8 @@ export function Dock() {
           <span className="sep" />
         </>
       )}
-      <Group label="Select" entries={selects} align="end" />
-      {phone && <Group label="More" entries={more} icon={<Ellipsis />} align="end" />}
+      <Group label="Select" entries={selects} />
+      <Group label="More" entries={more} icon={<Ellipsis />} />
     </div>
   );
 }

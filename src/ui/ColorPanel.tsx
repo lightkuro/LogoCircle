@@ -38,14 +38,27 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
         : { ...doc, palette: doc.palette.map((c, i) => (i === target ? (hex ?? c) : c)), updatedAt: Date.now() },
     );
 
-  // Keep the whole panel on screen, whichever way it opened.
+  // Keep the whole panel on screen and clear of the bars at the top and bottom, whichever way it opened.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.translate = '';
-    const r = el.getBoundingClientRect();
+    el.style.maxHeight = '';
     const pad = 8;
-    const dy = r.top < pad ? pad - r.top : r.bottom > window.innerHeight - pad ? window.innerHeight - pad - r.bottom : 0;
+    const barTop = (sel: string): number =>
+      Math.min(window.innerHeight, ...[...document.querySelectorAll(sel)].map((b) => b.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => r.top));
+    const barBottom = (sel: string): number => Math.max(0, ...[...document.querySelectorAll(sel)].map((b) => b.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => r.bottom));
+    const top = barBottom('.chrome-top > *') + pad;
+    // every bar along the bottom except the one this panel opened from
+    const bottom = barTop('.chrome-bottom > *:not(:has(.color-panel))') - pad;
+    const room = bottom - top;
+    let r = el.getBoundingClientRect();
+    if (r.height > room && room > 160) {
+      el.style.maxHeight = `${room}px`;
+      el.style.overflowY = 'auto';
+      r = el.getBoundingClientRect();
+    }
+    const dy = r.bottom > bottom ? bottom - r.bottom : r.top < top ? top - r.top : 0;
     const dx = r.left < pad ? pad - r.left : r.right > window.innerWidth - pad ? window.innerWidth - pad - r.right : 0;
     if (dx || dy) el.style.translate = `${Math.round(dx)}px ${Math.round(dy)}px`;
   }, [target, more]);
@@ -71,7 +84,7 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
   }, [target]);
 
   return (
-    <div ref={ref} className="pop color-panel" data-align={align} role="dialog" aria-label={target === 'paper' ? 'Paper color' : `Color ${target + 1}`}>
+    <div ref={ref} className="pop color-panel" data-align={align} role="dialog" aria-label={target === 'paper' ? 'Background color' : `Color ${target + 1}`}>
       {target === 'paper' && (
         <div className="flex flex-wrap gap-1 pb-2">
           {PAPERS.map((p) => (
@@ -84,7 +97,7 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
               onClick={() => set(p)}
             >
               <span className={`swatch-sm ${p ? '' : 'swatch-clear'}`} style={{ width: 14, height: 14, ...(p ? { background: p } : {}) }} />
-              {p === null ? 'Clear' : p === '#ffffff' ? 'White' : p === '#111111' ? 'Black' : 'Cream'}
+              {p === null ? 'Clear' : p === '#ffffff' ? 'White' : p === '#111111' ? 'Black' : 'Paper'}
             </button>
           ))}
         </div>
@@ -115,7 +128,7 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
         {target !== 'paper' && (
           <>
             <button type="button" className="chip" style={{ height: 34, padding: '0 9px' }} aria-expanded={more} onClick={() => setMore(!more)}>
-              More
+              Sets
               <ChevronDown style={{ width: 14, height: 14, transform: more ? 'rotate(180deg)' : undefined, transition: 'transform 160ms var(--ease-out)' }} />
             </button>
             <button
@@ -134,8 +147,7 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
       </div>
       {more && target !== 'paper' && (
         <div className="pt-2">
-          <div className="pb-1 text-[11px] font-bold uppercase tracking-[0.06em] text-muted">Color sets</div>
-          <div className="grid grid-cols-2 gap-1">
+          <div className="grid grid-cols-2 gap-1" role="group" aria-label="Color sets">
             {PALETTES.map((p) => (
               <button
                 key={p.name}

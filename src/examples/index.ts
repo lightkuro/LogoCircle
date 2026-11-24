@@ -59,23 +59,6 @@ function leaf(): Doc {
   ]);
 }
 
-function sunset(): Doc {
-  let doc = base('Sunset', ['#f9a03f', '#e4572e']);
-  const lines = [500, 548, 572, 612, 632, 664, 680, 706, 718];
-  doc = withGuides(doc, [
-    { type: 'ellipse', cx: 512, cy: 500, rx: 250, ry: 250, rot: 0 },
-    ...lines.map((y): GuideSpec => ({ type: 'line', x0: 212, y0: y, x1: 812, y1: y, width: 0 })),
-  ]);
-  return color(doc, [
-    [512, 380, 0],
-    [512, 524, 1],
-    [512, 592, 1],
-    [512, 648, 1],
-    [512, 693, 1],
-    [512, 736, 1],
-  ]);
-}
-
 function fish(): Doc {
   let doc = base('Fish', ['#0077b6', '#48cae4']);
   doc = withGuides(doc, [
@@ -159,7 +142,6 @@ const once = (id: string, make: () => Doc | Promise<Doc>) => (): Promise<Doc> =>
 
 export const EXAMPLES: Example[] = [
   { id: 'leaf', name: 'Leaf', note: 'Two circles and a line', build: once('leaf', leaf) },
-  { id: 'sunset', name: 'Sunset', note: 'One circle, a stack of lines', build: once('sunset', sunset) },
   { id: 'fish', name: 'Fish', note: 'Circles and a triangle', build: once('fish', fish) },
   { id: 'orbit', name: 'Orbit', note: 'Rings cut in quarters', build: once('orbit', target) },
   { id: 'moon', name: 'moon', note: 'A word with a letter reshaped', build: once('moon', moon) },

@@ -27,7 +27,7 @@ import {
   type Frame,
   type Handle,
 } from './frame';
-import { snapMove, snapPoint, snapTangent } from './snapping';
+import { snapMove, snapPoint, snapTangent, snapSticky, stickyPoint } from './snapping';
 import { toDoc, toScreen, zoomAt } from './view';
 
 /** Drawing tools (pen, brush, draw, cut) plug in here; they take over the pointer while active. */
@@ -164,10 +164,12 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       const boxRadius = inside ? Math.min(radius, Math.max(6, Math.min(wPx, hPx) * 0.26)) : radius;
       let best: Handle | null = null;
       let bestD = radius;
+      // On a polygon, stretching wins over moving a single point where the two meet.
+      const stretchy = s.selection.length === 1 && doc.guides.find((x) => x.id === s.selection[0])?.type === 'poly';
       for (const h of placeHandles(doc, s.selection, frame, s.view.k)) {
         const sp = toScreen(s.view, h.p);
-        // Point handles win ties against the box handles they may sit on.
-        const bias = h.handle.kind === 'pt' ? -4 : h.handle.kind === 'mid' ? 2 : 0;
+        // Otherwise point handles win ties against the box handles they may sit on.
+        const bias = h.handle.kind === 'pt' ? -4 : h.handle.kind === 'mid' ? 2 : h.handle.kind === 'box' && stretchy ? -6 : 0;
         const d = Math.hypot(sp.x - p.x, sp.y - p.y) + bias;
         if (h.handle.kind === 'box' && d > boxRadius) continue;
         if (d <= bestD) {
@@ -486,7 +488,13 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
             else dx = 0;
           }
           let lines: { a: Pt; b: Pt }[] = [];
-          if (g.box && !e.altKey && s.snap) {
+          // Sticky points first: a corner or point that comes near another pulls the move onto it.
+          const stuck = s.stickyPoints && !e.altKey ? snapSticky(doc, g.ids, dx, dy, 12 / s.view.k) : null;
+          if (stuck) {
+            dx = stuck.dx;
+            dy = stuck.dy;
+            lines = stuck.lines;
+          } else if (g.box && !e.altKey && s.snap) {
             // A lone circle first tries to sit exactly against its neighbours.
             const only = g.ids.size === 1 ? [...g.ids][0]! : null;
             const tan = only ? snapTangent(doc, only, dx, dy, 5 / s.view.k) : null;
@@ -501,7 +509,9 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         }
         case 'box': {
           const h = g.handle;
-          g.mat = h.kind === 'rot' ? rotateMatrix(g.frame, g.startDoc, d, e.altKey) : h.kind === 'box' ? boxHandleMatrix(g.frame, h.at, d) : g.mat;
+          // Sticky points: the corner or side being dragged sticks to nearby corners, points and edges.
+          const to = h.kind === 'box' && s.stickyPoints && !e.altKey ? (stickyPoint(doc, g.ids, d, 12 / s.view.k) ?? d) : d;
+          g.mat = h.kind === 'rot' ? rotateMatrix(g.frame, g.startDoc, d, e.altKey) : h.kind === 'box' ? boxHandleMatrix(g.frame, h.at, to) : g.mat;
           drag().set({ ids: g.ids, mat: g.mat, shapeRings: previewLinked(doc, transformItems(doc, g.ids, g.mat), g.ids) });
           break;
         }
@@ -515,7 +525,8 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           if (g.guide.type === 'line') {
             anchor = g.index === 0 ? { x: g.guide.x1, y: g.guide.y1 } : { x: g.guide.x0, y: g.guide.y0 };
           }
-          const sn = e.altKey || !s.snap ? { p: d, lines: [] } : snapPoint(doc, g.guide.id, d, 7 / s.view.k, anchor, s.grid);
+          const sticky = s.stickyPoints && !e.altKey ? stickyPoint(doc, new Set([g.guide.id]), d, 12 / s.view.k) : null;
+          const sn = sticky ? { p: sticky, lines: [] } : e.altKey || !s.snap ? { p: d, lines: [] } : snapPoint(doc, g.guide.id, d, 7 / s.view.k, anchor, s.grid);
           g.current = moveGuideHandle(g.guide, g.index, sn.p);
           drag().set({ guide: g.current, snapLines: sn.lines, shapeRings: previewLinked(doc, updateGuide(doc, g.guide.id, g.current), NONE) });
           break;

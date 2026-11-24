@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CircleHelp, Ellipsis, Eye, EyeOff, Layers, Redo2, RotateCcw, Save, Share, Undo2 } from 'lucide-react';
+import { CircleHelp, Ellipsis, FileUp, Eye, EyeOff, Layers, Redo2, RotateCcw, Save, Share, Undo2 } from 'lucide-react';
 import { Popover } from '@base-ui/react/popover';
 import { useDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
@@ -8,6 +8,7 @@ import { useKeys } from '@/keys';
 import { resetToStarter, saveToDevice, setMode } from '@/actions';
 import { IconButton, Segmented } from './primitives';
 import { LogoMark } from './icons';
+import { importSvgFile } from '@/advanced/files';
 
 /** A one-glance explanation, with the way to more. */
 function HelpButton() {
@@ -62,6 +63,7 @@ function MoreButton({ phone, canRedo }: { phone: boolean; canRedo: boolean }) {
           <Popover.Popup className="pop bar-menu" style={{ width: 252 }}>
             {phone && <Item icon={<Redo2 />} label="Redo" disabled={!canRedo} onClick={() => useDoc.getState().redo()} />}
             <Item icon={<Save />} label="Save" onClick={() => void saveToDevice()} />
+            <Item icon={<FileUp />} label="Import SVG" onClick={() => void importSvgFile()} />
             {phone && <Item icon={<Share />} label="Export" onClick={() => useUi.setState({ sheet: 'export' })} />}
             <div className="menu-sep" />
             <Item icon={<RotateCcw />} label="Reset to default" onClick={() => void resetToStarter()} />

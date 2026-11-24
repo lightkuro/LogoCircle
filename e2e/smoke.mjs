@@ -81,11 +81,16 @@ async function add(page, _phone, name) {
   return fromGroup(page, group, name);
 }
 
-/** Open one of the dock's groups (hovering does it) and choose from its list. */
+/** Open one of the dock's groups (hovering does it) and choose from its list. `item` can be a path, as in 'Import photo/Choose photo'. */
 async function fromGroup(page, group, item) {
   await page.getByRole('button', { name: group, exact: true }).hover();
   await page.waitForTimeout(320);
-  await page.getByRole('menuitem', { name: new RegExp(`^${item}`) }).click();
+  for (const step of item.split('/')) {
+    const name = new RegExp(`^${step}`);
+    // a switch in the list (Cut lines, Sticky points) is a checkbox item; a plain item wins when both match
+    const plain = page.getByRole('menuitem', { name });
+    await ((await plain.count()) ? plain : page.getByRole('menuitemcheckbox', { name })).first().click();
+  }
 }
 
 /** Put the color in hand for coloring areas (with nothing selected, or it would color the selection instead). */
@@ -151,7 +156,7 @@ async function photoToLogo(browser, phone) {
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
   // The photo is under More, which offers a file or the clipboard.
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), fromGroup(page, 'More', 'Choose a photo')]);
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), fromGroup(page, 'More', 'Import photo/Choose photo')]);
   await chooser.setFiles({ name: 'cat.png', mimeType: 'image/png', buffer: Buffer.from(png) });
   await page.waitForFunction(() => window.__lc.doc().refs.length === 1);
   check((await state(page)).refs === 1, 'photo placed');
@@ -243,7 +248,7 @@ async function wordmark(browser, phone) {
   console.log(`\nWordmark (${phone ? 'phone' : 'desktop'})`);
   const { ctx, page, errors } = await fresh(browser, phone);
   await add(page, phone, 'Text');
-  await page.getByLabel('Text', { exact: true }).fill('bird');
+  await page.getByRole('textbox', { name: 'Text', exact: true }).fill('bird');
   await page.getByRole('button', { name: /^Add( to canvas)?$/ }).click();
   await page.waitForFunction(() => window.__lc.doc().shapes.length === 4);
   let s = await state(page);
@@ -508,7 +513,7 @@ async function controls(browser) {
   check(Math.abs(Math.atan2(frame[1][1] - frame[0][1], frame[1][0] - frame[0][0]) - tri.rot) < 0.02, 'selecting it again shows the box still turned with it');
 
   // Examples keep to their own colors
-  for (const name of ['Leaf', 'Sunset', 'Fish', 'Orbit', 'moon']) {
+  for (const name of ['Leaf', 'Fish', 'Orbit', 'moon']) {
     // the question mark in the top bar (its popover has a button of the same name)
     await page.locator('.chrome-top').getByRole('button', { name: 'Help' }).click();
     await page.getByRole('button', { name: 'Examples', exact: true }).click();
@@ -597,6 +602,46 @@ async function refinements(browser) {
   await page.keyboard.press('Control+a');
   await page.keyboard.press('Delete');
 
+  // A polygon: its sides stretch it, and new points come from the menu.
+  await add(page, false, 'Polygon');
+  let poly = (await doc()).guides.at(-1);
+  const xs0 = poly.pts.map((p) => p.x);
+  const right = Math.max(...xs0);
+  const midY = (Math.min(...poly.pts.map((p) => p.y)) + Math.max(...poly.pts.map((p) => p.y))) / 2;
+  check(poly.pts.length === 6 && new Set(poly.pts.map((p, i) => Math.round(Math.hypot(poly.pts[(i + 1) % 6].x - p.x, poly.pts[(i + 1) % 6].y - p.y)))).size === 1, 'a new polygon is a regular hexagon');
+  await drag(page, [right, midY], [right + 120, midY]);
+  poly = (await doc()).guides.at(-1);
+  check(poly.pts.length === 6 && Math.max(...poly.pts.map((p) => p.x)) > right + 60, 'dragging its side stretches it, with no point added');
+  const ea = poly.pts[0];
+  const eb = poly.pts[1];
+  const onEdge = await toScreen(page, (ea.x + eb.x) / 2, (ea.y + eb.y) / 2);
+  await page.mouse.click(onEdge.x, onEdge.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Add a point here' }).click();
+  check((await doc()).guides.at(-1).pts.length === 7, 'right-click on a side: Add a point here');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
+
+  // Sticky points: a corner brought near another corner lands exactly on it.
+  await page.evaluate(() => window.__lc.ui().set({ snap: false }));
+  await fromGroup(page, 'More', 'Sticky points');
+  check(await page.evaluate(() => window.__lc.ui().stickyPoints), 'Sticky points can be switched on from More');
+  await add(page, false, 'Square');
+  await moveSelectionTo(page, 300, 300);
+  await add(page, false, 'Square');
+  const a = (await doc()).guides[0];
+  let b = (await doc()).guides[1];
+  // put b's top-left corner a few units off a's bottom-right corner
+  const target = { x: a.cx + a.w / 2 + 5, y: a.cy + a.h / 2 + 4 };
+  await drag(page, [b.cx, b.cy], [target.x + b.w / 2, target.y + b.h / 2]);
+  b = (await doc()).guides[1];
+  check(Math.abs(b.cx - b.w / 2 - (a.cx + a.w / 2)) < 0.01 && Math.abs(b.cy - b.h / 2 - (a.cy + a.h / 2)) < 0.01, 'with Sticky points on, the corners meet exactly');
+  await fromGroup(page, 'More', 'Sticky points');
+  await page.evaluate(() => window.__lc.ui().set({ snap: true }));
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
+
   // The right mouse button: a click opens the menu, a drag box-selects.
   await add(page, false, 'Circle');
   await page.keyboard.press('Escape');
@@ -609,9 +654,32 @@ async function refinements(browser) {
   check((await ui()).menu, 'a right-click still opens the menu');
   await page.keyboard.press('Escape');
 
+  // The background color: from More it opens above More, with a preview of the logo.
+  await fromGroup(page, 'More', 'Background color');
+  const bg = await page.getByRole('dialog', { name: 'Background color' }).boundingBox();
+  const moreBtn = await btn('More').boundingBox();
+  check(bg.y + bg.height <= moreBtn.y && Math.abs(bg.x + bg.width / 2 - (moreBtn.x + moreBtn.width / 2)) < bg.width / 2, 'Background color opens by the More button');
+  check((await page.getByRole('img', { name: 'Preview' }).count()) === 1, 'with a preview of the logo on that background');
+  await page.keyboard.press('Escape');
+  // The hue strip runs from red to pink: red at one end only.
+  await btn('Color 1').click();
+  await btn('Color 1').click();
+  const ends = await page.evaluate(() => {
+    const bgi = getComputedStyle(document.querySelector('.picker2-strip')).backgroundImage;
+    const stops = bgi.match(/rgb\([^)]+\)/g);
+    return [stops[0], stops[stops.length - 1]];
+  });
+  check(ends[0] !== ends[1], `the hue strip does not end where it starts (${ends.join(' to ')})`);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+
   // Settings: reached from the menu; keys can be changed; the mouse buttons can be swapped.
   await btn('Menu').click();
   check((await page.getByRole('button', { name: /^Examples/ }).count()) === 0 && (await page.getByRole('button', { name: /^How it works/ }).count()) <= 1, 'the menu no longer lists the help pages');
+  const privacy = page.getByRole('link', { name: 'Privacy & terms' });
+  check((await privacy.getAttribute('href')) === '/privacy', 'the menu links to Privacy & terms');
+  const res = await page.request.get(`${URL}privacy`);
+  check(res.ok() && (await res.text()).includes('Terms of use'), 'and that page is there');
   await page.getByRole('button', { name: /^Settings/ }).click();
   await page.getByRole('button', { name: /^Shortcut for Circle/ }).click();
   await page.keyboard.press('k');
@@ -632,6 +700,9 @@ async function refinements(browser) {
   await mouseDrag([100, 100], [300, 250], 'right');
   check(Math.abs((await ui()).view.x - v0.x) > 30, 'and a right drag moves the view');
   await page.evaluate(() => window.__lc.ui().set({ sheet: 'settings' }));
+  await page.getByRole('switch', { name: 'Tool names' }).click();
+  check((await page.locator('.dock .tool > span').first().isVisible()) === false && (await page.locator('.dock .tool[aria-label="Text"]').count()) === 1, 'Tool names off leaves icons only, still named for screen readers');
+  await page.getByRole('switch', { name: 'Tool names' }).click();
   await page.getByRole('radio', { name: 'Mobile' }).click();
   check((await page.evaluate(() => document.documentElement.dataset.layout)) === 'phone', 'Layout: Mobile gives the phone interface on a big screen');
   await page.getByRole('button', { name: 'Reset all settings' }).click();
@@ -753,9 +824,10 @@ async function phoneLayout(browser) {
   check(helpButtons.join(',') === 'Guide,Examples', `help offers Guide, then Examples (${helpButtons.join(', ')})`);
   await page.keyboard.press('Escape');
 
-  // Photo lives under More, with a way to paste one.
+  // Photo lives under More, in Import photo, with a way to paste one.
   await btn('More').click();
-  check((await page.getByRole('menuitem', { name: 'Choose a photo' }).count()) === 1 && (await page.getByRole('menuitem', { name: 'Paste a photo' }).count()) === 1, 'More offers choosing or pasting a photo');
+  await page.getByRole('menuitem', { name: 'Import photo' }).click();
+  check((await page.getByRole('menuitem', { name: 'Choose photo' }).count()) === 1 && (await page.getByRole('menuitem', { name: 'Paste photo' }).count()) === 1, 'More, Import photo offers choosing or pasting a photo');
   await page.keyboard.press('Escape');
   await btn('More options').click();
   check((await page.getByRole('button', { name: 'Redo' }).count()) === 1 && (await page.getByRole('button', { name: 'Export' }).count()) === 1, 'the three dots hold Redo, Save and Export');
@@ -807,11 +879,11 @@ async function sideways(browser) {
   check(select.x > board.x + board.w, 'Select is on the right, with the zoom');
   check((await page.getByRole('button', { name: 'Zoom in' }).count()) === 1, 'the zoom buttons are there');
   await btn('More').click();
-  const item = page.getByRole('menuitem', { name: 'Choose a photo' });
+  const item = page.getByRole('menuitem', { name: 'Import photo' });
   check((await item.count()) === 1, 'Photo is under More');
   const ib = await item.boundingBox();
   const onTop = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('[role=menuitem]')?.textContent, [ib.x + ib.width / 2, ib.y + ib.height / 2]);
-  check(onTop === 'Choose a photo', 'the list opens over everything beside it');
+  check(onTop === 'Import photo', 'the list opens over everything beside it');
   check(ib.y + ib.height <= vh, 'and stays on screen');
   await page.keyboard.press('Escape');
   await btn('Text').click();
@@ -843,14 +915,21 @@ async function firstVisit(browser, phone) {
   });
   check(d.shapes >= 3 && d.word === 'default' && d.colors === 2, `starts with a small example and two colors (${d.shapes} shapes, "${d.word}", ${d.colors} colors)`);
 
-  // Colors: add up to four, never more in Classic; remove one again.
+  // Colors: a new one only exists once a color is picked for it; up to four in Classic; remove one again.
   const addBtn = page.getByRole('button', { name: 'Add a color', exact: true });
   await addBtn.click();
+  const newPanel = page.getByRole('dialog', { name: 'New color' });
+  check((await newPanel.locator('.basic-dot[data-active]').count()) === 0 && (await newPanel.getByLabel('Hex color').inputValue()) === '#2a9d55', 'a new color starts on green, with nothing marked as chosen');
+  await page.keyboard.press('Escape');
+  check((await page.evaluate(() => window.__lc.doc().palette.length)) === 2, 'opening Add and leaving adds nothing');
+  await addBtn.click();
+  await page.getByRole('dialog', { name: 'New color' }).getByRole('button', { name: '#000000' }).click();
   await page.keyboard.press('Escape');
   await addBtn.click();
+  await page.getByRole('dialog', { name: 'New color' }).getByRole('button', { name: '#e5383b' }).click();
   await page.keyboard.press('Escape');
   const n = await page.evaluate(() => window.__lc.doc().palette);
-  check(n.length === 4 && n[2] === '#000000' && !(await addBtn.isVisible().catch(() => false)), `Classic stops at four colors, the third starts black (${n.join(' ')})`);
+  check(n.length === 4 && n[2] === '#000000' && n[3] === '#e5383b' && !(await addBtn.isVisible().catch(() => false)), `picking a color adds it, up to four in Classic (${n.join(' ')})`);
   await page.getByRole('button', { name: 'Color 4', exact: true }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Remove color' }).click();
   check((await page.evaluate(() => window.__lc.doc().palette.length)) === 3, 'right-click on a color removes it');

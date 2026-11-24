@@ -355,6 +355,8 @@ export function SelectionOverlay() {
               </g>
             );
           case 'pt': {
+            // Under a stretch handle (a polygon's top and bottom points), the stretch handle is what is there.
+            if (handles.some((o) => o.handle.kind === 'box' && Math.hypot(toScreen(view, o.p).x - p.x, toScreen(view, o.p).y - p.y) < 8)) return null;
             const picked = corner && corner.id === selection[0] && (corner.index === h.handle.index || corner.index < 0);
             return <circle key={i} cx={p.x} cy={p.y} r={5.5} className={picked ? 'handle-pt is-picked' : 'handle-pt'} />;
           }

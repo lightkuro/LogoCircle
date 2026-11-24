@@ -1,4 +1,4 @@
-import type { BBox, Pt } from '@/geom';
+import { evalC, type BBox, type Pt } from '@/geom';
 import type { Doc } from '@/model/types';
 import { guidePoints, guideSnapPoints, isClosedGuide } from '@/model/guides';
 import { itemBBox } from '@/model/ops';
@@ -303,4 +303,108 @@ export function snapTangent(doc: Doc, id: string, dx: number, dy: number, tol: n
     }
   }
   return best ? { dx: best.dx, dy: best.dy, lines: [best.line] } : null;
+}
+
+// ---------------------------------------------------------------------------
+// Sticky points: corners and points pull onto nearby corners, points and edges
+// ---------------------------------------------------------------------------
+
+/** The corners and points of a shape's outline: where its edges meet. */
+function shapeCorners(doc: Doc, id: string): Pt[] {
+  const s = doc.shapes.find((x) => x.id === id);
+  if (!s) return [];
+  const out: Pt[] = [];
+  for (const ring of s.rings) for (const e of ring) out.push(evalC(e.c, e.t0));
+  return out;
+}
+
+/** The points something offers: an outline's key points, a shape's corners. */
+function ownPoints(doc: Doc, id: string): Pt[] {
+  const g = doc.guides.find((x) => x.id === id);
+  return g ? guideSnapPoints(g) : shapeCorners(doc, id);
+}
+
+interface StickyTargets {
+  points: Pt[];
+  edges: Pt[][];
+}
+
+function stickyTargets(doc: Doc, exclude: Set<string>): StickyTargets {
+  const { x, y, w, h } = board(doc);
+  const points: Pt[] = [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + h },
+    { x, y: y + h },
+    { x: x + w / 2, y: y + h / 2 },
+  ];
+  const edges: Pt[][] = [[points[0]!, points[1]!, points[2]!, points[3]!, points[0]!]];
+  if (doc.guides.length + doc.shapes.length > 200) return { points, edges };
+  for (const g of doc.guides) {
+    if (exclude.has(g.id) || g.hidden) continue;
+    points.push(...guideSnapPoints(g));
+    edges.push(...guidePoints(g, 1));
+  }
+  for (const s of doc.shapes) {
+    if (exclude.has(s.id) || s.hidden) continue;
+    points.push(...shapeCorners(doc, s.id));
+  }
+  return { points, edges };
+}
+
+/** The nearest point of any edge to `p`, if one is within `tol`. */
+function nearestOnEdges(edges: Pt[][], p: Pt, tol: number): { q: Pt; d: number } | null {
+  let best: { q: Pt; d: number } | null = null;
+  for (const poly of edges) {
+    for (let i = 1; i < poly.length; i++) {
+      const a = poly[i - 1]!;
+      const b = poly[i]!;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+      const q = { x: a.x + dx * t, y: a.y + dy * t };
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d <= tol && (!best || d < best.d)) best = { q, d };
+    }
+  }
+  return best;
+}
+
+/** Where a point would stick: the nearest corner or point within `tol`, else the nearest edge. */
+function stickTo(t: StickyTargets, p: Pt, tol: number): { q: Pt; d: number; kind: 'point' | 'edge' } | null {
+  let best: { q: Pt; d: number; kind: 'point' | 'edge' } | null = null;
+  for (const q of t.points) {
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    if (d <= tol && (!best || d < best.d)) best = { q, d, kind: 'point' };
+  }
+  if (best) return best;
+  const on = nearestOnEdges(t.edges, p, tol * 0.8);
+  return on && { ...on, kind: 'edge' };
+}
+
+/**
+ * Sticky points, for a move: of all the corners and points being moved, the
+ * one nearest to another corner, point or edge pulls the whole move onto it.
+ * Points win over edges. Returns null when nothing is near.
+ */
+export function snapSticky(doc: Doc, ids: Set<string>, dx: number, dy: number, tol: number): { dx: number; dy: number; lines: SnapLine[] } | null {
+  const t = stickyTargets(doc, ids);
+  let best: { ox: number; oy: number; score: number; q: Pt } | null = null;
+  for (const id of ids) {
+    for (const p of ownPoints(doc, id)) {
+      const at = { x: p.x + dx, y: p.y + dy };
+      const hit = stickTo(t, at, tol);
+      if (!hit) continue;
+      const score = hit.d * (hit.kind === 'edge' ? 1.25 : 1);
+      if (!best || score < best.score) best = { ox: hit.q.x - at.x, oy: hit.q.y - at.y, score, q: hit.q };
+    }
+  }
+  if (!best) return null;
+  return { dx: dx + best.ox, dy: dy + best.oy, lines: [{ a: best.q, b: best.q }] };
+}
+
+/** Sticky points, for one dragged point or handle: where it would stick, if anywhere. */
+export function stickyPoint(doc: Doc, exclude: Set<string>, p: Pt, tol: number): Pt | null {
+  return stickTo(stickyTargets(doc, exclude), p, tol)?.q ?? null;
 }

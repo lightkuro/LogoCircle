@@ -184,13 +184,15 @@ export function placeHandles(doc: Doc, ids: string[], frame: Frame, k: number): 
   const hw = frame.w / 2;
   const hh = frame.h / 2;
   const pointy = g && (g.type === 'poly' || g.type === 'curve' || g.type === 'path');
+  // A polygon is stretched by its sides like a box; its points are for fine changes.
+  const stretchy = g?.type === 'poly';
   const wPx = frame.w * k;
   const hPx = frame.h * k;
   for (const at of Object.keys(LOCAL) as BoxHandle[]) {
     const [lx, ly] = LOCAL[at];
     const corner = lx !== 0 && ly !== 0;
     if (!corner) {
-      if (pointy) continue; // points already cover reshaping
+      if (pointy && !stretchy) continue; // points already cover reshaping
       if (lx === 0 && wPx < 56) continue;
       if (ly === 0 && hPx < 56) continue;
       if (lx !== 0 && frame.w === 0) continue;
@@ -208,8 +210,9 @@ export function placeHandles(doc: Doc, ids: string[], frame: Frame, k: number): 
       });
     }
     pts.forEach((p, index) => out.push({ handle: { kind: 'pt', index }, p }));
-    if (g.type === 'curve' || g.type === 'poly') {
-      const closed = g.type === 'poly' || g.closed;
+    // The small dots that add a point sit on curves only; a polygon gets new points from its menu.
+    if (g.type === 'curve') {
+      const closed = g.closed;
       const n = pts.length;
       const count = closed ? n : n - 1;
       const edges = g.type === 'curve' ? guideCenterline(g)[0]?.edges : undefined;

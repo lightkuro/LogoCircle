@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
-import { FilePlus2, FolderOpen, LayoutGrid, Save, Settings, Upload } from 'lucide-react';
+import { FilePlus2, FolderOpen, LayoutGrid, Save, Settings } from 'lucide-react';
 import { useUi } from '@/store/ui';
 import { useDoc } from '@/store/doc';
 import { useIsPhone } from '@/store/settings';
 import { createNewDoc, setMode } from '@/actions';
 import { Segmented, Sheet, Tip } from '../primitives';
-import { importSvgFile, openProjectFile, saveProjectFile } from '@/advanced/files';
+import { openProjectFile, saveProjectFile } from '@/advanced/files';
 
 /** A menu row. Its `hint` shows on hover with a mouse; on a phone the label says enough. */
 function Row({ icon, label, hint, onClick }: { icon: ReactNode; label: string; hint?: string; onClick: () => void }) {
@@ -71,12 +71,16 @@ export function MenuSheet() {
       <Row icon={<LayoutGrid />} label="My logos" onClick={() => useUi.setState({ sheet: 'gallery', galleryTab: 'mine' })} />
       {mode === 'advanced' && (
         <>
-          <Row icon={<Upload />} label="Import SVG" hint="Bring in an existing logo to edit" onClick={() => void importSvgFile().then(close)} />
           <Row icon={<Save />} label="Save project file" hint="Everything, including outlines and photos" onClick={() => void saveProjectFile().then(close)} />
           <Row icon={<FolderOpen />} label="Open project file" onClick={() => void openProjectFile().then(close)} />
         </>
       )}
       <Row icon={<Settings />} label="Settings" hint="Layout, appearance, mouse and keyboard" onClick={() => useUi.setState({ sheet: 'settings' })} />
+      <div className="menu-foot">
+        <a href="/privacy" target="_blank" rel="noopener">
+          Privacy &amp; terms
+        </a>
+      </div>
     </Sheet>
   );
 }

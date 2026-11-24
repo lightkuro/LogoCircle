@@ -30,6 +30,8 @@ export default defineConfig({
       workbox: {
         // Fonts are fetched when first used, then kept for offline use.
         globPatterns: ['**/*.{js,css,html,svg,png}'],
+        // The privacy and terms page is a page of its own, not a route of the app.
+        navigateFallbackDenylist: [/^\/privacy/],
         runtimeCaching: [
           {
             urlPattern: /\/assets\/.*\.woff$/,

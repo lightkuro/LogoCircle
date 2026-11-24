@@ -68,8 +68,12 @@ interface UiState {
   corner: { id: string; index: number } | null;
   /** Right-click / long-press menu, at a screen position. */
   menu: { x: number; y: number; items: MenuItem[]; touch?: boolean } | null;
-  /** Which swatch has its small color panel open ('paper' for the background). */
-  colorPanel: number | 'paper' | null;
+  /** Which swatch has its small color panel open ('paper' for the background, 'new' for a swatch being added). */
+  colorPanel: number | 'paper' | 'new' | null;
+  /** Where the background's panel was asked for from (a button or a menu), to open by it. */
+  colorAnchor: { left: number; top: number; right: number; bottom: number; width: number; height: number; side: 'above' | 'beside' } | null;
+  /** While moving or reshaping, points snap to nearby edges, corners and points. */
+  stickyPoints: boolean;
   /** Phones: the strip of colors at the side is folded down to one dot. */
   colorsFolded: boolean;
   /** Grid spacing in document units; 0 hides the grid (Advanced). */
@@ -122,6 +126,8 @@ export const useUi = create<UiState>((set) => ({
   corner: null,
   menu: null,
   colorPanel: null,
+  colorAnchor: null,
+  stickyPoints: stored('lc.sticky', '') === '1',
   colorsFolded: stored('lc.colorsFolded', '') === '1',
   grid: 0,
   hintDismissed: stored('lc.hint', '') === '1',
@@ -139,6 +145,7 @@ useUi.subscribe((s) => {
   if (s.multi && (s.selection.length === 0 || s.tool !== 'arrange')) useUi.setState({ multi: false });
   if (s.corner && (s.tool !== 'arrange' || s.selection.length !== 1 || s.selection[0] !== s.corner.id)) useUi.setState({ corner: null });
   if (s.frameEdit && s.tool !== 'arrange') useUi.setState({ frameEdit: false });
+  if (s.colorAnchor && s.colorPanel !== 'paper') useUi.setState({ colorAnchor: null });
 });
 
 export const selectionKey = (ids: string[]): string => [...ids].sort().join(',');

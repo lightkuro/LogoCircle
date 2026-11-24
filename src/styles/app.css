@@ -1115,25 +1115,6 @@ select {
   }
 }
 
-/* react-colorful sizing */
-.picker .react-colorful {
-  width: 100%;
-  height: 200px;
-}
-.picker .react-colorful__saturation {
-  border-radius: 14px 14px 0 0;
-}
-.picker .react-colorful__last-control {
-  border-radius: 0 0 14px 14px;
-}
-.picker .react-colorful__hue {
-  height: 28px;
-}
-.picker .react-colorful__pointer {
-  width: 26px;
-  height: 26px;
-}
-
 /* ------------------------------------------------------------------------
    Dock: grouped tools, numbered colors, flyouts
    ------------------------------------------------------------------------ */
@@ -1342,23 +1323,6 @@ select {
     opacity: 0;
     transform: scale(0.97);
   }
-}
-.color-panel .react-colorful {
-  width: 100%;
-  height: 150px;
-}
-.color-panel .react-colorful__saturation {
-  border-radius: 10px 10px 0 0;
-}
-.color-panel .react-colorful__last-control {
-  border-radius: 0 0 10px 10px;
-}
-.color-panel .react-colorful__hue {
-  height: 22px;
-}
-.color-panel .react-colorful__pointer {
-  width: 22px;
-  height: 22px;
 }
 .basic-grid {
   display: grid;
@@ -1802,4 +1766,126 @@ html[data-layout='side'] .dialog[data-place='top-right'] {
 }
 .menu-item[aria-checked='true'] .menu-trail {
   color: var(--text);
+}
+
+/* ------------------------------------------------------------------------
+   The color picker: a square for saturation and brightness over a hue strip
+   ------------------------------------------------------------------------ */
+.picker2 {
+  display: flex;
+  flex-direction: column;
+  touch-action: none;
+}
+.picker2-square {
+  position: relative;
+  height: 150px;
+  border-radius: 10px 10px 0 0;
+  background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent);
+  cursor: crosshair;
+  outline: none;
+}
+.picker2-strip {
+  position: relative;
+  height: 22px;
+  border-radius: 0 0 10px 10px;
+  cursor: ew-resize;
+  outline: none;
+}
+.picker2-knob {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2.5px #fff, 0 1px 4px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+.picker2-square:focus-visible .picker2-knob,
+.picker2-strip:focus-visible .picker2-knob {
+  box-shadow: 0 0 0 2.5px #fff, 0 0 0 4.5px var(--accent);
+}
+
+/* The background panel: the four choices and, beside them, the logo on that background. */
+.paper-head {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.paper-choices {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-content: start;
+  justify-content: start;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.paper-preview {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--swatch-ring);
+}
+.paper-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* A heading in a list that opens to more entries in place. */
+.menu-item .menu-fold {
+  margin-left: auto;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  transition: transform 160ms var(--ease-out);
+}
+.menu-item .menu-fold[data-open] {
+  transform: rotate(180deg);
+}
+.menu-item.menu-inner {
+  padding-left: 22px;
+}
+
+/* Folded colors: one dot in the lower corner, just above the bars along the bottom. */
+.color-strip-area.is-folded {
+  top: auto;
+  bottom: calc(var(--safe-bottom) + 146px);
+}
+html[data-labels='off'] .color-strip-area.is-folded {
+  bottom: calc(var(--safe-bottom) + 132px);
+}
+html[data-layout='side'] .color-strip-area.is-folded {
+  align-self: flex-end;
+}
+
+/* Tool names switched off: icons only, in a slimmer bar. */
+html[data-labels='off'] .dock .tool > span {
+  display: none;
+}
+html[data-labels='off'] .dock .tool {
+  height: 44px;
+  min-width: 46px;
+}
+html[data-labels='off'] .dock .tool .tool-caret {
+  top: 0;
+}
+
+/* Small print at the foot of the LogoCircle menu. */
+.menu-foot {
+  margin-top: 12px;
+  padding: 10px 10px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.menu-foot a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.menu-foot a:hover {
+  color: var(--text);
+  text-decoration: underline;
 }

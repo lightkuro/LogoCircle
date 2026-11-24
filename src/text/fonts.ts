@@ -1,11 +1,13 @@
 /**
- * Bundled fonts, via @fontsource. All are open-licensed (SIL OFL 1.1, except
- * Luckiest Guy, Roboto Slab and Yellowtail, which are Apache 2.0).
+ * Bundled fonts, via @fontsource, plus Paper Mono from its own repository
+ * (src/text/vendor). All are open-licensed (SIL OFL 1.1, except Luckiest Guy,
+ * Roboto Slab and Yellowtail, which are Apache 2.0).
  *
  * Every import below is only a URL: a font file is fetched the first time a
  * preview tile for it scrolls into view, or when it is used on the canvas.
  * This file is generated from a list (name, weight, kind); keep it that way.
  */
+import paperMono from './vendor/paper-mono/PaperMono-Regular.woff?url&no-inline';
 import f0a from '@fontsource/poppins/files/poppins-latin-700-normal.woff?url&no-inline';
 import f0b from '@fontsource/poppins/files/poppins-latin-ext-700-normal.woff?url&no-inline';
 import f1a from '@fontsource/montserrat/files/montserrat-latin-800-normal.woff?url&no-inline';
@@ -168,6 +170,8 @@ export const FONT_KINDS: { kind: Exclude<FontKind, 'custom'>; label: string }[] 
 
 export const FONTS: FontDef[] = [
   { id: 'poppins', name: 'Poppins', kind: 'sans', urls: [f0a, f0b], popular: true },
+  // Paper Mono by Paper (paper.design), SIL OFL 1.1; the Regular weight, Latin and extended Latin in one file.
+  { id: 'paper-mono', name: 'Paper Mono', kind: 'mono', urls: [paperMono], popular: true },
   { id: 'montserrat', name: 'Montserrat', kind: 'sans', urls: [f1a, f1b], popular: true },
   { id: 'inter', name: 'Inter', kind: 'sans', urls: [f2a, f2b], popular: true },
   { id: 'outfit', name: 'Outfit', kind: 'sans', urls: [f3a, f3b], popular: true },
@@ -183,7 +187,7 @@ export const FONTS: FontDef[] = [
   { id: 'nunito', name: 'Nunito', kind: 'round', urls: [f13a, f13b], popular: true },
   { id: 'playfair-display', name: 'Playfair Display', kind: 'serif', urls: [f14a, f14b], popular: true },
   { id: 'dm-serif-display', name: 'DM Serif Display', kind: 'serif', urls: [f15a, f15b], popular: true },
-  { id: 'abril-fatface', name: 'Abril Fatface', kind: 'serif', urls: [f16a, f16b], popular: true },
+  { id: 'abril-fatface', name: 'Abril Fatface', kind: 'serif', urls: [f16a, f16b] },
   { id: 'pacifico', name: 'Pacifico', kind: 'script', urls: [f17a, f17b], popular: true },
   { id: 'dm-sans', name: 'DM Sans', kind: 'sans', urls: [f18a, f18b] },
   { id: 'manrope', name: 'Manrope', kind: 'sans', urls: [f19a, f19b] },

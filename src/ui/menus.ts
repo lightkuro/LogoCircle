@@ -2,14 +2,15 @@
  * Right-click (and press-and-hold) menus. One place decides what is offered
  * for whatever is under the pointer, so the menu always matches the thing.
  */
-import type { Pt } from '@/geom';
+import { flattenEdge, type Pt } from '@/geom';
 import { commit, getDoc, useDoc } from '@/store/doc';
 import { ui, useUi, type MenuItem } from '@/store/ui';
 import { board } from '@/model/doc';
-import { cornerRadius, guideArea, insertGuidePoint, maxCornerRadius, removeGuidePoint, setCornerRadius, togglePathNode } from '@/model/guides';
+import { cornerRadius, guideArea, guideCenterline, insertGuidePoint, maxCornerRadius, removeGuidePoint, setCornerRadius, togglePathNode } from '@/model/guides';
 import { updateGuide } from '@/model/ops';
 import type { Guide } from '@/model/types';
 import {
+  openBackground,
   canRepeat,
   colorSelection,
   copySelection,
@@ -81,7 +82,12 @@ const open = (at: Pt, items: MenuItem[]): void => {
 const patchGuide = (g: Guide): void => commit(updateGuide(getDoc(), g.id, g));
 
 /** A rectangle's corner handles, in the order its rounding is stored. */
-const RECT_CORNER: Partial<Record<string, number>> = { nw: 0, ne: 1, se: 2, sw: 3 };
+const RECT_CORNER: Partial<Record<string, number>> = {
+  nw: 0,
+  ne: 1,
+  se: 2,
+  sw: 3,
+};
 
 const corners = (g: Guide): number => (g.type === 'rect' ? 4 : g.type === 'poly' ? g.pts.length : 0);
 const anyRounded = (g: Guide): boolean => cornerRadius(g, -1) > 0;
@@ -102,18 +108,41 @@ function cornerItems(g: Guide, index: number | undefined): MenuItem[] {
   const items: MenuItem[] = [];
   if (index !== undefined) {
     const r = cornerRadius(g, index);
-    items.push({ label: r > 0 ? 'Adjust this corner' : 'Round this corner', icon: SquareRoundCorner, onSelect: () => roundCorner(g, index) });
-    if (r > 0) items.push({ label: 'Sharpen this corner', icon: Square, onSelect: () => patchGuide(setCornerRadius(g, index, 0)) });
+    items.push({
+      label: r > 0 ? 'Adjust this corner' : 'Round this corner',
+      icon: SquareRoundCorner,
+      onSelect: () => roundCorner(g, index),
+    });
+    if (r > 0)
+      items.push({
+        label: 'Sharpen this corner',
+        icon: Square,
+        onSelect: () => patchGuide(setCornerRadius(g, index, 0)),
+      });
   }
-  items.push({ label: 'Round all corners', icon: SquareRoundCorner, divide: items.length > 0, onSelect: () => roundCorner(g, -1) });
-  if (anyRounded(g)) items.push({ label: 'Sharpen all corners', icon: Square, onSelect: () => patchGuide(setCornerRadius(g, -1, 0)) });
+  items.push({
+    label: 'Round all corners',
+    icon: SquareRoundCorner,
+    divide: items.length > 0,
+    onSelect: () => roundCorner(g, -1),
+  });
+  if (anyRounded(g))
+    items.push({
+      label: 'Sharpen all corners',
+      icon: Square,
+      onSelect: () => patchGuide(setCornerRadius(g, -1, 0)),
+    });
   return items;
 }
 
 function pointMenu(g: Guide, h: Handle, d: Pt): MenuItem[] {
   const items: MenuItem[] = [];
   if (h.kind === 'mid') {
-    items.push({ label: 'Add a point here', icon: Plus, onSelect: () => patchGuide(insertGuidePoint(g, h.index, d)) });
+    items.push({
+      label: 'Add a point here',
+      icon: Plus,
+      onSelect: () => patchGuide(insertGuidePoint(g, h.index, d)),
+    });
     return items;
   }
   if (h.kind === 'box') {
@@ -127,19 +156,60 @@ function pointMenu(g: Guide, h: Handle, d: Pt): MenuItem[] {
   if (g.type === 'path') {
     const n = g.nodes[i];
     const smooth = !!n && (n.ix !== undefined || n.ox !== undefined);
-    items.push({ label: smooth ? 'Make this a sharp corner' : 'Make this point smooth', icon: Spline, onSelect: () => patchGuide(togglePathNode(g, i)) });
+    items.push({
+      label: smooth ? 'Make this a sharp corner' : 'Make this point smooth',
+      icon: Spline,
+      onSelect: () => patchGuide(togglePathNode(g, i)),
+    });
   }
   if (g.type === 'poly' || g.type === 'curve' || g.type === 'path') {
     const next = removeGuidePoint(g, i);
-    items.push({ label: 'Remove this point', icon: Minus, disabled: !next, divide: items.length > 0, onSelect: () => next && patchGuide(next) });
+    items.push({
+      label: 'Remove this point',
+      icon: Minus,
+      disabled: !next,
+      divide: items.length > 0,
+      onSelect: () => next && patchGuide(next),
+    });
   }
   if (g.type === 'curve') {
-    items.push({ label: g.closed ? 'Open the curve' : 'Close the curve', icon: Spline, onSelect: () => patchGuide({ ...g, closed: !g.closed }) });
+    items.push({
+      label: g.closed ? 'Open the curve' : 'Close the curve',
+      icon: Spline,
+      onSelect: () => patchGuide({ ...g, closed: !g.closed }),
+    });
   }
   return items;
 }
 
-function selectionMenu(): MenuItem[] {
+/** Which side of a polygon (or stretch of a curve) a point is on, if it is close to one. */
+function sideAt(g: Guide, d: Pt, tol: number): number | null {
+  if (g.type !== 'poly' && g.type !== 'curve') return null;
+  const n = g.pts.length;
+  const closed = g.type === 'poly' || g.closed;
+  const edges = g.type === 'curve' ? guideCenterline(g)[0]?.edges : undefined;
+  let best: number | null = null;
+  let bestD = tol;
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const pts = edges?.[i] ? flattenEdge(edges[i]!, 1) : [g.pts[i]!, g.pts[(i + 1) % n]!];
+    for (let k = 1; k < pts.length; k++) {
+      const a = pts[k - 1]!;
+      const b = pts[k]!;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 ? Math.max(0, Math.min(1, ((d.x - a.x) * dx + (d.y - a.y) * dy) / len2)) : 0;
+      const dist = Math.hypot(d.x - (a.x + dx * t), d.y - (a.y + dy * t));
+      if (dist < bestD) {
+        bestD = dist;
+        best = i;
+      }
+    }
+  }
+  return best;
+}
+
+function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
   const doc = getDoc();
   const s = ui();
   const sel = new Set(s.selection);
@@ -147,86 +217,264 @@ function selectionMenu(): MenuItem[] {
   const guides = doc.guides.filter((x) => sel.has(x.id));
   const refs = doc.refs.filter((x) => sel.has(x.id));
   const items: MenuItem[] = [];
+  // On the edge of a polygon or curve: a new point, right there.
+  const lone = guides.length === 1 && !shapes.length ? guides[0]! : null;
+  const side = lone && d ? sideAt(lone, d, tol) : null;
+  if (lone && d && side !== null) {
+    items.push({ label: 'Add a point here', icon: Plus, onSelect: () => patchGuide(insertGuidePoint(lone, side, d)) });
+  }
   if (refs.length && !shapes.length && !guides.length) {
     const r = refs[0]!;
-    const set = (patch: Partial<typeof r>): void => commit({ ...getDoc(), refs: getDoc().refs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)), updatedAt: Date.now() });
-    items.push({ label: r.locked ? 'Unlock to move or resize' : 'Lock in place', icon: r.locked ? LockOpen : Lock, onSelect: () => set({ locked: !r.locked }) });
-    items.push({ label: r.above ? 'Show under the colors' : 'Show over the colors', icon: Layers2, onSelect: () => set({ above: !r.above }) });
-    items.push({ label: 'Remove photo', icon: Trash2, danger: true, divide: true, onSelect: deleteSelection });
+    const set = (patch: Partial<typeof r>): void =>
+      commit({
+        ...getDoc(),
+        refs: getDoc().refs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)),
+        updatedAt: Date.now(),
+      });
+    items.push({
+      label: r.locked ? 'Unlock to move or resize' : 'Lock in place',
+      icon: r.locked ? LockOpen : Lock,
+      onSelect: () => set({ locked: !r.locked }),
+    });
+    items.push({
+      label: r.above ? 'Show under the colors' : 'Show over the colors',
+      icon: Layers2,
+      onSelect: () => set({ above: !r.above }),
+    });
+    items.push({
+      label: 'Remove photo',
+      icon: Trash2,
+      danger: true,
+      divide: true,
+      onSelect: deleteSelection,
+    });
     return items;
   }
 
   // Retype a word that has not been changed yet.
   const word = shapes.length && shapes.every((x) => x.group && x.group === shapes[0]!.group) ? doc.groups[shapes[0]!.group!] : undefined;
   if (word?.text?.pristine && doc.shapes.filter((x) => x.group === word.id).length === shapes.length) {
-    items.push({ label: 'Edit text', icon: Pencil, onSelect: () => useUi.setState({ sheet: 'text', textTarget: word.id }) });
+    items.push({
+      label: 'Edit text',
+      icon: Pencil,
+      onSelect: () => useUi.setState({ sheet: 'text', textTarget: word.id }),
+    });
   }
 
   // Color: any shape, and any outline that has (or can be given) an area.
   const limit = s.mode === 'classic' ? 4 : 8;
   doc.palette.slice(0, limit).forEach((c, i) => {
-    items.push({ label: `Color ${i + 1}`, swatch: c, divide: i === 0 && items.length > 0, onSelect: () => void colorSelection(i) });
+    items.push({
+      label: `Color ${i + 1}`,
+      swatch: c,
+      divide: i === 0 && items.length > 0,
+      onSelect: () => void colorSelection(i),
+    });
   });
 
   const one = guides.length === 1 && !shapes.length ? guides[0]! : null;
   if (one && (one.type === 'rect' || one.type === 'poly')) {
-    items.push({ label: 'Round all corners', icon: SquareRoundCorner, divide: true, onSelect: () => roundCorner(one, -1) });
-    if (anyRounded(one)) items.push({ label: 'Sharpen all corners', icon: Square, onSelect: () => patchGuide(setCornerRadius(one, -1, 0)) });
+    items.push({
+      label: 'Round all corners',
+      icon: SquareRoundCorner,
+      divide: true,
+      onSelect: () => roundCorner(one, -1),
+    });
+    if (anyRounded(one))
+      items.push({
+        label: 'Sharpen all corners',
+        icon: Square,
+        onSelect: () => patchGuide(setCornerRadius(one, -1, 0)),
+      });
   }
   if (one && one.type === 'curve') {
-    items.push({ label: one.closed ? 'Open the curve' : 'Close the curve', icon: Spline, divide: true, onSelect: () => patchGuide({ ...one, closed: !one.closed }) });
+    items.push({
+      label: one.closed ? 'Open the curve' : 'Close the curve',
+      icon: Spline,
+      divide: true,
+      onSelect: () => patchGuide({ ...one, closed: !one.closed }),
+    });
   }
 
-  items.push({ label: 'Duplicate', icon: CopyPlus, keys: key('duplicate'), divide: true, onSelect: duplicateSelection });
-  if (canRepeat()) items.push({ label: 'Repeat with the same spacing', icon: Repeat2, keys: key('repeat'), onSelect: repeatDuplicate });
-  items.push({ label: 'Copy', icon: Copy, keys: key('copy'), onSelect: () => void copySelection() });
-  items.push({ label: 'Flip sideways', icon: FlipVertical2, onSelect: () => flipSelection('h') });
-  items.push({ label: 'Flip upside down', icon: FlipHorizontal2, onSelect: () => flipSelection('v') });
+  items.push({
+    label: 'Duplicate',
+    icon: CopyPlus,
+    keys: key('duplicate'),
+    divide: true,
+    onSelect: duplicateSelection,
+  });
+  if (canRepeat())
+    items.push({
+      label: 'Repeat with the same spacing',
+      icon: Repeat2,
+      keys: key('repeat'),
+      onSelect: repeatDuplicate,
+    });
+  items.push({
+    label: 'Copy',
+    icon: Copy,
+    keys: key('copy'),
+    onSelect: () => void copySelection(),
+  });
+  items.push({
+    label: 'Flip sideways',
+    icon: FlipVertical2,
+    onSelect: () => flipSelection('h'),
+  });
+  items.push({
+    label: 'Flip upside down',
+    icon: FlipHorizontal2,
+    onSelect: () => flipSelection('v'),
+  });
 
   if (shapes.length) {
     const first = doc.shapes[0];
     const last = doc.shapes[doc.shapes.length - 1];
     const atTop = shapes.includes(last!) && shapes.length === 1;
     const atBottom = shapes.includes(first!) && shapes.length === 1;
-    items.push({ label: 'Bring forward', icon: ArrowUp, divide: true, disabled: atTop, onSelect: () => orderSelection('forward') });
-    items.push({ label: 'Send backward', icon: ArrowDown, disabled: atBottom, onSelect: () => orderSelection('backward') });
-    items.push({ label: 'Bring to front', icon: ArrowUpToLine, disabled: atTop, onSelect: () => orderSelection('front') });
-    items.push({ label: 'Send to back', icon: ArrowDownToLine, disabled: atBottom, onSelect: () => orderSelection('back') });
+    items.push({
+      label: 'Bring forward',
+      icon: ArrowUp,
+      divide: true,
+      disabled: atTop,
+      onSelect: () => orderSelection('forward'),
+    });
+    items.push({
+      label: 'Send backward',
+      icon: ArrowDown,
+      disabled: atBottom,
+      onSelect: () => orderSelection('backward'),
+    });
+    items.push({
+      label: 'Bring to front',
+      icon: ArrowUpToLine,
+      disabled: atTop,
+      onSelect: () => orderSelection('front'),
+    });
+    items.push({
+      label: 'Send to back',
+      icon: ArrowDownToLine,
+      disabled: atBottom,
+      onSelect: () => orderSelection('back'),
+    });
   }
 
   const groupIds = selectionGroups();
   const members = [...doc.shapes, ...doc.guides].filter((x) => x.group && groupIds.includes(x.group)).length;
   // already exactly one whole group? then only offer to take it apart
   const oneGroup = groupIds.length === 1 && members === sel.size;
-  if (sel.size > 1 && !oneGroup) items.push({ label: 'Group', icon: GroupIcon, keys: key('group'), divide: true, onSelect: groupSelection });
+  if (sel.size > 1 && !oneGroup)
+    items.push({
+      label: 'Group',
+      icon: GroupIcon,
+      keys: key('group'),
+      divide: true,
+      onSelect: groupSelection,
+    });
   if (groupIds.length) {
-    items.push({ label: word ? 'Split into letters' : 'Ungroup', icon: Ungroup, keys: key('ungroup'), divide: oneGroup || sel.size <= 1, onSelect: ungroupSelection });
+    items.push({
+      label: word ? 'Split into letters' : 'Ungroup',
+      icon: Ungroup,
+      keys: key('ungroup'),
+      divide: oneGroup || sel.size <= 1,
+      onSelect: ungroupSelection,
+    });
   }
   if (shapes.some((x) => x.from)) {
-    items.push({ label: 'Detach from its outlines', icon: Unlink, divide: true, onSelect: detachSelection });
+    items.push({
+      label: 'Detach from its outlines',
+      icon: Unlink,
+      divide: true,
+      onSelect: detachSelection,
+    });
   }
   if (guides.some((g) => guideArea(g)) && !shapes.length) {
     // nothing extra: the Color items above fill it
   }
-  items.push({ label: 'Delete', icon: Trash2, keys: key('delete'), danger: true, divide: true, onSelect: deleteSelection });
+  items.push({
+    label: 'Delete',
+    icon: Trash2,
+    keys: key('delete'),
+    danger: true,
+    divide: true,
+    onSelect: deleteSelection,
+  });
   return items;
 }
 
-function canvasMenu(): MenuItem[] {
+function canvasMenu(at?: Pt): MenuItem[] {
   const s = ui();
   const doc = getDoc();
   const items: MenuItem[] = [];
-  if (hasClipboard()) items.push({ label: 'Paste', icon: ClipboardPaste, keys: key('paste'), onSelect: pasteClipboard });
-  items.push({ label: 'Select all', icon: SquareDashedMousePointer, keys: key('selectAll'), onSelect: selectAll });
-  items.push({ label: s.showGuides ? 'Hide outlines' : 'Show outlines', icon: s.showGuides ? EyeOff : Eye, keys: key('outlines'), divide: true, onSelect: () => useUi.setState({ showGuides: !s.showGuides, selection: [] }) });
+  if (hasClipboard())
+    items.push({
+      label: 'Paste',
+      icon: ClipboardPaste,
+      keys: key('paste'),
+      onSelect: pasteClipboard,
+    });
+  items.push({
+    label: 'Select all',
+    icon: SquareDashedMousePointer,
+    keys: key('selectAll'),
+    onSelect: selectAll,
+  });
+  items.push({
+    label: s.showGuides ? 'Hide outlines' : 'Show outlines',
+    icon: s.showGuides ? EyeOff : Eye,
+    keys: key('outlines'),
+    divide: true,
+    onSelect: () => useUi.setState({ showGuides: !s.showGuides, selection: [] }),
+  });
   if (doc.guides.some((g) => g.type === 'line' && g.cut)) {
-    items.push({ label: s.showCuts ? 'Hide cut lines' : 'Show cut lines', icon: Scissors, onSelect: () => useUi.setState({ showCuts: !s.showCuts, selection: [] }) });
+    items.push({
+      label: s.showCuts ? 'Hide cut lines' : 'Show cut lines',
+      icon: Scissors,
+      onSelect: () => useUi.setState({ showCuts: !s.showCuts, selection: [] }),
+    });
   }
-  items.push({ label: 'Frame size', icon: Crop, divide: true, onSelect: () => editFrame(true) });
-  items.push({ label: 'Fit the frame to the artwork', icon: Scaling, disabled: !doc.shapes.length, onSelect: fitBoardToArtwork });
-  items.push({ label: 'Background color', icon: PaintBucket, onSelect: () => useUi.setState({ colorPanel: 'paper' }) });
-  items.push({ label: 'Zoom to fit', icon: Maximize, keys: key('fit'), divide: true, onSelect: () => fitToScreen() });
-  if (useDoc.getState().past.length) items.push({ label: 'Undo', icon: Undo2, keys: key('undo'), onSelect: () => useDoc.getState().undo() });
+  items.push({
+    label: 'Frame size',
+    icon: Crop,
+    divide: true,
+    onSelect: () => editFrame(true),
+  });
+  items.push({
+    label: 'Fit the frame to the artwork',
+    icon: Scaling,
+    disabled: !doc.shapes.length,
+    onSelect: fitBoardToArtwork,
+  });
+  items.push({
+    label: 'Background color',
+    icon: PaintBucket,
+    onSelect: () =>
+      openBackground(
+        at && {
+          left: at.x,
+          top: at.y,
+          right: at.x,
+          bottom: at.y,
+          width: 0,
+          height: 0,
+        },
+        'beside',
+      ),
+  });
+  items.push({
+    label: 'Zoom to fit',
+    icon: Maximize,
+    keys: key('fit'),
+    divide: true,
+    onSelect: () => fitToScreen(),
+  });
+  if (useDoc.getState().past.length)
+    items.push({
+      label: 'Undo',
+      icon: Undo2,
+      keys: key('undo'),
+      onSelect: () => useDoc.getState().undo(),
+    });
   return items;
 }
 
@@ -238,7 +486,11 @@ function frameMenu(): MenuItem[] {
     { label: 'Wide 16 : 9', onSelect: () => setBoardRatio(16, 9) },
     { label: 'Tall 3 : 4', onSelect: () => setBoardRatio(3, 4) },
     { label: 'Fit to the artwork', divide: true, onSelect: fitBoardToArtwork },
-    { label: `Done (${Math.round(b.w)} by ${Math.round(b.h)})`, divide: true, onSelect: () => editFrame(false) },
+    {
+      label: `Done (${Math.round(b.w)} by ${Math.round(b.h)})`,
+      divide: true,
+      onSelect: () => editFrame(false),
+    },
   ];
 }
 
@@ -256,13 +508,14 @@ export function openCanvasMenu(at: Pt, d: Pt, handle: Handle | null, hits: strin
     }
   }
   const hit = hits.find((id) => s.selection.includes(id)) ?? hits[0];
+  const tol = (touch ? 16 : 8) / s.view.k;
   if (hit) {
     if (!s.selection.includes(hit)) useUi.setState({ selection: expandToGroup(doc, hit) });
-    return open(at, selectionMenu());
+    return open(at, selectionMenu(d, tol));
   }
-  if (handle && s.selection.length) return open(at, selectionMenu());
+  if (handle && s.selection.length) return open(at, selectionMenu(d, tol));
   useUi.setState({ selection: [] });
-  open(at, canvasMenu());
+  open(at, canvasMenu(at));
 }
 
 /** The menu for a color swatch in the dock. */
@@ -271,12 +524,23 @@ export function openSwatchMenu(at: Pt, index: number, touch = false): void {
   const doc = getDoc();
   const used = doc.shapes.filter((s) => s.fill === index).length;
   open(at, [
-    { label: 'Edit color', swatch: doc.palette[index], onSelect: () => useUi.setState({ colorPanel: index }) },
+    {
+      label: 'Edit color',
+      swatch: doc.palette[index],
+      onSelect: () => useUi.setState({ colorPanel: index }),
+    },
     {
       label: 'Select everything in this color',
       icon: SquareDashedMousePointer,
       disabled: used === 0,
-      onSelect: () => useUi.setState({ tool: 'arrange', erasing: false, selection: getDoc().shapes.filter((s) => s.fill === index).map((s) => s.id) }),
+      onSelect: () =>
+        useUi.setState({
+          tool: 'arrange',
+          erasing: false,
+          selection: getDoc()
+            .shapes.filter((s) => s.fill === index)
+            .map((s) => s.id),
+        }),
     },
     {
       label: 'Remove color',

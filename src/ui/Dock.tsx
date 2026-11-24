@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Brush,
+  ChevronDown,
   ChevronLeft,
   Circle,
   ClipboardPaste,
@@ -11,7 +12,9 @@ import {
   Hand,
   Hexagon,
   ImagePlus,
+  Image as ImageIcon,
   Lasso,
+  Magnet,
   Maximize,
   Minus,
   MousePointer2,
@@ -33,7 +36,7 @@ import { remember, useUi, type SelectMode } from '@/store/ui';
 import { buzz, useIsPhone, useIsSide, useIsTouch } from '@/store/settings';
 import { useKeys } from '@/keys';
 import { resolveFill } from '@/model/doc';
-import { addOutline, addSwatch, editFrame, fitToScreen, openPhoto, pastePhoto, pickEraser, pickInk, pickPhoto, setTool, zoomBy, type AddKind } from '@/actions';
+import { addOutline, addSwatch, editFrame, fitToScreen, openBackground, openPhoto, pastePhoto, pickEraser, pickInk, pickPhoto, setSticky, setTool, zoomBy, type AddKind } from '@/actions';
 import { openSwatchMenu } from './menus';
 import { ColorPanel } from './ColorPanel';
 import { Tip } from './primitives';
@@ -44,20 +47,30 @@ interface Entry {
   label: string;
   icon: ReactNode;
   keys?: string;
-  run: () => void;
+  /** `from` is where the list's button is on screen, for anything that opens beside it. */
+  run: (from?: DOMRect) => void;
   active?: boolean;
   /** Draw a divider above this entry in the list. */
   divide?: boolean;
-  /** A switch rather than a tool: shows a check, and never becomes the button's face. */
+  /** A switch rather than a tool: shows its state, and never becomes the button's face. */
   checked?: boolean;
+  /** A heading that opens to more entries, in place. */
+  children?: Entry[];
 }
 
-const openText = (): void => useUi.setState({ sheet: 'text', textTarget: null, tool: 'arrange', erasing: false, colorPanel: null });
+const openText = (): void =>
+  useUi.setState({
+    sheet: 'text',
+    textTarget: null,
+    tool: 'arrange',
+    erasing: false,
+    colorPanel: null,
+  });
 
 function Single({ entry }: { entry: Entry }) {
   return (
     <Tip label={entry.label} keys={entry.keys}>
-      <button type="button" className="tool" aria-pressed={entry.active} data-active={entry.active || undefined} onClick={entry.run}>
+      <button type="button" className="tool" aria-label={entry.label} aria-pressed={entry.active} data-active={entry.active || undefined} onClick={() => entry.run()}>
         {entry.icon}
         <span>{entry.label}</span>
       </button>
@@ -87,7 +100,12 @@ function Group({
   const touch = useIsTouch();
   const [open, setOpen] = useState(false);
   // the tool shown on the button: never a switch such as Cut lines
-  const [last, setLast] = useState(() => Math.max(0, entries.findIndex((e) => e.checked === undefined)));
+  const [last, setLast] = useState(() =>
+    Math.max(
+      0,
+      entries.findIndex((e) => e.checked === undefined),
+    ),
+  );
   const wrap = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState<number | null>(null);
@@ -126,11 +144,40 @@ function Group({
   }, [open]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const pick = (i: number): void => {
-    if (entries[i]!.checked === undefined) setLast(i);
+  const [unfolded, setUnfolded] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) setUnfolded(null);
+  }, [open]);
+  const pick = (e: Entry): void => {
+    if (e.children) return setUnfolded(unfolded === e.id ? null : e.id);
+    const i = entries.indexOf(e);
+    if (i >= 0 && e.checked === undefined) setLast(i);
+    const from = wrap.current?.getBoundingClientRect();
     setOpen(false);
-    entries[i]!.run();
+    e.run(from);
   };
+  const row = (e: Entry, inner = false): ReactNode => (
+    <div key={e.id}>
+      {e.divide && <div className="menu-sep" />}
+      <button
+        type="button"
+        role={e.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+        aria-checked={e.checked}
+        aria-expanded={e.children ? unfolded === e.id : undefined}
+        className={inner ? 'menu-item menu-inner' : 'menu-item'}
+        data-active={e.active || undefined}
+        onClick={() => pick(e)}
+      >
+        {e.checked === undefined && e.icon}
+        {e.label}
+        {e.keys && <kbd>{e.keys}</kbd>}
+        {/* a switch shows its state with its icon, after the words */}
+        {e.checked !== undefined && <span className="menu-trail">{e.icon}</span>}
+        {e.children && <ChevronDown className="menu-fold" data-open={unfolded === e.id || undefined} aria-hidden />}
+      </button>
+      {e.children && unfolded === e.id && e.children.map((c) => row(c, true))}
+    </div>
+  );
 
   return (
     <div
@@ -156,7 +203,7 @@ function Group({
         data-active={activeIndex >= 0 || undefined}
         onClick={() => {
           // Mouse: the list is already open from hovering, so a click means "this one again".
-          if (!touch && open && !icon) pick(entries.indexOf(shown));
+          if (!touch && open && !icon) pick(shown);
           else setOpen(!open);
         }}
       >
@@ -175,27 +222,12 @@ function Group({
           data-out={out}
           role="menu"
           aria-label={label}
-          style={{ [out === 'up' ? 'left' : 'top']: at ?? 0, visibility: at === null ? 'hidden' : undefined }}
+          style={{
+            [out === 'up' ? 'left' : 'top']: at ?? 0,
+            visibility: at === null ? 'hidden' : undefined,
+          }}
         >
-          {entries.map((e, i) => (
-            <div key={e.id}>
-              {e.divide && <div className="menu-sep" />}
-              <button
-                type="button"
-                role={e.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
-                aria-checked={e.checked}
-                className="menu-item"
-                data-active={e.active || undefined}
-                onClick={() => pick(i)}
-              >
-                {e.checked === undefined && e.icon}
-                {e.label}
-                {e.keys && <kbd>{e.keys}</kbd>}
-                {/* a switch shows its state with its icon, after the words: an eye, or the eye crossed out */}
-                {e.checked !== undefined && <span className="menu-trail">{e.icon}</span>}
-              </button>
-            </div>
-          ))}
+          {entries.map((e) => row(e))}
         </div>
       )}
     </div>
@@ -254,6 +286,7 @@ function Colors() {
   const palette = useDoc((s) => s.doc.palette);
   const mode = useUi((s) => s.mode);
   const paperPanel = useUi((s) => s.colorPanel === 'paper');
+  const adding = useUi((s) => s.colorPanel === 'new');
   const limit = mode === 'classic' ? 4 : 24;
   const shown = palette.slice(0, limit);
   return (
@@ -261,14 +294,23 @@ function Colors() {
       {shown.map((c, i) => (
         <Swatch key={i} index={i} color={c} last={i >= shown.length - 1 && i > 1} />
       ))}
-      {palette.length < limit && (
-        <Tip label="Add a color">
-          <button type="button" className="swatch" data-swatch aria-label="Add a color" onClick={addSwatch}>
-            <span className="swatch-dot flex items-center justify-center" style={{ background: 'var(--sunken)', boxShadow: 'inset 0 0 0 1px var(--border-strong)' }}>
-              <Plus style={{ width: 15, height: 15 }} />
-            </span>
-          </button>
-        </Tip>
+      {(palette.length < limit || adding) && (
+        <div className="swatch-wrap">
+          <Tip label="Add a color">
+            <button type="button" className="swatch" data-swatch aria-label="Add a color" aria-expanded={adding} onClick={addSwatch}>
+              <span
+                className="swatch-dot flex items-center justify-center"
+                style={{
+                  background: 'var(--sunken)',
+                  boxShadow: 'inset 0 0 0 1px var(--border-strong)',
+                }}
+              >
+                <Plus style={{ width: 15, height: 15 }} />
+              </span>
+            </button>
+          </Tip>
+          {adding && <ColorPanel target="new" />}
+        </div>
       )}
       {/* The paper's color panel opens here, beside the colors, wherever it was asked for. */}
       <div className="swatch-wrap paper-anchor">{paperPanel && <ColorPanel target="paper" align="end" />}</div>
@@ -292,7 +334,7 @@ export function ColorStrip() {
   };
   if (folded) {
     return (
-      <div className="color-strip-area">
+      <div className="color-strip-area is-folded">
         <button type="button" className="glass color-fold" aria-label="Show the colors" aria-expanded={false} onClick={() => fold(false)}>
           {erasing ? <EraseIcon /> : <span className="swatch-dot" style={{ background: resolveFill({ palette }, ink) }} />}
         </button>
@@ -321,49 +363,220 @@ function useEntries() {
   const hasPhoto = useDoc((s) => s.doc.refs.length > 0);
   const erasing = useUi((s) => s.tool === 'color' && s.erasing);
   const showCuts = useUi((s) => s.showCuts);
+  const sticky = useUi((s) => s.stickyPoints);
+  const side = useIsSide();
   const advanced = mode === 'advanced';
   const arranging = tool === 'arrange';
 
-  const select = (m: SelectMode) => (): void => useUi.setState({ selectMode: m, tool: 'arrange', erasing: false, colorPanel: null, frameEdit: false });
+  const select = (m: SelectMode) => (): void =>
+    useUi.setState({
+      selectMode: m,
+      tool: 'arrange',
+      erasing: false,
+      colorPanel: null,
+      frameEdit: false,
+    });
   const selects: Entry[] = [
-    { id: 'move', label: 'Move', keys: key('move'), icon: <MousePointer2 />, run: select('move'), active: arranging && selectMode === 'move' ? false : undefined },
-    { id: 'pan', label: 'Pan', keys: touch ? undefined : 'Space', icon: <Hand />, run: select('pan'), active: arranging && selectMode === 'pan' },
-    { id: 'box', label: 'Box select', keys: touch ? undefined : 'Shift drag', icon: <SquareDashed />, run: select('box'), active: arranging && selectMode === 'box' },
-    { id: 'lasso', label: 'Lasso select', icon: <Lasso />, run: select('lasso'), active: arranging && selectMode === 'lasso' },
-    { id: 'single', label: 'One at a time', icon: <MousePointerClick />, run: select('single'), active: arranging && selectMode === 'single' },
+    {
+      id: 'move',
+      label: 'Move',
+      keys: key('move'),
+      icon: <MousePointer2 />,
+      run: select('move'),
+      active: arranging && selectMode === 'move' ? false : undefined,
+    },
+    {
+      id: 'pan',
+      label: 'Pan',
+      keys: touch ? undefined : 'Space',
+      icon: <Hand />,
+      run: select('pan'),
+      active: arranging && selectMode === 'pan',
+    },
+    {
+      id: 'box',
+      label: 'Box select',
+      keys: touch ? undefined : 'Shift drag',
+      icon: <SquareDashed />,
+      run: select('box'),
+      active: arranging && selectMode === 'box',
+    },
+    {
+      id: 'lasso',
+      label: 'Lasso select',
+      icon: <Lasso />,
+      run: select('lasso'),
+      active: arranging && selectMode === 'lasso',
+    },
+    {
+      id: 'single',
+      label: 'One at a time',
+      icon: <MousePointerClick />,
+      run: select('single'),
+      active: arranging && selectMode === 'single',
+    },
   ];
   const add = (kind: AddKind) => (): void => addOutline(kind);
   const shapes: Entry[] = [
-    { id: 'circle', label: 'Circle', keys: key('circle'), icon: <Circle />, run: add('circle') },
-    { id: 'rect', label: 'Square', keys: key('square'), icon: <Square />, run: add('rect') },
-    { id: 'triangle', label: 'Triangle', icon: <Triangle />, run: add('triangle') },
+    {
+      id: 'circle',
+      label: 'Circle',
+      keys: key('circle'),
+      icon: <Circle />,
+      run: add('circle'),
+    },
+    {
+      id: 'rect',
+      label: 'Square',
+      keys: key('square'),
+      icon: <Square />,
+      run: add('rect'),
+    },
+    {
+      id: 'triangle',
+      label: 'Triangle',
+      icon: <Triangle />,
+      run: add('triangle'),
+    },
     { id: 'polygon', label: 'Polygon', icon: <Hexagon />, run: add('polygon') },
     { id: 'star', label: 'Star', icon: <Star />, run: add('star') },
   ];
   const lines: Entry[] = [
-    { id: 'line', label: 'Line', keys: key('line'), icon: <LineIcon />, run: add('line') },
-    { id: 'curve', label: 'Curve', keys: key('curve'), icon: <CurveIcon />, run: add('curve') },
-    { id: 'draw', label: 'Draw', keys: key('draw'), icon: <Pencil />, run: () => setTool('draw'), active: tool === 'draw' },
-    { id: 'brush', label: 'Brush', keys: key('brush'), icon: <Brush />, run: () => setTool('brush'), active: tool === 'brush' },
-    ...(advanced ? [{ id: 'pen', label: 'Pen', keys: key('pen'), icon: <PenTool />, run: () => setTool('pen'), active: tool === 'pen' }] : []),
+    {
+      id: 'line',
+      label: 'Line',
+      keys: key('line'),
+      icon: <LineIcon />,
+      run: add('line'),
+    },
+    {
+      id: 'curve',
+      label: 'Curve',
+      keys: key('curve'),
+      icon: <CurveIcon />,
+      run: add('curve'),
+    },
+    {
+      id: 'draw',
+      label: 'Draw',
+      keys: key('draw'),
+      icon: <Pencil />,
+      run: () => setTool('draw'),
+      active: tool === 'draw',
+    },
+    {
+      id: 'brush',
+      label: 'Brush',
+      keys: key('brush'),
+      icon: <Brush />,
+      run: () => setTool('brush'),
+      active: tool === 'brush',
+    },
+    ...(advanced
+      ? [
+          {
+            id: 'pen',
+            label: 'Pen',
+            keys: key('pen'),
+            icon: <PenTool />,
+            run: () => setTool('pen'),
+            active: tool === 'pen',
+          },
+        ]
+      : []),
   ];
   const photos: Entry[] = [
-    { id: 'choose', label: hasPhoto && !advanced ? 'Choose another photo' : 'Choose a photo', keys: hasPhoto ? undefined : key('photo'), icon: <ImagePlus />, run: pickPhoto },
-    { id: 'paste', label: 'Paste a photo', keys: key('paste'), icon: <ClipboardPaste />, run: () => void pastePhoto() },
-    ...(hasPhoto && !advanced ? [{ id: 'controls', label: 'Photo settings', keys: key('photo'), icon: <SlidersHorizontal />, run: openPhoto }] : []),
+    {
+      id: 'import',
+      label: 'Import photo',
+      icon: <ImagePlus />,
+      run: () => undefined,
+      children: [
+        {
+          id: 'choose',
+          label: 'Choose photo',
+          keys: hasPhoto ? undefined : key('photo'),
+          icon: <ImageIcon />,
+          run: pickPhoto,
+        },
+        {
+          id: 'paste',
+          label: 'Paste photo',
+          keys: key('paste'),
+          icon: <ClipboardPaste />,
+          run: () => void pastePhoto(),
+        },
+      ],
+    },
+    ...(hasPhoto && !advanced
+      ? [
+          {
+            id: 'controls',
+            label: 'Photo settings',
+            keys: key('photo'),
+            icon: <SlidersHorizontal />,
+            run: openPhoto,
+          },
+        ]
+      : []),
   ];
   const cuts: Entry[] = [
     // A switch, at the top so the tools sit right above the button.
-    { id: 'marks', label: 'Cut lines', icon: showCuts ? <Eye /> : <EyeOff />, run: () => useUi.setState({ showCuts: !showCuts }), checked: showCuts },
-    { id: 'cut', label: 'Cut', keys: key('cut'), icon: <Scissors />, run: () => setTool('cut'), active: tool === 'cut', divide: true },
-    { id: 'erase', label: 'Erase', keys: key('erase'), icon: <EraseIcon />, run: pickEraser, active: erasing },
+    {
+      id: 'marks',
+      label: 'Cut lines',
+      icon: showCuts ? <Eye /> : <EyeOff />,
+      run: () => useUi.setState({ showCuts: !showCuts }),
+      checked: showCuts,
+    },
+    {
+      id: 'cut',
+      label: 'Cut',
+      keys: key('cut'),
+      icon: <Scissors />,
+      run: () => setTool('cut'),
+      active: tool === 'cut',
+      divide: true,
+    },
+    {
+      id: 'erase',
+      label: 'Erase',
+      keys: key('erase'),
+      icon: <EraseIcon />,
+      run: pickEraser,
+      active: erasing,
+    },
   ];
   // Phones: the things reached for less often share one button.
   const more: Entry[] = [
     ...photos,
-    { id: 'paper', label: 'Background color', icon: <PaintBucket />, run: () => useUi.setState({ colorPanel: 'paper' }), divide: true },
-    { id: 'frame', label: 'Frame size', icon: <Crop />, run: () => editFrame(true) },
-    { id: 'fit', label: 'Zoom to fit', icon: <Maximize />, run: () => fitToScreen() },
+    {
+      id: 'paper',
+      label: 'Background color',
+      icon: <PaintBucket />,
+      run: (from) => openBackground(from, side ? 'beside' : 'above'),
+      divide: true,
+    },
+    {
+      id: 'frame',
+      label: 'Frame size',
+      icon: <Crop />,
+      run: () => editFrame(true),
+    },
+    {
+      id: 'fit',
+      label: 'Zoom to fit',
+      icon: <Maximize />,
+      run: () => fitToScreen(),
+    },
+    {
+      id: 'sticky',
+      label: 'Sticky points',
+      icon: <Magnet style={{ opacity: sticky ? 1 : 0.45 }} />,
+      run: () => setSticky(!sticky),
+      checked: sticky,
+      divide: true,
+    },
   ];
 
   return { key, selects, shapes, lines, cuts, photos, more };
@@ -373,7 +586,13 @@ export function Dock() {
   const phone = useIsPhone();
   const side = useIsSide();
   const { key, selects, shapes, lines, cuts, more } = useEntries();
-  const text: Entry = { id: 'text', label: 'Text', keys: key('text'), icon: <Type />, run: openText };
+  const text: Entry = {
+    id: 'text',
+    label: 'Text',
+    keys: key('text'),
+    icon: <Type />,
+    run: openText,
+  };
 
   if (side) {
     // A phone on its side: the tools run down the left edge, Select sits with the zoom on the right.

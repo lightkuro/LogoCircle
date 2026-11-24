@@ -28,14 +28,9 @@ export const BASIC_COLORS = ['#2a9d55', '#16a3b8', '#2f6bff', '#7c3aed', '#ec489
 
 export const DEFAULT_PALETTE = ['#16877f', '#f29e4c'];
 
-/** The order new swatches take their color in: black first, then whatever is not there yet. */
-const NEXT_COLORS = ['#000000', '#ffffff', '#8e8e93', '#e5383b', '#ff8a00', '#f4b942', '#2a9d55', '#16a3b8', '#2f6bff', '#7c3aed', '#ec4899', '#8b5e3c'];
+/** What a new swatch's panel shows until a color is chosen: the first of the plain colors. */
+export const NEW_COLOR = BASIC_COLORS[0]!;
 
-/** The color a newly added swatch starts with. */
-export function nextColor(palette: string[]): string {
-  const have = new Set(palette.map((c) => c.toLowerCase()));
-  return NEXT_COLORS.find((c) => !have.has(c)) ?? '#000000';
-}
 
 /** The background a new logo starts on: a warm, paper-like off-white. */
 export const DEFAULT_PAPER = '#f5f1e8';

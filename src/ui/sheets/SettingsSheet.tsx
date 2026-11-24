@@ -186,6 +186,7 @@ export function SettingsSheet() {
   const theme = useSettings((s) => s.theme);
   const dragEmpty = useSettings((s) => s.dragEmpty);
   const haptics = useSettings((s) => s.haptics);
+  const toolLabels = useSettings((s) => s.toolLabels);
   const touch = useIsTouch();
   const set = settings().set;
   const drag = (v: DragEmpty) => (): void => set({ dragEmpty: v });
@@ -238,6 +239,8 @@ export function SettingsSheet() {
           </div>
         </>
       )}
+
+      <Switch label="Tool names" hint="Words under the icons in the bar of tools. Off leaves just the icons." checked={toolLabels} onChange={(v) => set({ toolLabels: v })} />
 
       <div className="label">Helpers</div>
       <Switch label="Snapping" hint="Things line up with nearby outlines, edges and centres as you drag them." checked={snap} onChange={(v) => useUi.setState({ snap: v })} />

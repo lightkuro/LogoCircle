@@ -562,8 +562,8 @@ export function TextSheet() {
                 onChange={goTo}
                 options={[
                   { value: 'font', label: 'Font' },
-                  { value: 'size', label: 'Size' },
                   { value: 'color', label: 'Color' },
+                  { value: 'size', label: 'Size' },
                 ]}
               />
               <button type="button" className="ib" aria-label="Close" onClick={close}>

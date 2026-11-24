@@ -9,7 +9,7 @@ Make a logo by drawing simple outlines and coloring in the areas between them. R
 3. **Refine.** Under Cut: tap a piece of an outline between two crossings to remove it, drag a line across shapes to slice them, or Erase areas. Show cut lines shows removed pieces as dots; tap one to bring it back. A fill follows its outlines when they are moved or reshaped. Words work the same way: put an outline over a letter, then erase or recolor what it cuts.
 4. **Export.** Hide the outlines to see the logo, adjust the frame size, then download SVG or PNG.
 
-Right-click (or press and hold) anything for what can be done with it: round a single corner, edit a word, change the order, group.
+Right-click (or press and hold) anything for what can be done with it: round a single corner, add a point to a polygon's side, edit a word, change the order, group. Sticky points, under More, makes corners and points stick to nearby corners, points and edges while moving or reshaping.
 
 Phones get their own layout: upright, one bar of tools along the bottom, colors down the side and panels on the lower half of the screen; turned on their side, the tools run down the left edge and Select and zoom down the right, so the canvas keeps the full height. Phones get touch wording only; desktops get mouse and keyboard wording. Settings, in the LogoCircle menu, can force either layout, switch between light and dark, swap what the left and right mouse buttons do on empty canvas, and change any keyboard shortcut.
 
@@ -18,7 +18,7 @@ Two modes share one document:
 - **Classic** (default): up to four linked colors, one reference photo, and only the essentials.
 - **Advanced**: unlimited colors, layers, strokes, opacity, boolean operations, pen, point editing, alignment, numeric sizes, grid, SVG import, more export formats, project files.
 
-Everything is stored on your device (IndexedDB). Nothing is uploaded.
+Everything is stored on your device (IndexedDB). Nothing is uploaded. The privacy and terms page is `public/privacy.html`, served at `/privacy`.
 
 ## Develop
 
@@ -83,7 +83,7 @@ The region engine is the core. Each outline keeps its exact curve, so a shape co
 
 ## Fonts
 
-68 fonts are bundled through [Fontsource](https://fontsource.org) and fetched only when used. They are licensed under the SIL Open Font License, except Luckiest Guy, Roboto Slab and Yellowtail, which are Apache 2.0. You can also load your own TTF, OTF or WOFF file; it stays on your device.
+69 fonts are bundled and fetched only when used: 68 through [Fontsource](https://fontsource.org), and Paper Mono from [its own repository](https://github.com/paper-design/paper-mono) (in `src/text/vendor`, with its licence). They are licensed under the SIL Open Font License, except Luckiest Guy, Roboto Slab and Yellowtail, which are Apache 2.0. You can also load your own TTF, OTF or WOFF file; it stays on your device.
 
 The color sets (Soft, Coffee, Pear and so on) are just colors in the spirit of familiar brands: no names, logos or other brand assets are used.
 

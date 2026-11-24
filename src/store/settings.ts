@@ -21,11 +21,13 @@ export interface Settings {
   dragEmpty: DragEmpty;
   /** A short vibration when coloring or opening a hold menu, where the device has one. */
   haptics: boolean;
+  /** Words under the icons in the bar of tools. */
+  toolLabels: boolean;
   /** Key bindings that differ from the defaults: command id → combo ('' = no key). */
   keys: Record<string, string>;
 }
 
-const DEFAULTS: Settings = { layout: 'auto', theme: 'auto', dragEmpty: 'pan', haptics: true, keys: {} };
+const DEFAULTS: Settings = { layout: 'auto', theme: 'auto', dragEmpty: 'pan', haptics: true, toolLabels: true, keys: {} };
 const KEY = 'lc.settings';
 
 function load(): Settings {
@@ -36,6 +38,7 @@ function load(): Settings {
       theme: raw.theme === 'light' || raw.theme === 'dark' ? raw.theme : 'auto',
       dragEmpty: raw.dragEmpty === 'select' ? 'select' : 'pan',
       haptics: raw.haptics !== false,
+      toolLabels: raw.toolLabels !== false,
       keys: raw.keys && typeof raw.keys === 'object' ? { ...raw.keys } : {},
     };
   } catch {
@@ -58,8 +61,8 @@ export const settings = (): SettingsState => useSettings.getState();
 
 useSettings.subscribe((s) => {
   try {
-    const { layout, theme, dragEmpty, haptics, keys } = s;
-    localStorage.setItem(KEY, JSON.stringify({ layout, theme, dragEmpty, haptics, keys }));
+    const { layout, theme, dragEmpty, haptics, toolLabels, keys } = s;
+    localStorage.setItem(KEY, JSON.stringify({ layout, theme, dragEmpty, haptics, toolLabels, keys }));
   } catch {
     /* private mode: preferences simply do not persist */
   }
@@ -143,13 +146,15 @@ export function useDocumentAttributes(): void {
   const kind = useLayoutKind();
   const touch = useIsTouch();
   const theme = useSettings((s) => s.theme);
+  const labels = useSettings((s) => s.toolLabels);
   useEffect(() => {
     const root = document.documentElement;
+    root.dataset.labels = labels ? 'on' : 'off';
     root.dataset.layout = kind;
     root.dataset.input = touch ? 'touch' : 'mouse';
     if (theme === 'auto') delete root.dataset.theme;
     else root.dataset.theme = theme;
-  }, [kind, touch, theme]);
+  }, [kind, touch, theme, labels]);
 }
 
 /** A short vibration, unless switched off. */

@@ -10,9 +10,9 @@ import { putImage, saveNow } from '@/store/persist';
 import { isPhone, isSide, isTouch } from '@/store/settings';
 import { keyLabel } from '@/keys';
 import { CLASSIC_COLORS, type Doc, type Guide, type RefImage, type Shape } from '@/model/types';
-import { addColor, addGuide, addRef, applyPalette, duplicateItems, removeColor, removeItems, selectionBBox, transformItems, contentBBox } from '@/model/ops';
+import { addGuide, addRef, applyPalette, duplicateItems, removeColor, removeItems, selectionBBox, transformItems, contentBBox } from '@/model/ops';
 import { visibleGuides } from '@/model/paint';
-import { board, groupMembers, newDoc, nextColor } from '@/model/doc';
+import { board, groupMembers, newDoc } from '@/model/doc';
 import { guideArea } from '@/model/guides';
 import { uid } from '@/model/ids';
 import { chromeInsets, fitView, toDoc, zoomAt } from '@/canvas/view';
@@ -283,13 +283,21 @@ export function pickEraser(): void {
   useUi.setState({ tool: 'color', erasing: true, selection: [], trayOpen: false, colorPanel: null, frameEdit: false });
 }
 
-/** Add a swatch (black first, then whatever is not there yet) and open its panel. */
+/** Open the panel for a new swatch. The swatch only appears once a color is chosen in it. */
 export function addSwatch(): void {
-  const doc = getDoc();
-  if (doc.palette.length >= colorLimit()) return;
-  const r = addColor(doc, nextColor(doc.palette));
-  commit(r.doc);
-  useUi.setState({ ink: r.index, colorPanel: r.index });
+  if (getDoc().palette.length >= colorLimit()) return;
+  useUi.setState((s) => ({ colorPanel: s.colorPanel === 'new' ? null : 'new', colorAnchor: null }));
+}
+
+/** Sticky points on or off; remembered on this device. */
+export function setSticky(on: boolean): void {
+  useUi.setState({ stickyPoints: on });
+  remember('lc.sticky', on ? '1' : '');
+}
+
+/** Open the background's color panel by whatever asked for it: a button (opens above it) or a point (beside it). */
+export function openBackground(at?: { left: number; top: number; right: number; bottom: number; width: number; height: number }, side: 'above' | 'beside' = 'above'): void {
+  useUi.setState({ colorPanel: 'paper', colorAnchor: at ? { left: at.left, top: at.top, right: at.right, bottom: at.bottom, width: at.width, height: at.height, side } : null });
 }
 
 export function removeSwatch(index: number): void {

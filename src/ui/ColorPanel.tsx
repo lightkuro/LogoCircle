@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { HexColorPicker } from 'react-colorful';
 import { ChevronDown, Trash2 } from 'lucide-react';
 import { useDoc } from '@/store/doc';
@@ -18,15 +19,22 @@ function normalizeHex(v: string): string | null {
 }
 
 /**
- * The small panel that opens above a swatch: a picker, a few plain colors and
- * a hex field. Color sets live one step further, under More.
+ * The small panel that opens beside the colors: a picker, a few plain colors
+ * and a hex field. Color sets live one step further, under Sets.
+ *
+ * It is drawn on top of everything and placed from where its colors are on
+ * screen: beside a strip of colors running down an edge, or above colors in a
+ * bar along the bottom. Always inside the screen, clear of the bars at the top
+ * and bottom, and scrolling when there is not the room.
  */
 export function ColorPanel({ target, align }: { target: number | 'paper'; align?: 'end' }) {
   const palette = useDoc((s) => s.doc.palette);
   const paper = useDoc((s) => s.doc.paper);
   const live = useLiveEdit();
   const ref = useRef<HTMLDivElement>(null);
+  const marker = useRef<HTMLSpanElement>(null);
   const [more, setMore] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight?: number } | null>(null);
   const value = target === 'paper' ? (paper ?? '#ffffff') : (palette[target] ?? '#000000');
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
@@ -38,30 +46,36 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
         : { ...doc, palette: doc.palette.map((c, i) => (i === target ? (hex ?? c) : c)), updatedAt: Date.now() },
     );
 
-  // Keep the whole panel on screen and clear of the bars at the top and bottom, whichever way it opened.
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    el.style.translate = '';
-    el.style.maxHeight = '';
+    const at = marker.current;
+    if (!el || !at) return;
     const pad = 8;
-    const barTop = (sel: string): number =>
-      Math.min(window.innerHeight, ...[...document.querySelectorAll(sel)].map((b) => b.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => r.top));
-    const barBottom = (sel: string): number => Math.max(0, ...[...document.querySelectorAll(sel)].map((b) => b.getBoundingClientRect()).filter((r) => r.height > 0).map((r) => r.bottom));
-    const top = barBottom('.chrome-top > *') + pad;
-    // every bar along the bottom except the one this panel opened from
-    const bottom = barTop('.chrome-bottom > *:not(:has(.color-panel))') - pad;
-    const room = bottom - top;
-    let r = el.getBoundingClientRect();
-    if (r.height > room && room > 160) {
-      el.style.maxHeight = `${room}px`;
-      el.style.overflowY = 'auto';
-      r = el.getBoundingClientRect();
+    const rects = (sel: string): DOMRect[] => [...document.querySelectorAll(sel)].map((b) => b.getBoundingClientRect()).filter((r) => r.height > 0);
+    const strip = at.closest('.color-strip');
+    const home = (strip ?? at.closest('.swatch-wrap') ?? at.parentElement)!.getBoundingClientRect();
+    // the bars along the top, and those along the bottom other than the one these colors are in
+    const top = Math.max(pad, ...rects('.chrome-top > *').map((r) => r.bottom + pad));
+    const bottom = Math.min(window.innerHeight - pad, ...rects('.chrome-bottom > *').filter((r) => strip || r.bottom < home.top || r.top > home.bottom).map((r) => r.top - pad));
+    const room = Math.max(160, bottom - top);
+    el.style.maxHeight = '';
+    const w = el.offsetWidth;
+    const h = Math.min(el.scrollHeight, room);
+    let left: number;
+    let y: number;
+    if (strip) {
+      // beside the strip, level with its middle
+      left = home.right + 10;
+      y = home.top + home.height / 2 - h / 2;
+    } else {
+      // above the swatch, centred on it, or ending at it for the last ones
+      left = align === 'end' ? home.right + 8 - w : home.left + home.width / 2 - w / 2;
+      y = home.top - 12 - h;
     }
-    const dy = r.bottom > bottom ? bottom - r.bottom : r.top < top ? top - r.top : 0;
-    const dx = r.left < pad ? pad - r.left : r.right > window.innerWidth - pad ? window.innerWidth - pad - r.right : 0;
-    if (dx || dy) el.style.translate = `${Math.round(dx)}px ${Math.round(dy)}px`;
-  }, [target, more]);
+    left = Math.max(pad, Math.min(left, window.innerWidth - w - pad));
+    y = Math.max(top, Math.min(y, bottom - h));
+    setPos({ left: Math.round(left), top: Math.round(y), maxHeight: h < el.scrollHeight ? Math.round(h) : undefined });
+  }, [target, more, align]);
 
   // One undo step for the whole visit; close on a click anywhere else.
   useEffect(() => {
@@ -83,8 +97,14 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target]);
 
-  return (
-    <div ref={ref} className="pop color-panel" data-align={align} role="dialog" aria-label={target === 'paper' ? 'Background color' : `Color ${target + 1}`}>
+  const panel = (
+    <div
+      ref={ref}
+      className="pop color-panel"
+      role="dialog"
+      aria-label={target === 'paper' ? 'Background color' : `Color ${target + 1}`}
+      style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, maxHeight: pos?.maxHeight, visibility: pos ? undefined : 'hidden' }}
+    >
       {target === 'paper' && (
         <div className="flex flex-wrap gap-1 pb-2">
           {PAPERS.map((p) => (
@@ -92,7 +112,7 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
               key={p ?? 'none'}
               type="button"
               className="chip"
-              style={{ height: 30, padding: '0 9px', fontSize: 12, background: 'var(--sunken)' }}
+              style={{ height: 30, padding: '0 9px', fontSize: 12, ...(paper === p ? null : { background: 'var(--sunken)' }) }}
               data-active={paper === p || undefined}
               onClick={() => set(p)}
             >
@@ -162,7 +182,7 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
               >
                 <span className="flex shrink-0">
                   {p.colors.map((c, i) => (
-                    <span key={i} className="swatch-sm" style={{ background: c, width: 13, height: 13, marginLeft: i ? -4 : 0, boxShadow: '0 0 0 1.5px var(--surface-solid), inset 0 0 0 1px var(--swatch-ring)' }} />
+                    <span key={i} className="swatch-sm" style={{ background: c, width: 13, height: 13, marginLeft: i ? -4 : 0, boxShadow: 'inset 0 0 0 1px var(--swatch-ring)' }} />
                   ))}
                 </span>
                 <span className="truncate">{p.name}</span>
@@ -172,5 +192,11 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
         </div>
       )}
     </div>
+  );
+  return (
+    <>
+      <span ref={marker} hidden />
+      {createPortal(panel, document.body)}
+    </>
   );
 }

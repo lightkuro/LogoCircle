@@ -3,7 +3,7 @@ import { CircleHelp, Ellipsis, Eye, EyeOff, Layers, Redo2, RotateCcw, Save, Shar
 import { Popover } from '@base-ui/react/popover';
 import { useDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
-import { useIsPhone, useIsTouch } from '@/store/settings';
+import { useIsPhone } from '@/store/settings';
 import { useKeys } from '@/keys';
 import { resetToStarter, saveToDevice, setMode } from '@/actions';
 import { IconButton, Segmented } from './primitives';
@@ -11,33 +11,26 @@ import { LogoMark } from './icons';
 
 /** A one-glance explanation, with the way to more. */
 function HelpButton() {
-  const touch = useIsTouch();
-  const tap = touch ? 'Tap' : 'Click';
   return (
     <Popover.Root>
-      <Popover.Trigger className="ib" aria-label="How it works">
+      <Popover.Trigger className="ib" aria-label="Help">
         <CircleHelp />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={12} collisionPadding={8} style={{ zIndex: 30 }}>
-          <Popover.Popup className="pop" style={{ width: 300, padding: '14px 16px 12px' }}>
-            <div className="text-[15px] font-semibold tracking-[-0.01em]">Draw outlines, then color in</div>
-            <ol className="m-0 mt-2 list-decimal space-y-1 pl-5 text-[13.5px] leading-snug text-muted">
-              <li>Add circles, shapes and lines. Overlap them freely.</li>
-              <li>
-                {tap} a color, then {tap.toLowerCase()} the areas between the outlines.
-              </li>
-              <li>Hide the outlines and export.</li>
+          <Popover.Popup className="pop" style={{ width: 220, padding: '14px 16px 12px' }}>
+            <div className="text-[15px] font-semibold tracking-[-0.01em]">Simply:</div>
+            <ol className="m-0 mt-1.5 list-decimal space-y-0.5 pl-5 text-[14px] leading-snug">
+              <li>Add shapes</li>
+              <li>Trim</li>
+              <li>Color areas</li>
             </ol>
-            <p className="mb-0 mt-2 text-[13px] leading-snug text-muted">
-              Select something and {tap.toLowerCase()} a color to color it directly. {touch ? 'Press and hold' : 'Right-click'} anything for more.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              <Popover.Close className="chip" style={{ background: 'var(--sunken)' }} onClick={() => useUi.setState({ sheet: 'gallery', galleryTab: 'examples' })}>
-                See examples
-              </Popover.Close>
+            <div className="mt-3 flex flex-wrap gap-1">
               <Popover.Close className="chip" style={{ background: 'var(--sunken)' }} onClick={() => useUi.setState({ sheet: 'help' })}>
-                How it works
+                Guide
+              </Popover.Close>
+              <Popover.Close className="chip" style={{ background: 'var(--sunken)' }} onClick={() => useUi.setState({ sheet: 'gallery', galleryTab: 'examples' })}>
+                Examples
               </Popover.Close>
             </div>
           </Popover.Popup>

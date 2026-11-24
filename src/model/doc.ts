@@ -13,14 +13,14 @@ export interface PaletteDef {
  * with black or white so every set has at least two.
  */
 export const PALETTES: PaletteDef[] = [
-  { name: 'Burger', colors: ['#da291c', '#ffc72c'] },
-  { name: 'Deer', colors: ['#367c2b', '#ffde00'] },
-  { name: 'Taco', colors: ['#702082', '#ef1897', '#fee100'] },
-  { name: 'Software', colors: ['#4285f4', '#ea4335', '#fbbc05', '#34a853'] },
+  { name: 'Soft', colors: ['#4285f4', '#ea4335', '#fbbc05', '#34a853'] },
   { name: 'Coffee', colors: ['#00704a', '#000000'] },
   { name: 'Pear', colors: ['#000000', '#a2aaad'] },
   { name: 'Cars', colors: ['#003478', '#ffffff'] },
+  { name: 'Deer', colors: ['#367c2b', '#ffde00'] },
+  { name: 'Taco', colors: ['#702082', '#ffffff'] },
   { name: 'Soda', colors: ['#f40009', '#ffffff'] },
+  { name: 'Burger', colors: ['#da291c', '#ffc72c'] },
 ];
 
 /** A few plain colors for quick picking, in two rows of six: the colorful ones, then the warm ones and the neutrals. */

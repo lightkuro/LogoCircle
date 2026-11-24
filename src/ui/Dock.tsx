@@ -7,6 +7,7 @@ import {
   Crop,
   Ellipsis,
   Eye,
+  EyeOff,
   Hand,
   Hexagon,
   ImagePlus,
@@ -85,7 +86,8 @@ function Group({
 }) {
   const touch = useIsTouch();
   const [open, setOpen] = useState(false);
-  const [last, setLast] = useState(0);
+  // the tool shown on the button: never a switch such as Cut lines
+  const [last, setLast] = useState(() => Math.max(0, entries.findIndex((e) => e.checked === undefined)));
   const wrap = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState<number | null>(null);
@@ -186,10 +188,11 @@ function Group({
                 data-active={e.active || undefined}
                 onClick={() => pick(i)}
               >
-                {e.icon}
+                {e.checked === undefined && e.icon}
                 {e.label}
                 {e.keys && <kbd>{e.keys}</kbd>}
-                {e.checked !== undefined && <span className="menu-switch" data-on={e.checked || undefined} aria-hidden />}
+                {/* a switch shows its state with its icon, after the words: an eye, or the eye crossed out */}
+                {e.checked !== undefined && <span className="menu-trail">{e.icon}</span>}
               </button>
             </div>
           ))}
@@ -350,15 +353,16 @@ function useEntries() {
     ...(hasPhoto && !advanced ? [{ id: 'controls', label: 'Photo settings', keys: key('photo'), icon: <SlidersHorizontal />, run: openPhoto }] : []),
   ];
   const cuts: Entry[] = [
-    { id: 'cut', label: 'Cut', keys: key('cut'), icon: <Scissors />, run: () => setTool('cut'), active: tool === 'cut' },
+    // A switch, at the top so the tools sit right above the button.
+    { id: 'marks', label: 'Cut lines', icon: showCuts ? <Eye /> : <EyeOff />, run: () => useUi.setState({ showCuts: !showCuts }), checked: showCuts },
+    { id: 'cut', label: 'Cut', keys: key('cut'), icon: <Scissors />, run: () => setTool('cut'), active: tool === 'cut', divide: true },
     { id: 'erase', label: 'Erase', keys: key('erase'), icon: <EraseIcon />, run: pickEraser, active: erasing },
-    { id: 'marks', label: 'Show cut lines', icon: <Eye />, run: () => useUi.setState({ showCuts: !showCuts }), checked: showCuts, divide: true },
   ];
   // Phones: the things reached for less often share one button.
   const more: Entry[] = [
     ...photos,
     { id: 'paper', label: 'Background color', icon: <PaintBucket />, run: () => useUi.setState({ colorPanel: 'paper' }), divide: true },
-    { id: 'frame', label: 'Export frame', icon: <Crop />, run: () => editFrame(true) },
+    { id: 'frame', label: 'Frame size', icon: <Crop />, run: () => editFrame(true) },
     { id: 'fit', label: 'Zoom to fit', icon: <Maximize />, run: () => fitToScreen() },
   ];
 

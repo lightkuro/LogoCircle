@@ -150,11 +150,13 @@ async function photoToLogo(browser, phone) {
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
-  // Photo has its own button on a desktop and sits under More on a phone; either way it offers a file or the clipboard.
+  // The photo is under More, which offers a file or the clipboard.
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), fromGroup(page, 'More', 'Choose a photo')]);
   await chooser.setFiles({ name: 'cat.png', mimeType: 'image/png', buffer: Buffer.from(png) });
   await page.waitForFunction(() => window.__lc.doc().refs.length === 1);
   check((await state(page)).refs === 1, 'photo placed');
+  check((await page.getByRole('toolbar', { name: 'Photo' }).count()) === 1, 'its settings show straight away');
+  await page.keyboard.press('Escape');
 
   // Body, head, and a ground line.
   await add(page, phone, 'Circle');
@@ -508,8 +510,8 @@ async function controls(browser) {
   // Examples keep to their own colors
   for (const name of ['Leaf', 'Sunset', 'Fish', 'Orbit', 'moon']) {
     // the question mark in the top bar (its popover has a button of the same name)
-    await page.locator('.chrome-top').getByRole('button', { name: 'How it works' }).click();
-    await page.getByRole('button', { name: 'See examples' }).click();
+    await page.locator('.chrome-top').getByRole('button', { name: 'Help' }).click();
+    await page.getByRole('button', { name: 'Examples', exact: true }).click();
     await page.getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
     await page.waitForFunction((n) => window.__lc.doc().name === n, name);
     const ex = await doc();
@@ -720,6 +722,37 @@ async function phoneLayout(browser) {
   check(/^Tap /.test(await page.locator('.hint-pill').innerText()), 'the hint speaks of tapping, not clicking');
   await btn('Done').click();
 
+  // The background color, from More: its panel stays clear of the bars above and below.
+  await btn('More').click();
+  await page.getByRole('menuitem', { name: 'Background color' }).click();
+  const bgPanel = await page.getByRole('dialog', { name: 'Background color' }).boundingBox();
+  const topBars = await page.evaluate(() => Math.max(...[...document.querySelectorAll('.chrome-top > *')].map((e) => e.getBoundingClientRect().bottom)));
+  const dockTop = (await page.getByRole('toolbar', { name: 'Tools' }).boundingBox()).y;
+  check(bgPanel.y >= topBars && bgPanel.y + bgPanel.height <= dockTop, `the background color panel sits between the bars (${Math.round(bgPanel.y)} to ${Math.round(bgPanel.y + bgPanel.height)})`);
+  check((await page.evaluate(() => window.__lc.doc().paper)) === '#f5f1e8', 'a new logo starts on the paper color');
+  await page.keyboard.press('Escape');
+  // The Cut menu: the cut-lines switch first, shown by its eye.
+  await btn('Cut').click();
+  const cutItems = await page.getByRole('menu', { name: 'Cut' }).locator('.menu-item').allInnerTexts();
+  check(cutItems[0]?.trim() === 'Cut lines' && cutItems.length === 3, `Cut lines comes first in the Cut menu (${cutItems.map((t) => t.trim()).join(', ')})`);
+  await page.keyboard.press('Escape');
+  // The color sets, in their order and names.
+  await btn('Color 1').click();
+  await btn('Color 1').click();
+  await page.getByRole('button', { name: 'Sets' }).click();
+  const sets = await page.getByRole('group', { name: 'Color sets' }).locator('.menu-item').allInnerTexts();
+  check(sets.join(',') === 'Soft,Coffee,Pear,Cars,Deer,Taco,Soda,Burger', `the color sets (${sets.join(', ')})`);
+  const setsPanel = await page.getByRole('dialog', { name: 'Color 1' }).boundingBox();
+  const lowBars = await page.evaluate(() => Math.min(...[...document.querySelectorAll('.chrome-bottom > *')].map((e) => e.getBoundingClientRect().top)));
+  check(setsPanel.y >= topBars && setsPanel.y + setsPanel.height <= lowBars, 'with the sets open, the panel still clears the bars');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  // The question mark: three steps, then Guide and Examples.
+  await btn('Help').click();
+  const helpButtons = await page.locator('.pop').filter({ hasText: 'Simply:' }).getByRole('button').allInnerTexts();
+  check(helpButtons.join(',') === 'Guide,Examples', `help offers Guide, then Examples (${helpButtons.join(', ')})`);
+  await page.keyboard.press('Escape');
+
   // Photo lives under More, with a way to paste one.
   await btn('More').click();
   check((await page.getByRole('menuitem', { name: 'Choose a photo' }).count()) === 1 && (await page.getByRole('menuitem', { name: 'Paste a photo' }).count()) === 1, 'More offers choosing or pasting a photo');
@@ -843,7 +876,7 @@ async function firstVisit(browser, phone) {
   // The export frame can be moved and resized.
   const sp = await toScreen(page, 100, 100);
   await page.mouse.click(sp.x, sp.y, { button: 'right' });
-  await page.getByRole('menuitem', { name: /Adjust the export frame/ }).click();
+  await page.getByRole('menuitem', { name: 'Frame size' }).click();
   await drag(page, [1024, 1024], [900, 700]);
   if (phone) {
     // On a phone the frame's size and shapes are behind one button.

@@ -407,7 +407,7 @@ function FrameBar() {
   );
   if (phone) {
     return (
-      <div className="glass bar rise" role="toolbar" aria-label="Export frame">
+      <div className="glass bar rise" role="toolbar" aria-label="Frame size">
         <Menu name="Frame size and shape" icon={<Crop />} label="Size" width={236}>
           <div className="bar-menu-pad flex items-center gap-2">{size}</div>
           <div className="menu-sep" />
@@ -423,8 +423,8 @@ function FrameBar() {
     );
   }
   return (
-    <div className="glass bar rise scroll-x" role="toolbar" aria-label="Export frame">
-      <span className="whitespace-nowrap pl-3 pr-1 text-[13px] font-medium text-muted">Export frame</span>
+    <div className="glass bar rise scroll-x" role="toolbar" aria-label="Frame size">
+      <span className="whitespace-nowrap pl-3 pr-1 text-[13px] font-medium text-muted">Frame size</span>
       {size}
       <span className="sep" />
       <Chip tip="Square" label="1:1" onClick={() => setBoardRatio(1, 1)} />

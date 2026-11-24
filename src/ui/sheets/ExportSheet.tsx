@@ -103,7 +103,7 @@ export function ExportSheet() {
         {mode === 'advanced' && <Toggle label="Crop to artwork" hint="Trim the empty space around the logo" checked={content} onChange={setContent} />}
         <Tip label="Move or resize what gets exported" side="right">
           <button type="button" className="row-btn" style={{ paddingLeft: 4, paddingRight: 4 }} onClick={() => editFrame(true)}>
-            <span className="min-w-0 flex-1 text-[15px] font-medium">Export frame</span>
+            <span className="min-w-0 flex-1 text-[15px] font-medium">Frame size</span>
             <span className="text-[13px] text-muted" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {Math.round(frame.w)} by {Math.round(frame.h)}
             </span>

@@ -9,7 +9,7 @@ const steps = (tap: string, hold: string): Rows => [
   ['Outlines', 'Add circles, shapes, lines and curves. They are only guides: move, resize and overlap them freely. Trace over a photo if you like.'],
   ['Color', `${tap} a color, then ${tap.toLowerCase()} or drag across the areas the outlines make. Neighbouring areas of the same color join into one shape. Or select an outline and ${tap.toLowerCase()} a color to color it directly.`],
   ['Refine', `Under Cut: Cut removes the piece of an outline you ${tap.toLowerCase()}, between two crossings, or slices shapes along a line you drag; Erase clears areas. Show cut lines brings removed pieces back. A fill follows its outlines when you move them. Words work the same way.`],
-  ['Export', 'Hide the outlines to see the result, adjust the export frame if you need to, then export a clean SVG or PNG. Everything stays on this device; nothing is uploaded.'],
+  ['Export', 'Hide the outlines to see the result, adjust the frame size if you need to, then export a clean SVG or PNG. Everything stays on this device; nothing is uploaded.'],
   ['More', `${hold} anything for what can be done with it: round one corner, edit a word, change the order, group, and more.`],
 ];
 
@@ -78,7 +78,7 @@ export function HelpSheet() {
   const keys = useKeyRows();
   const list = steps(touch ? 'Tap' : 'Click', touch ? 'Press and hold' : 'Right-click');
   return (
-    <Sheet open={open} onClose={() => useUi.setState({ sheet: null })} title="How it works" place="top-left">
+    <Sheet open={open} onClose={() => useUi.setState({ sheet: null })} title="Guide" place="top-left">
       <ol className="m-0 list-none p-0">
         {list.map(([t, d], i) => (
           <li key={t} className="flex gap-3 py-2">

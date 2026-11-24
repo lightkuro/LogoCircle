@@ -7,7 +7,7 @@ Make a logo by drawing simple outlines and coloring in the areas between them. R
 1. **Outlines.** Add circles, shapes, lines and curves. They are construction guides: overlap them freely, and trace over a reference photo if you like.
 2. **Color.** Tap a color, then tap or drag across the areas the outlines enclose. Neighbouring areas of the same color merge into one shape. Or select an outline and tap a color to color it directly; give it thickness first and it colors as a ring or a stroke.
 3. **Refine.** Under Cut: tap a piece of an outline between two crossings to remove it, drag a line across shapes to slice them, or Erase areas. Show cut lines shows removed pieces as dots; tap one to bring it back. A fill follows its outlines when they are moved or reshaped. Words work the same way: put an outline over a letter, then erase or recolor what it cuts.
-4. **Export.** Hide the outlines to see the logo, adjust the export frame, then download SVG or PNG.
+4. **Export.** Hide the outlines to see the logo, adjust the frame size, then download SVG or PNG.
 
 Right-click (or press and hold) anything for what can be done with it: round a single corner, edit a word, change the order, group.
 
@@ -85,7 +85,7 @@ The region engine is the core. Each outline keeps its exact curve, so a shape co
 
 68 fonts are bundled through [Fontsource](https://fontsource.org) and fetched only when used. They are licensed under the SIL Open Font License, except Luckiest Guy, Roboto Slab and Yellowtail, which are Apache 2.0. You can also load your own TTF, OTF or WOFF file; it stays on your device.
 
-The color sets (Burger, Deer, Taco and so on) are just colors in the spirit of familiar brands: no names, logos or other brand assets are used.
+The color sets (Soft, Coffee, Pear and so on) are just colors in the spirit of familiar brands: no names, logos or other brand assets are used.
 
 ## License
 

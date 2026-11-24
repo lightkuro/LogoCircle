@@ -518,7 +518,8 @@ export async function addPhoto(file: Blob): Promise<void> {
       locked: true,
     };
     commit(addRef(doc, ref, ui().mode === 'classic'));
-    useUi.setState({ tool: 'arrange', erasing: false, selection: [], trayOpen: false });
+    // Selected, so its settings (fade, lock, on top) show straight away.
+    useUi.setState({ tool: 'arrange', erasing: false, selection: [ref.id], trayOpen: false, colorPanel: null });
     toast('Photo added', { description: 'It stays underneath as a guide and is never exported.' });
   } catch {
     toast.error('That file could not be opened as an image.');

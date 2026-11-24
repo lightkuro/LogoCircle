@@ -222,7 +222,7 @@ function canvasMenu(): MenuItem[] {
   if (doc.guides.some((g) => g.type === 'line' && g.cut)) {
     items.push({ label: s.showCuts ? 'Hide cut lines' : 'Show cut lines', icon: Scissors, onSelect: () => useUi.setState({ showCuts: !s.showCuts, selection: [] }) });
   }
-  items.push({ label: 'Adjust the export frame', icon: Crop, divide: true, onSelect: () => editFrame(true) });
+  items.push({ label: 'Frame size', icon: Crop, divide: true, onSelect: () => editFrame(true) });
   items.push({ label: 'Fit the frame to the artwork', icon: Scaling, disabled: !doc.shapes.length, onSelect: fitBoardToArtwork });
   items.push({ label: 'Background color', icon: PaintBucket, onSelect: () => useUi.setState({ colorPanel: 'paper' }) });
   items.push({ label: 'Zoom to fit', icon: Maximize, keys: key('fit'), divide: true, onSelect: () => fitToScreen() });

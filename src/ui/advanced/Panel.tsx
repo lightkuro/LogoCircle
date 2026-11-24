@@ -158,7 +158,7 @@ function CanvasSettings() {
   };
   return (
     <>
-      <Section title="Export frame">
+      <Section title="Frame size">
         <div className="grid grid-cols-2 gap-1.5">
           <NumField label="X" value={artboard.x} onCommit={(v) => resize({ x: v })} />
           <NumField label="Y" value={artboard.y} onCommit={(v) => resize({ y: v })} />

@@ -56,7 +56,7 @@ export const COMMANDS: Command[] = [
   { id: 'zoomIn', label: 'Zoom in', group: 'View', keys: ['mod+=', 'mod++'] },
   { id: 'zoomOut', label: 'Zoom out', group: 'View', keys: ['mod+-'] },
   { id: 'export', label: 'Export', group: 'View', keys: ['mod+e'] },
-  { id: 'help', label: 'How it works', group: 'View', keys: ['?'] },
+  { id: 'help', label: 'Guide', group: 'View', keys: ['?'] },
 ];
 
 export const GROUPS: CommandGroup[] = ['Tools', 'Colors', 'Edit', 'View'];

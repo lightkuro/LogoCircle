@@ -1642,3 +1642,161 @@ html[data-layout='phone'] .tool {
   line-height: 1.4;
   color: var(--text);
 }
+
+/* ------------------------------------------------------------------------
+   A phone on its side: little height, plenty of width. The controls go down
+   both edges and the canvas keeps the whole height between them.
+   ------------------------------------------------------------------------ */
+.side-left,
+.side-right {
+  position: absolute;
+  top: calc(var(--safe-top) + 64px);
+  bottom: calc(var(--safe-bottom) + 8px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 10;
+}
+.side-left {
+  left: calc(var(--safe-left) + 8px);
+}
+.side-right {
+  right: calc(var(--safe-right) + 8px);
+}
+.side-left > *,
+.side-right > * {
+  pointer-events: auto;
+}
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 4px;
+  max-height: 100%;
+}
+.rail .tool {
+  height: 48px;
+  min-width: 54px;
+}
+.rail .sep {
+  width: auto;
+  height: 1px;
+  margin: 3px 8px;
+  align-self: stretch;
+}
+/* In a rail the arrow points the way the list opens. */
+.rail .tool .tool-caret {
+  top: 50%;
+  left: auto;
+  right: 0;
+  margin: -5px 0 0;
+  transform: rotate(90deg);
+}
+.rail .tool .tool-caret[data-open] {
+  transform: rotate(-90deg);
+}
+.rail-zoom {
+  height: 30px;
+  min-width: 48px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.rail-zoom:active {
+  background: var(--pressed);
+}
+
+/* Lists that open sideways out of a rail (placed level with their button by the code). */
+.flyout[data-out='right'],
+.flyout[data-out='left'] {
+  bottom: auto;
+  transform: none;
+  animation-name: flyout-in-side;
+}
+.flyout[data-out='right'] {
+  left: calc(100% + 10px);
+  transform-origin: left center;
+}
+.flyout[data-out='left'] {
+  left: auto;
+  right: calc(100% + 10px);
+  transform-origin: right center;
+}
+.flyout[data-out='right']::after,
+.flyout[data-out='left']::after {
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  height: auto;
+}
+.flyout[data-out='right']::after {
+  left: -12px;
+  right: auto;
+}
+.flyout[data-out='left']::after {
+  left: auto;
+  right: -12px;
+}
+@keyframes flyout-in-side {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* The colors sit beside the tools rather than floating over the canvas. */
+html[data-layout='side'] .color-strip-area {
+  position: static;
+  max-height: 100%;
+  /* below the tools rail, so the rail's lists open over it (z-index counts for flex items) */
+  z-index: 1;
+}
+html[data-layout='side'] .color-strip {
+  max-height: 100%;
+}
+html[data-layout='side'] .color-strip .swatch {
+  height: 46px;
+}
+html[data-layout='side'] .color-strip .color-panel {
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}
+
+/* The hint and the bar of the moment stay between the rails. */
+html[data-layout='side'] .hint-area {
+  top: calc(var(--safe-top) + 10px);
+  left: calc(var(--safe-left) + 150px);
+  right: calc(var(--safe-right) + 190px);
+}
+html[data-layout='side'] .hint-pill {
+  padding: 6px 11px 6px 9px;
+  font-size: 12.5px;
+}
+html[data-layout='side'] .chrome-bottom {
+  left: calc(var(--safe-left) + 150px);
+  right: calc(var(--safe-right) + 80px);
+  bottom: calc(var(--safe-bottom) + 8px);
+}
+html[data-layout='side'] .dialog[data-place] {
+  top: calc(var(--safe-top) + 10px);
+  bottom: calc(var(--safe-bottom) + 10px);
+  max-height: none;
+  left: calc(var(--safe-left) + 10px);
+}
+html[data-layout='side'] .dialog[data-place='top-right'] {
+  left: auto;
+  right: calc(var(--safe-right) + 10px);
+}
+
+/* A list opening out of the tools rail goes over the colors beside it. */
+.side-left > .rail {
+  position: relative;
+  z-index: 2;
+}

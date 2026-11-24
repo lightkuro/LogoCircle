@@ -10,7 +10,7 @@ import { commitText } from '@/actions';
 import { DEFAULT_FONT, FONTS, FONT_KINDS, type FontDef, type FontKind } from '@/text/fonts';
 import { addCustomFont, cssFontLoaded, cssFontReady, customFonts, cssFamily, isCustomFont, removeCustomFont, restoreCustomFonts } from '@/text/load';
 import type { Layout } from '@/text/layout';
-import { useIsPhone } from '@/store/settings';
+import { useIsPhone, useLayoutKind } from '@/store/settings';
 import { Segmented, Sheet, Slider } from '../primitives';
 
 /** The pages of the phone panel. */
@@ -166,6 +166,7 @@ function useKeyboardInset(active: boolean): number {
  * down to put it away.
  */
 function HalfPanel({
+  side = false,
   open,
   title,
   onClose,
@@ -175,6 +176,8 @@ function HalfPanel({
   children,
   bodyRef,
 }: {
+  /** A phone on its side: a full-height panel down the left edge, nothing to pull. */
+  side?: boolean;
   open: boolean;
   title: string;
   onClose: () => void;
@@ -227,15 +230,22 @@ function HalfPanel({
       <div className="txp-away" data-shown={shown || undefined} onPointerDown={onClose} />
       <div
         ref={panel}
-        className="txp"
+        className={side ? 'txp txp-side' : 'txp'}
         role="dialog"
         aria-label={title}
         data-shown={shown || undefined}
         data-expanded={expanded || undefined}
         data-pulling={pull !== null || undefined}
-        style={{ bottom: keyboard, ...(pull !== null ? { height: pull } : null), ...(keyboard ? { maxHeight: `calc(100dvh - ${keyboard}px - 8px)` } : null) }}
+        style={
+          side
+            ? keyboard
+              ? { bottom: keyboard + 8 }
+              : undefined
+            : { bottom: keyboard, ...(pull !== null ? { height: pull } : null), ...(keyboard ? { maxHeight: `calc(100dvh - ${keyboard}px - 8px)` } : null) }
+        }
       >
         <div
+          hidden={side}
           className="txp-handle"
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
@@ -286,6 +296,9 @@ export function TextSheet() {
   const input = useRef<HTMLInputElement>(null);
   const file = useRef<HTMLInputElement>(null);
   const phone = useIsPhone();
+  // Phones get the compact panel: along the bottom when upright, down the left side when turned.
+  const layout = useLayoutKind();
+  const upright = layout === 'phone' || layout === 'side';
   const [expanded, setExpanded] = useState(false);
   const [page, setPage] = useState<Page>('font');
   const body = useRef<HTMLDivElement>(null);
@@ -378,8 +391,8 @@ export function TextSheet() {
 
   const title = existing ? 'Edit text' : 'Add text';
   const add = (
-    <button type="button" className="btn" data-variant="primary" data-size={phone ? undefined : 'lg'} style={phone ? { height: 46, flexShrink: 0 } : { width: '100%' }} disabled={busy} onClick={() => void submit()}>
-      {existing ? 'Update' : phone ? 'Add' : 'Add to canvas'}
+    <button type="button" className="btn" data-variant="primary" data-size={upright ? undefined : 'lg'} style={upright ? { height: 46, flexShrink: 0 } : { width: '100%' }} disabled={busy} onClick={() => void submit()}>
+      {existing ? 'Update' : upright ? 'Add' : 'Add to canvas'}
     </button>
   );
   const field = (
@@ -412,7 +425,7 @@ export function TextSheet() {
   );
   const fonts = (
     <>
-      {!phone && (
+      {!upright && (
         <div className="tx-row" style={{ marginTop: 4 }}>
           <span className="label">Font</span>
           {ownFont}
@@ -485,7 +498,7 @@ export function TextSheet() {
           )}
         </>
       )}
-      {phone && <div className="tx-row">{ownFont}</div>}
+      {upright && <div className="tx-row">{ownFont}</div>}
     </>
   );
 
@@ -493,7 +506,7 @@ export function TextSheet() {
   const spacingSlider = (
     <Slider label="Letter spacing" min={-8} max={40} typeMax={200} value={Math.round(spacing * 100)} onChange={(v) => setSpacing(v / 100)} format={(v) => String(Math.round(v))} />
   );
-  const sliders = phone ? (
+  const sliders = upright ? (
     // Phones: one line each, so both fit in the half-height panel.
     <div className="txp-sliders">
       <div className="txp-slider">
@@ -525,9 +538,10 @@ export function TextSheet() {
     </div>
   );
 
-  if (phone) {
+  if (upright) {
     return (
       <HalfPanel
+        side={layout === 'side'}
         open={open}
         title={title}
         onClose={close}

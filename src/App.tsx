@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Toaster } from 'sonner';
 import { Stage } from '@/canvas/Stage';
 import { useDoc } from '@/store/doc';
 import { loadCurrent, startAutosave } from '@/store/persist';
-import { openDoc, addPhoto } from '@/actions';
+import { openDoc, addPhoto, fitToScreen } from '@/actions';
 import { remember } from '@/store/ui';
-import { useDocumentAttributes, useIsDark } from '@/store/settings';
+import { useDocumentAttributes, useIsDark, useLayoutKind } from '@/store/settings';
 import { useShortcuts } from '@/shortcuts';
 import { TopBar } from '@/ui/TopBar';
-import { ColorStrip, Dock } from '@/ui/Dock';
+import { ColorStrip, Dock, SideControls } from '@/ui/Dock';
 import { ContextBar, TopHint } from '@/ui/ContextBar';
 import { TipProvider, useIsPhone } from '@/ui/primitives';
 import { Sheets } from '@/ui/Sheets';
@@ -30,6 +30,8 @@ const seenBefore = (): boolean => {
 export function App() {
   const [, setReady] = useState(false);
   const phone = useIsPhone();
+  const kind = useLayoutKind();
+  const side = kind === 'side';
   const dark = useIsDark();
   useDocumentAttributes();
   useShortcuts();
@@ -54,6 +56,14 @@ export function App() {
   }, []);
 
   useEffect(() => startBackdropNudge(), []);
+
+  // Turning the phone moves the controls around: fit the canvas to the room it now has.
+  const firstKind = useRef(true);
+  useEffect(() => {
+    if (firstKind.current) return void (firstKind.current = false);
+    const id = requestAnimationFrame(() => fitToScreen());
+    return () => cancelAnimationFrame(id);
+  }, [kind]);
 
   // Photos can be pasted or dropped anywhere.
   useEffect(() => {
@@ -91,11 +101,22 @@ export function App() {
         <Stage />
         <TopBar />
         {phone && <TopHint />}
-        {phone && <ColorStrip />}
+        {phone && !side && <ColorStrip />}
         <div className="chrome-bottom">
           <ContextBar />
-          <Dock />
+          {!side && <Dock />}
         </div>
+        {side && (
+          <>
+            <div className="side-left">
+              <Dock />
+              <ColorStrip />
+            </div>
+            <div className="side-right">
+              <SideControls />
+            </div>
+          </>
+        )}
         {!phone && <ZoomControl />}
         <AdvancedPanel />
         <Sheets />

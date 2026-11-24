@@ -732,6 +732,74 @@ async function phoneLayout(browser) {
   await ctx.close();
 }
 
+/** A phone on its side: controls down both edges, the canvas at full height between them. */
+async function sideways(browser) {
+  console.log('\nPhone on its side');
+  const ctx = await browser.newContext({ ...devices['iPhone 13 landscape'] });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  await page.goto(URL, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => window.__lc && window.__lc.ui().stage.w > 0);
+  await page.waitForTimeout(500);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  const vw = page.viewportSize().width;
+  const vh = page.viewportSize().height;
+  check((await page.evaluate(() => document.documentElement.dataset.layout)) === 'side', 'turned sideways, the phone gets the side layout');
+  const boxes = await page.evaluate(() =>
+    [...document.querySelectorAll('.chrome-top > *, .side-left > *, .side-right > *, .chrome-bottom > *')].map((e) => {
+      const r = e.getBoundingClientRect();
+      return { x: r.left, y: r.top, r: r.right, b: r.bottom };
+    }),
+  );
+  let overlaps = 0;
+  for (let i = 0; i < boxes.length; i++)
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      if (a.x < b.r - 1 && b.x < a.r - 1 && a.y < b.b - 1 && b.y < a.b - 1) overlaps++;
+    }
+  check(boxes.length >= 5 && overlaps === 0, `no two controls overlap (${boxes.length} groups)`);
+  const board = await page.evaluate(() => {
+    const d = window.__lc.doc().artboard;
+    const v = window.__lc.ui().view;
+    const left = document.querySelector('.side-left').getBoundingClientRect().right;
+    const right = document.querySelector('.side-right').getBoundingClientRect().left;
+    return { x: (d.x ?? 0) * v.k + v.x, y: (d.y ?? 0) * v.k + v.y, w: d.w * v.k, h: d.h * v.k, left, right };
+  });
+  check(board.x >= board.left && board.x + board.w <= board.right, 'the canvas sits between the two columns of controls');
+  check(board.h > vh * 0.85, `and gets nearly the full height (${Math.round(board.h)} of ${vh})`);
+  const select = await btn('Select').boundingBox();
+  check(select.x > board.x + board.w, 'Select is on the right, with the zoom');
+  check((await page.getByRole('button', { name: 'Zoom in' }).count()) === 1, 'the zoom buttons are there');
+  await btn('More').click();
+  const item = page.getByRole('menuitem', { name: 'Choose a photo' });
+  check((await item.count()) === 1, 'Photo is under More');
+  const ib = await item.boundingBox();
+  const onTop = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('[role=menuitem]')?.textContent, [ib.x + ib.width / 2, ib.y + ib.height / 2]);
+  check(onTop === 'Choose a photo', 'the list opens over everything beside it');
+  check(ib.y + ib.height <= vh, 'and stays on screen');
+  await page.keyboard.press('Escape');
+  await btn('Text').click();
+  await page.waitForTimeout(500);
+  const panel = await page.getByRole('dialog', { name: 'Add text' }).boundingBox();
+  check(panel.x < 60 && panel.height > vh * 0.8 && panel.width < vw * 0.6, 'the text panel runs down the left side');
+  await page.getByRole('radio', { name: 'Size' }).click();
+  const slider = await page.getByRole('slider', { name: 'Letter spacing' }).boundingBox();
+  check(slider.y + slider.height <= panel.y + panel.height, 'and its sliders fit');
+  await btn('Close').click();
+  await page.waitForTimeout(400);
+  // Turning the phone upright brings back the bar along the bottom.
+  await page.setViewportSize({ width: 390, height: 664 });
+  await page.waitForTimeout(400);
+  const dock = await page.getByRole('toolbar', { name: 'Tools' }).boundingBox();
+  check((await page.evaluate(() => document.documentElement.dataset.layout)) === 'phone' && dock.y > 664 * 0.7 && dock.width > dock.height, 'turned upright, the tools go back along the bottom');
+  await page.screenshot({ path: join(shots, 'sideways-upright.png') });
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 async function firstVisit(browser, phone) {
   console.log(`\nFirst visit, colors and export frame (${phone ? 'phone' : 'desktop'})`);
   const { ctx, page, errors } = await fresh(browser, phone, { starter: true });
@@ -810,6 +878,7 @@ try {
   await controls(browser);
   await refinements(browser);
   await phoneLayout(browser);
+  await sideways(browser);
   await touch(browser);
 } catch (err) {
   console.error(err);

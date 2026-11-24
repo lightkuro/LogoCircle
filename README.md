@@ -11,7 +11,7 @@ Make a logo by drawing simple outlines and coloring in the areas between them. R
 
 Right-click (or press and hold) anything for what can be done with it: round a single corner, edit a word, change the order, group.
 
-Phones get their own layout (one bar of tools, colors down the side, panels on the lower half of the screen) and only touch wording; desktops get mouse and keyboard wording. Settings, in the LogoCircle menu, can force either layout, switch between light and dark, swap what the left and right mouse buttons do on empty canvas, and change any keyboard shortcut.
+Phones get their own layout: upright, one bar of tools along the bottom, colors down the side and panels on the lower half of the screen; turned on their side, the tools run down the left edge and Select and zoom down the right, so the canvas keeps the full height. Phones get touch wording only; desktops get mouse and keyboard wording. Settings, in the LogoCircle menu, can force either layout, switch between light and dark, swap what the left and right mouse buttons do on empty canvas, and change any keyboard shortcut.
 
 Two modes share one document:
 

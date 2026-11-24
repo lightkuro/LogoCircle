@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Brush,
   ChevronLeft,
@@ -14,6 +14,7 @@ import {
   ImagePlus,
   Lasso,
   Maximize,
+  Minus,
   MousePointer2,
   MousePointerClick,
   PenTool,
@@ -29,10 +30,10 @@ import {
 } from 'lucide-react';
 import { useDoc } from '@/store/doc';
 import { remember, useUi, type SelectMode } from '@/store/ui';
-import { buzz, useIsPhone, useIsTouch } from '@/store/settings';
+import { buzz, useIsPhone, useIsSide, useIsTouch } from '@/store/settings';
 import { useKeys } from '@/keys';
 import { resolveFill } from '@/model/doc';
-import { addOutline, addSwatch, editFrame, fitToScreen, openPhoto, pastePhoto, pickEraser, pickInk, pickPhoto, setTool, type AddKind } from '@/actions';
+import { addOutline, addSwatch, editFrame, fitToScreen, openPhoto, pastePhoto, pickEraser, pickInk, pickPhoto, setTool, zoomBy, type AddKind } from '@/actions';
 import { openSwatchMenu } from './menus';
 import { ColorPanel } from './ColorPanel';
 import { Tip } from './primitives';
@@ -69,11 +70,37 @@ function Single({ entry }: { entry: Entry }) {
  * opens the list. With a mouse, hovering opens it too, and clicking the button
  * itself picks the tool shown on it again.
  */
-function Group({ label, entries, align, icon, caret }: { label: string; entries: Entry[]; align?: 'start' | 'end'; icon?: ReactNode; caret?: boolean }) {
+function Group({
+  label,
+  entries,
+  align,
+  icon,
+  caret,
+  out = 'up',
+}: {
+  label: string;
+  entries: Entry[];
+  align?: 'start' | 'end';
+  icon?: ReactNode;
+  caret?: boolean;
+  /** Which way the list opens: up from a bar along the bottom, or sideways from a rail down an edge. */
+  out?: 'up' | 'right' | 'left';
+}) {
   const touch = useIsTouch();
   const [open, setOpen] = useState(false);
   const [last, setLast] = useState(0);
   const wrap = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const [top, setTop] = useState<number | null>(null);
+
+  // Sideways lists sit level with their button, kept inside the screen.
+  useLayoutEffect(() => {
+    if (!open || out === 'up' || !list.current || !wrap.current) return setTop(null);
+    const b = wrap.current.getBoundingClientRect();
+    const h = list.current.offsetHeight;
+    const want = b.top + b.height / 2 - h / 2;
+    setTop(Math.max(8, Math.min(want, window.innerHeight - h - 8)) - b.top);
+  }, [open, out, entries.length]);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const activeIndex = entries.findIndex((e) => e.active);
   const shown = entries[activeIndex >= 0 ? activeIndex : Math.min(last, entries.length - 1)]!;
@@ -134,7 +161,15 @@ function Group({ label, entries, align, icon, caret }: { label: string; entries:
         <span>{label}</span>
       </button>
       {open && (
-        <div className="pop flyout" data-align={align} role="menu" aria-label={label}>
+        <div
+          ref={list}
+          className="pop flyout"
+          data-align={align}
+          data-out={out}
+          role="menu"
+          aria-label={label}
+          style={out === 'up' ? undefined : { top: top ?? 0, visibility: top === null ? 'hidden' : undefined }}
+        >
           {entries.map((e, i) => (
             <div key={e.id}>
               {e.divide && <div className="menu-sep" />}
@@ -269,8 +304,8 @@ export function ColorStrip() {
   );
 }
 
-export function Dock() {
-  const phone = useIsPhone();
+/** Everything the tool buttons offer, shared by the bottom dock and the side rails. */
+function useEntries() {
   const touch = useIsTouch();
   const key = useKeys();
   const tool = useUi((s) => s.tool);
@@ -322,9 +357,31 @@ export function Dock() {
     { id: 'fit', label: 'Zoom to fit', icon: <Maximize />, run: () => fitToScreen() },
   ];
 
+  return { key, selects, shapes, lines, cuts, photos, more };
+}
+
+export function Dock() {
+  const phone = useIsPhone();
+  const side = useIsSide();
+  const { key, selects, shapes, lines, cuts, photos, more } = useEntries();
+  const text: Entry = { id: 'text', label: 'Text', keys: key('text'), icon: <Type />, run: openText };
+
+  if (side) {
+    // A phone on its side: the tools run down the left edge, Select sits with the zoom on the right.
+    return (
+      <div className="glass dock rail" role="toolbar" aria-label="Tools" aria-orientation="vertical">
+        <Single entry={text} />
+        <Group label="Shapes" entries={shapes} caret out="right" />
+        <Group label="Lines" entries={lines} caret out="right" />
+        <Group label="Cut" entries={cuts} caret out="right" />
+        <Group label="More" entries={more} icon={<Ellipsis />} out="right" />
+      </div>
+    );
+  }
+
   return (
     <div className="glass dock" role="toolbar" aria-label="Tools">
-      <Single entry={{ id: 'text', label: 'Text', keys: key('text'), icon: <Type />, run: openText }} />
+      <Single entry={text} />
       <Group label="Shapes" entries={shapes} align="start" caret />
       <Group label="Lines" entries={lines} caret />
       <Group label="Cut" entries={cuts} caret />
@@ -338,6 +395,27 @@ export function Dock() {
       )}
       <Group label="Select" entries={selects} align="end" />
       {phone && <Group label="More" entries={more} icon={<Ellipsis />} align="end" />}
+    </div>
+  );
+}
+
+/** A phone on its side: Select and the zoom, in one column down the right edge. */
+export function SideControls() {
+  const { selects } = useEntries();
+  const k = useUi((s) => s.view.k);
+  return (
+    <div className="glass rail side-controls" role="toolbar" aria-label="Select and zoom" aria-orientation="vertical">
+      <Group label="Select" entries={selects} out="left" />
+      <span className="sep" />
+      <button type="button" className="ib" aria-label="Zoom in" onClick={() => zoomBy(1.25)}>
+        <Plus />
+      </button>
+      <button type="button" className="rail-zoom" aria-label="Fit to screen" onClick={() => fitToScreen()}>
+        {Math.round(k * 100)}%
+      </button>
+      <button type="button" className="ib" aria-label="Zoom out" onClick={() => zoomBy(0.8)}>
+        <Minus />
+      </button>
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { Tooltip } from '@base-ui/react/tooltip';
 import { Info, X } from 'lucide-react';
 
 export { useIsPhone, useIsTouch } from '@/store/settings';
-import { useIsPhone } from '@/store/settings';
+import { useLayoutKind } from '@/store/settings';
 
 /** Wide enough to lay the whole dock out in one row. */
 export function useIsWide(): boolean {
@@ -264,7 +264,8 @@ export function Sheet({
    */
   place?: SheetPlace;
 }) {
-  const phone = useIsPhone();
+  // Upright phones get a sheet from the bottom; a phone on its side has the room for a side panel.
+  const phone = useLayoutKind() === 'phone';
   const head = (Title: typeof Dialog.Title | typeof Drawer.Title, Close: typeof Dialog.Close | typeof Drawer.Close) => (
     <div className="sheet-head">
       <Title className="sheet-title">{title}</Title>

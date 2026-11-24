@@ -7,7 +7,7 @@ import { mul, scale, translate, type Mat, type Pt } from '@/geom';
 import { useDoc, getDoc, commit } from '@/store/doc';
 import { ui, useUi, remember, type Mode, type Tool } from '@/store/ui';
 import { putImage, saveNow } from '@/store/persist';
-import { isPhone, isTouch } from '@/store/settings';
+import { isPhone, isSide, isTouch } from '@/store/settings';
 import { keyLabel } from '@/keys';
 import { CLASSIC_COLORS, type Doc, type Guide, type RefImage, type Shape } from '@/model/types';
 import { addColor, addGuide, addRef, applyPalette, duplicateItems, removeColor, removeItems, selectionBBox, transformItems, contentBBox } from '@/model/ops';
@@ -20,7 +20,14 @@ import { regularPoints } from '@/geom';
 
 export type AddKind = 'circle' | 'line' | 'rect' | 'triangle' | 'curve' | 'polygon' | 'star';
 
-const insets = () => chromeInsets(ui().stage, ui().mode === 'advanced', isPhone());
+const insets = () => (isSide() ? sideInsets(ui().stage) : chromeInsets(ui().stage, ui().mode === 'advanced', isPhone()));
+
+/** A phone on its side: the canvas gets the full height, between the controls down either edge. */
+function sideInsets(stage: { w: number; h: number }) {
+  const left = typeof document !== 'undefined' ? document.querySelector('.side-left')?.getBoundingClientRect() : undefined;
+  const right = typeof document !== 'undefined' ? document.querySelector('.side-right')?.getBoundingClientRect() : undefined;
+  return { top: 12, bottom: 12, left: (left?.right ?? 150) + 10, right: stage.w - (right?.left ?? stage.w - 80) + 10 };
+}
 
 /** The document point in the middle of the visible canvas. */
 export function viewCenter(): Pt {

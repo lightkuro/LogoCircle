@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { ChevronDown, Trash2 } from 'lucide-react';
 import { useDoc } from '@/store/doc';
@@ -37,6 +37,18 @@ export function ColorPanel({ target, align }: { target: number | 'paper'; align?
         ? { ...doc, paper: hex, updatedAt: Date.now() }
         : { ...doc, palette: doc.palette.map((c, i) => (i === target ? (hex ?? c) : c)), updatedAt: Date.now() },
     );
+
+  // Keep the whole panel on screen, whichever way it opened.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.translate = '';
+    const r = el.getBoundingClientRect();
+    const pad = 8;
+    const dy = r.top < pad ? pad - r.top : r.bottom > window.innerHeight - pad ? window.innerHeight - pad - r.bottom : 0;
+    const dx = r.left < pad ? pad - r.left : r.right > window.innerWidth - pad ? window.innerWidth - pad - r.right : 0;
+    if (dx || dy) el.style.translate = `${Math.round(dx)}px ${Math.round(dy)}px`;
+  }, [target, more]);
 
   // One undo step for the whole visit; close on a click anywhere else.
   useEffect(() => {

@@ -537,3 +537,23 @@
 .txp:not([data-shown]) {
   pointer-events: none;
 }
+
+/* A phone on its side: the same panel, full height down the left edge. */
+.txp.txp-side {
+  left: calc(var(--safe-left) + 10px);
+  right: auto;
+  top: calc(var(--safe-top) + 10px);
+  bottom: calc(var(--safe-bottom) + 10px);
+  width: min(380px, 52vw);
+  height: auto;
+  padding-top: 10px;
+  padding-bottom: 0;
+  border-radius: 20px;
+  transform: translateX(calc(-100% - 20px));
+}
+.txp.txp-side[data-shown] {
+  transform: none;
+}
+.txp-side .txp-top .tx-preview {
+  height: 62px;
+}

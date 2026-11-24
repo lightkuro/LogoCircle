@@ -68,6 +68,8 @@ useSettings.subscribe((s) => {
 // --- What kind of device this is ------------------------------------------------
 
 const PHONE = '(max-width: 639px)';
+/** A phone on its side: little height to spare, so the controls move to the sides. */
+const SHORT = '(max-height: 500px) and (orientation: landscape)';
 const TOUCH = '(hover: none), (pointer: coarse)';
 const DARK = '(prefers-color-scheme: dark)';
 
@@ -85,11 +87,34 @@ function useMedia(q: string): boolean {
   return on;
 }
 
-/** The phone interface: one column of floating bars, sheets from the bottom. */
-export function useIsPhone(): boolean {
+/**
+ * Which interface to lay out: `phone` (upright: tools along the bottom),
+ * `side` (a phone on its side: tools down both edges, the canvas between them
+ * at full height) or `desktop`.
+ */
+export type LayoutKind = 'phone' | 'side' | 'desktop';
+
+function layoutKind(layout: Layout, narrow: boolean, short: boolean): LayoutKind {
+  if (layout === 'desktop') return 'desktop';
+  if (short) return 'side';
+  return layout === 'mobile' || narrow ? 'phone' : 'desktop';
+}
+
+export function useLayoutKind(): LayoutKind {
   const layout = useSettings((s) => s.layout);
-  const narrow = useMedia(PHONE);
-  return layout === 'auto' ? narrow : layout === 'mobile';
+  return layoutKind(layout, useMedia(PHONE), useMedia(SHORT));
+}
+
+export const layoutKindNow = (): LayoutKind => layoutKind(settings().layout, matches(PHONE), matches(SHORT));
+
+/** The compact, touch-first interface: phones, upright or on their side. */
+export function useIsPhone(): boolean {
+  return useLayoutKind() !== 'desktop';
+}
+
+/** A phone on its side. */
+export function useIsSide(): boolean {
+  return useLayoutKind() === 'side';
 }
 
 /** Fingers rather than a mouse: decides the wording ("tap" or "click") and which controls are offered. */
@@ -99,10 +124,8 @@ export function useIsTouch(): boolean {
   return layout === 'auto' ? touch : layout === 'mobile';
 }
 
-export const isPhone = (): boolean => {
-  const { layout } = settings();
-  return layout === 'auto' ? matches(PHONE) : layout === 'mobile';
-};
+export const isPhone = (): boolean => layoutKindNow() !== 'desktop';
+export const isSide = (): boolean => layoutKindNow() === 'side';
 
 export const isTouch = (): boolean => {
   const { layout } = settings();
@@ -117,16 +140,16 @@ export function useIsDark(): boolean {
 
 /** Mirror the layout and theme onto <html>, where the stylesheet reads them. */
 export function useDocumentAttributes(): void {
-  const phone = useIsPhone();
+  const kind = useLayoutKind();
   const touch = useIsTouch();
   const theme = useSettings((s) => s.theme);
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.layout = phone ? 'phone' : 'desktop';
+    root.dataset.layout = kind;
     root.dataset.input = touch ? 'touch' : 'mouse';
     if (theme === 'auto') delete root.dataset.theme;
     else root.dataset.theme = theme;
-  }, [phone, touch, theme]);
+  }, [kind, touch, theme]);
 }
 
 /** A short vibration, unless switched off. */

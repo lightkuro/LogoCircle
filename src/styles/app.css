@@ -1159,15 +1159,16 @@ select {
   position: relative;
 }
 .tool .tool-caret {
+  /* the original small chevron (5 by 2.5 px, 1.25 px line), drawn 30% wider */
   position: absolute;
-  top: 2px;
+  top: 3.5px;
   left: 50%;
-  width: 16px;
-  height: 6px;
-  margin-left: -8px;
+  width: 10px;
+  height: 5px;
+  margin-left: -5px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.4px;
+  stroke-width: 1.25px;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.45;
@@ -1701,8 +1702,8 @@ html[data-layout='phone'] .tool {
 .rail .tool .tool-caret {
   top: 50%;
   left: auto;
-  right: -4px;
-  margin: -3px 0 0;
+  right: -1px;
+  margin: -2.5px 0 0;
   transform: rotate(90deg);
 }
 .rail .tool .tool-caret[data-open] {

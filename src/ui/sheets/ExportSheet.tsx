@@ -83,7 +83,7 @@ export function ExportSheet() {
         {empty ? (
           <span className="rounded-lg bg-surface px-3 py-1.5 text-[13px] text-muted">Nothing colored yet</span>
         ) : (
-          <img src={preview} alt="Logo preview" style={{ maxWidth: '100%', maxHeight: '100%', display: 'block' }} />
+          preview && <img src={preview} alt="Logo preview" style={{ maxWidth: '100%', maxHeight: '100%', display: 'block' }} />
         )}
       </div>
 

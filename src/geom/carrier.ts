@@ -364,7 +364,8 @@ export function unionBBox(a: BBox, b: BBox): BBox {
 
 export function edgesBBox(edges: Edge[]): BBox {
   const pts: Pt[] = [];
-  for (const e of edges) flattenEdge(e, 0.25, pts);
+  // Fine enough that aligning to an edge lands within a hundredth of a unit.
+  for (const e of edges) flattenEdge(e, 0.01, pts);
   return bboxOfPoints(pts);
 }
 

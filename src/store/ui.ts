@@ -93,3 +93,8 @@ export const useUi = create<UiState>((set) => ({
 }));
 
 export const ui = (): UiState => useUi.getState();
+
+// "Select more" is a momentary mode: it ends with the selection it was building.
+useUi.subscribe((s) => {
+  if (s.multi && (s.selection.length === 0 || s.tool !== 'arrange')) useUi.setState({ multi: false });
+});

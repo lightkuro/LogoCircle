@@ -118,7 +118,7 @@ export function guidePoints(g: Guide, tol = 0.5): Pt[][] {
 
 export function guideBBox(g: Guide): BBox {
   const pts: Pt[] = [];
-  for (const c of guideChains(g)) pts.push(...flattenChain(c, 0.5));
+  for (const c of guideChains(g)) pts.push(...flattenChain(c, 0.01));
   return bboxOfPoints(pts);
 }
 

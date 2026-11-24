@@ -1,4 +1,4 @@
-import { Check, CircleDot, CopyPlus, Layers2, FlipHorizontal2, FlipVertical2, Lock, LockOpen, PaintBucket, Palette, Pencil, Repeat2, Replace, SlidersHorizontal, Trash2, MousePointerClick, Undo2 } from 'lucide-react';
+import { Check, CircleDot, CopyPlus, Layers2, FlipHorizontal2, FlipVertical2, Lock, LockOpen, PaintBucket, Palette, Pencil, Repeat2, Replace, SlidersHorizontal, SquareDashedMousePointer, Trash2, MousePointerClick, Undo2 } from 'lucide-react';
 import { Popover } from '@base-ui/react/popover';
 import { useDoc, getDoc, commit } from '@/store/doc';
 import { useUi } from '@/store/ui';
@@ -153,9 +153,11 @@ export function ContextBar() {
   const tool = useUi((s) => s.tool);
   const selection = useUi((s) => s.selection);
   const ink = useUi((s) => s.ink);
+  const multi = useUi((s) => s.multi);
   const doc = useDoc((s) => s.doc);
   // re-render when Repeat becomes available
   useUi((s) => s.lastDup);
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
   if (tool === 'color') return <ColorBar />;
   if (tool === 'pen') return <PenBar />;
@@ -190,6 +192,15 @@ export function ContextBar() {
         </Tip>
       )}
       {thick.length > 0 && thick.length === guides.length && shapes.length === 0 && <Thickness guides={thick} />}
+      {coarse && (
+        <Chip
+          tip="Keep adding to the selection with each tap"
+          label={multi ? 'Selecting' : 'Select more'}
+          icon={<SquareDashedMousePointer />}
+          active={multi}
+          onClick={() => useUi.setState({ multi: !multi })}
+        />
+      )}
       <Chip tip="Duplicate" keys="⌘D" label="Duplicate" icon={<CopyPlus />} onClick={duplicateSelection} />
       <Chip tip="Repeat: copy again with the same spacing" keys="⌘⇧D" label="Repeat" icon={<Repeat2 />} disabled={!canRepeat()} onClick={repeatDuplicate} />
       <Chip tip="Flip left ↔ right" icon={<FlipHorizontal2 />} onClick={() => flipSelection('h')} />

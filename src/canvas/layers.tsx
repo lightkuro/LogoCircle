@@ -6,6 +6,7 @@ import { useUi } from '@/store/ui';
 import { useIsDark } from '@/store/settings';
 import { imageUrl } from '@/store/persist';
 import { board, resolveFill } from '@/model/doc';
+import { useTextPreview } from './textPreview';
 import { guideCenterline, guideChains, guideWidth } from '@/model/guides';
 import type { Doc, Guide, RefImage, Shape } from '@/model/types';
 import { useDrag } from './drag';
@@ -96,9 +97,12 @@ export function ShapesLayer() {
   const palette = useDoc((s) => s.doc.palette);
   const paper = useDoc((s) => s.doc.paper);
   const showGuides = useUi((s) => s.showGuides);
+  // a word being retyped is shown by the text preview instead
+  const hide = useTextPreview((s) => s.hide);
   return (
     <g>
       {shapes.map((s) => {
+        if (hide && s.group === hide) return null;
         const fill = resolveFill({ palette }, s.fill);
         return (
           <ShapeItem
@@ -113,6 +117,15 @@ export function ShapesLayer() {
       })}
     </g>
   );
+}
+
+/** The word being typed in the text panel, as it will land. */
+export function TextPreviewLayer() {
+  const d = useTextPreview((s) => s.d);
+  const fill = useTextPreview((s) => s.fill);
+  const palette = useDoc((s) => s.doc.palette);
+  if (!d) return null;
+  return <path d={d} fill={resolveFill({ palette }, fill)} className="text-preview" style={{ pointerEvents: 'none' }} />;
 }
 
 // ---------------------------------------------------------------------------

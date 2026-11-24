@@ -23,7 +23,7 @@ const { chromium, devices } = pw;
 const here = dirname(fileURLToPath(import.meta.url));
 const shots = process.env.E2E_SHOTS || join(here, 'shots');
 mkdirSync(shots, { recursive: true });
-const PORT = 4179;
+const PORT = Number(process.env.E2E_PORT) || 4179;
 const URL = `http://localhost:${PORT}/`;
 
 let failures = 0;
@@ -1109,6 +1109,110 @@ async function mirrorAndPicking(browser) {
   }
 }
 
+async function textDesktop(browser) {
+  console.log('\nText on a desktop: live on the canvas, lands on click-off');
+  const { page, ctx, errors } = await fresh(browser, false);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  const shapes = () => page.evaluate(() => window.__lc.doc().shapes.length);
+  const field = () => page.getByRole('textbox', { name: 'Text', exact: true });
+  const panel = page.getByRole('dialog', { name: 'Add text' });
+  // a spot on the canvas away from the panel and the word
+  const off = async () => {
+    const v = page.viewportSize();
+    await page.mouse.click(v.width - 120, 160);
+    await page.waitForTimeout(500);
+  };
+
+  await btn('Text').click();
+  await page.waitForTimeout(400);
+  await field().fill('Logo');
+  await page.waitForTimeout(600);
+  check((await page.locator('.text-preview').count()) === 1 && (await shapes()) === 0, 'the word shows on the canvas while typing, not yet in the logo');
+  await off();
+  check((await shapes()) === 4 && (await page.locator('.text-preview').count()) === 0, 'clicking the canvas puts the word down');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+  check((await shapes()) === 0, 'as one undo step');
+
+  await btn('Text').click();
+  await page.waitForTimeout(400);
+  await field().fill('Nope');
+  await page.waitForTimeout(500);
+  await panel.getByRole('button', { name: 'Close' }).click();
+  await page.waitForTimeout(400);
+  check((await shapes()) === 0 && (await page.locator('.text-preview').count()) === 0, 'X cancels: nothing added');
+  await btn('Text').click();
+  await page.waitForTimeout(400);
+  await field().fill('Nope');
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  check((await shapes()) === 0, 'Esc cancels too');
+
+  // Size, spacing and color stay in view while the fonts scroll; the edge drags the panel wider.
+  await btn('Text').click();
+  await page.waitForTimeout(400);
+  await field().fill('Wide');
+  await btn('More fonts').click();
+  await page.locator('.tx-desk-fonts').evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await page.waitForTimeout(200);
+  const pb = await panel.boundingBox();
+  const sb = await page.getByRole('slider', { name: 'Size' }).boundingBox();
+  const cb = await page.getByRole('button', { name: 'Color 1', exact: true }).boundingBox();
+  check(sb.y > pb.y && sb.y + sb.height < pb.y + pb.height && cb.y + cb.height < pb.y + pb.height, 'size and color stay in view while the fonts scroll');
+  const cols = () => page.locator('.tx-desk .tx-grid').first().evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
+  const c0 = await cols();
+  const edge = await page.locator('.panel-edge').boundingBox();
+  await page.mouse.move(edge.x + edge.width / 2, edge.y + edge.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + 260, edge.y + edge.height / 2, { steps: 6 });
+  await page.mouse.up();
+  const pb2 = await panel.boundingBox();
+  check(pb2.width > pb.width + 200 && (await cols()) > c0, `dragging the edge widens the panel (${Math.round(pb.width)} → ${Math.round(pb2.width)}) and shows more fonts side by side (${c0} → ${await cols()})`);
+  await page.waitForTimeout(400);
+  const word = await page.locator('.text-preview').boundingBox();
+  const pb3 = await panel.boundingBox();
+  check(word && word.x > pb3.x + pb3.width, 'the canvas slides aside so the word is not under the panel');
+
+  // Font settings: weights for Poppins, features for Paper Mono.
+  await page.locator('.tx-desk-fonts').evaluate((el) => el.scrollTo({ top: 0 }));
+  await btn('Poppins').click();
+  await page.getByRole('button', { name: 'Font settings' }).click();
+  await page.waitForTimeout(300);
+  check((await page.getByRole('slider', { name: 'Weight' }).count()) === 1 && (await page.getByRole('switch', { name: 'Italic' }).count()) === 1, 'Font settings offers weight and italic for Poppins');
+  await page.getByRole('slider', { name: 'Weight' }).focus();
+  await page.keyboard.press('ArrowLeft');
+  check((await page.locator('.tx-style-value').textContent()) === 'Semibold', 'one step lighter than Bold is Semibold');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  check((await panel.count()) === 1, 'Esc in Font settings closes only that');
+  await btn('Paper Mono').click();
+  await page.waitForTimeout(300);
+  await page.getByRole('button', { name: 'Font settings' }).click();
+  await page.waitForTimeout(400);
+  const names = await page.locator('.tx-style [role=switch]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+  check(['Ligatures', 'Single-story a', 'Slashed zero'].every((n) => names.includes(n)) && !names.includes('Italic'), `Paper Mono offers its own features (${names.join(', ')})`);
+  await page.getByRole('switch', { name: 'Single-story a' }).click();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await off();
+  const t = await page.evaluate(() => Object.values(window.__lc.doc().groups)[0]?.text);
+  check(t?.fontId === 'paper-mono' && t.features?.includes('cv01'), 'the word lands with the feature on');
+  await page.screenshot({ path: join(shots, 'text-desktop.png') });
+
+  // Retyping a word: shown live in its place, put back on click-off.
+  const before = await page.evaluate(() => window.__lc.doc().shapes.map((x) => x.id).join());
+  await page.evaluate(() => window.__lc.ui().set({ sheet: 'text', textTarget: Object.keys(window.__lc.doc().groups)[0] }));
+  await page.waitForTimeout(400);
+  await field().fill('Wider');
+  await page.waitForTimeout(500);
+  await off();
+  const after = await page.evaluate(() => ({ n: window.__lc.doc().shapes.length, ids: window.__lc.doc().shapes.map((x) => x.id).join(), v: Object.values(window.__lc.doc().groups).map((g) => g.text.value) }));
+  check(after.n === 5 && after.ids !== before && after.v.length === 1 && after.v[0] === 'Wider', 'retyping replaces the word in place');
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 // ---------------------------------------------------------------------------
 
 // Vite is started directly rather than through npx, so that stopping it stops the server itself.
@@ -1119,7 +1223,11 @@ try {
   browser = await chromium.launch();
   if (process.env.E2E_ONLY) {
     // E2E_ONLY=touch,controls runs just those flows
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking };
+    const both = (fn) => async (b) => {
+      await fn(b, false);
+      await fn(b, true);
+    };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, textDesktop, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1135,6 +1243,7 @@ try {
   await sideways(browser);
   await touch(browser);
   await mirrorAndPicking(browser);
+  await textDesktop(browser);
 } catch (err) {
   if (err !== 'only') {
     console.error(err);

@@ -316,7 +316,8 @@ export function Sheet({
   name,
 }: {
   open: boolean;
-  onClose: () => void;
+  /** `reason` says how: 'close-press' for the X, 'escape-key', 'outside-press' for a click elsewhere. */
+  onClose: (reason?: string) => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
@@ -364,7 +365,7 @@ export function Sheet({
     );
   }
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Root open={open} onOpenChange={(o, details) => !o && onClose(details.reason)}>
       <Dialog.Portal>
         <Dialog.Backdrop className="backdrop" data-clear={place !== 'center' || undefined} />
         <Dialog.Popup className="dialog" data-wide={wide || undefined} data-place={place} style={resizable && width ? { width } : undefined}>

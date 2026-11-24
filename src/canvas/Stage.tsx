@@ -5,7 +5,7 @@ import { buildDocArrangement } from '@/model/paint';
 import type { Arrangement } from '@/engine';
 import { fitToScreen } from '@/actions';
 import { arrangementRef, useGestures } from './useGestures';
-import { FacesLayer, GuidesLayer, PhotoLayer, SceneOverlays, SelectionOverlay, ShapesLayer } from './layers';
+import { FacesLayer, GuidesLayer, PhotoLayer, SceneOverlays, SelectionOverlay, ShapesLayer, TextPreviewLayer } from './layers';
 import { Loupe } from './Loupe';
 import { useDrag } from './drag';
 import { board } from '@/model/doc';
@@ -98,6 +98,7 @@ export function Stage() {
             <rect x={artboard.x} y={artboard.y} width={artboard.w} height={artboard.h} fill={paper ?? 'url(#lc-checker)'} />
             <PhotoLayer />
             <ShapesLayer />
+            <TextPreviewLayer />
             <PhotoLayer above />
             <FacesLayer arr={arr} />
             {grid > 0 && <rect x={artboard.x} y={artboard.y} width={artboard.w} height={artboard.h} fill="url(#lc-grid)" style={{ pointerEvents: 'none' }} />}

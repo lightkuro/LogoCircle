@@ -29,10 +29,11 @@
 }
 .tx-checker {
   background-color: #fff;
-  background-image: linear-gradient(45deg, #d9d9de 25%, transparent 25%, transparent 75%, #d9d9de 75%),
-    linear-gradient(45deg, #d9d9de 25%, transparent 25%, transparent 75%, #d9d9de 75%);
+  background-image: linear-gradient(45deg, #d9d9de 25%, transparent 25%, transparent 75%, #d9d9de 75%), linear-gradient(45deg, #d9d9de 25%, transparent 25%, transparent 75%, #d9d9de 75%);
   background-size: 16px 16px;
-  background-position: 0 0, 8px 8px;
+  background-position:
+    0 0,
+    8px 8px;
 }
 
 .tx-row {
@@ -67,7 +68,9 @@
   background: var(--sunken);
   color: var(--text);
   text-align: left;
-  transition: transform 160ms var(--ease-out), background-color 120ms ease;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 120ms ease;
 }
 .tx-font:active {
   transform: scale(0.97);
@@ -170,7 +173,9 @@
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
-  transition: transform 160ms var(--ease-out), background-color 120ms ease;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 120ms ease;
 }
 .tx-pill::before {
   content: '';
@@ -207,7 +212,9 @@
   font-size: 14px;
   font-weight: 600;
   text-align: left;
-  transition: transform 160ms var(--ease-out), background-color 120ms ease;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 120ms ease;
 }
 .tx-more:active {
   transform: scale(0.985);
@@ -293,7 +300,9 @@
   height: 28px;
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px var(--swatch-ring, rgba(0, 0, 0, 0.14));
-  transition: transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out);
+  transition:
+    transform 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
 }
 .tx-color:active .tx-color-dot {
   transform: scale(0.92);
@@ -303,7 +312,10 @@
 }
 .tx-color[aria-pressed='true'] .tx-color-dot {
   transform: scale(0.82);
-  box-shadow: inset 0 0 0 1px var(--swatch-ring, rgba(0, 0, 0, 0.14)), 0 0 0 2.5px var(--surface-solid), 0 0 0 4.5px var(--accent);
+  box-shadow:
+    inset 0 0 0 1px var(--swatch-ring, rgba(0, 0, 0, 0.14)),
+    0 0 0 2.5px var(--surface-solid),
+    0 0 0 4.5px var(--accent);
 }
 
 /* The sheet body has 18px of bottom padding, and sticky offsets are measured from
@@ -366,7 +378,9 @@
   border-radius: 22px 22px 0 0;
   box-shadow: var(--shadow-pop);
   transform: translateY(100%);
-  transition: transform 320ms var(--ease-drawer), height 320ms var(--ease-drawer);
+  transition:
+    transform 320ms var(--ease-drawer),
+    height 320ms var(--ease-drawer);
   will-change: transform;
 }
 .txp[data-shown] {
@@ -556,4 +570,99 @@
 }
 .txp-side .txp-top .tx-preview {
   height: 62px;
+}
+
+/* ------------------------------------------------------------------------
+   Desktop text panel: the field on top, the fonts scrolling in the middle,
+   and size, spacing, color and the button always in view at the bottom.
+   The word itself shows on the canvas as it is typed.
+   ------------------------------------------------------------------------ */
+.sheet-body:has(> .tx-desk) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.tx-desk {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.tx-desk-field {
+  padding: 2px 0 4px;
+}
+.tx-desk-fonts {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 -18px;
+  padding: 0 18px 14px;
+}
+/* wider panel, more fonts side by side */
+.tx-desk .tx-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.tx-desk-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 -18px;
+  padding: 8px 18px 16px;
+  box-shadow: 0 -1px 0 var(--border);
+}
+.tx-desk-controls .txp-slider {
+  min-height: 38px;
+}
+.tx-desk-controls .tx-colors {
+  margin: 0 -4px;
+}
+.tx-desk-controls .tx-color {
+  height: 50px;
+}
+
+/* Font settings: a small button beside "Your font" */
+.tx-own {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tx-pill.tx-icon {
+  justify-content: center;
+  width: 36px;
+  padding: 0;
+}
+.tx-style {
+  width: 264px;
+  padding: 10px 14px 12px;
+}
+.tx-style-name {
+  margin-bottom: 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tx-set {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  font-size: 14px;
+}
+.tx-style-weight {
+  padding-bottom: 4px;
+}
+.tx-style-weight .tx-set {
+  min-height: 30px;
+}
+.tx-style-value {
+  color: var(--muted);
+}
+.tx-style-wait {
+  margin: 8px 0 2px;
+  font-size: 13px;
+  color: var(--muted);
 }

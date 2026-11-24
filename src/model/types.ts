@@ -165,6 +165,10 @@ export interface TextInfo {
   size: number;
   spacing: number;
   fill: Fill;
+  /** Weight and slant (absent: the font's own default), and OpenType features switched on. */
+  weight?: number;
+  italic?: boolean;
+  features?: string[];
   /** Maps the freshly laid-out word to where it sits on the canvas. */
   m: Mat;
   /** Still exactly as typed (no letter moved, cut or recolored)? Then it can be retyped. */

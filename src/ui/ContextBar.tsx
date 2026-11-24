@@ -1,4 +1,4 @@
-import { Check, CircleDot, CopyPlus, FlipHorizontal2, FlipVertical2, Lock, LockOpen, PaintBucket, Palette, Pencil, Repeat2, Replace, SlidersHorizontal, Trash2, MousePointerClick, Undo2 } from 'lucide-react';
+import { Check, CircleDot, CopyPlus, Layers2, FlipHorizontal2, FlipVertical2, Lock, LockOpen, PaintBucket, Palette, Pencil, Repeat2, Replace, SlidersHorizontal, Trash2, MousePointerClick, Undo2 } from 'lucide-react';
 import { Popover } from '@base-ui/react/popover';
 import { useDoc, getDoc, commit } from '@/store/doc';
 import { useUi } from '@/store/ui';
@@ -81,6 +81,13 @@ function PhotoBar({ id }: { id: string }) {
         label={ref.locked ? 'Adjust' : 'Lock'}
         icon={ref.locked ? <LockOpen /> : <Lock />}
         onClick={() => commit(updateRef(getDoc(), id, { locked: !ref.locked }))}
+      />
+      <Chip
+        tip={ref.above ? 'Put the photo back underneath' : 'Show the photo over the colors, to keep tracing'}
+        label="On top"
+        icon={<Layers2 />}
+        active={!!ref.above}
+        onClick={() => commit(updateRef(getDoc(), id, { above: !ref.above }))}
       />
       <Chip tip="Choose another photo" label="Replace" icon={<Replace />} onClick={pickPhoto} />
       <Chip tip="Remove photo" icon={<Trash2 />} tone="danger" onClick={deleteSelection} />

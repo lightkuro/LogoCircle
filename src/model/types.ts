@@ -130,6 +130,8 @@ export interface RefImage {
   opacity: number;
   locked: boolean;
   hidden?: boolean;
+  /** Draw the photo over the colored shapes (still under the outlines) to keep tracing. */
+  above?: boolean;
 }
 
 export interface Doc {

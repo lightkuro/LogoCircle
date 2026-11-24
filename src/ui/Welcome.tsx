@@ -13,7 +13,7 @@ export function Welcome() {
   if (!empty || sheet || tool !== 'arrange') return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center px-6" style={{ paddingBottom: 96 }}>
-      <div className="pointer-events-auto w-full max-w-[380px] text-center">
+      <div className="glass pointer-events-auto w-full max-w-[400px] px-5 pb-4 pt-6 text-center" style={{ borderRadius: 26 }}>
         <h1 className="m-0 text-[26px] font-semibold leading-[1.1] tracking-[-0.02em]">Draw outlines, then color in.</h1>
         <p className="mx-auto mb-5 mt-2.5 max-w-[320px] text-[15px] leading-snug text-muted">
           Lay circles and lines over each other. Tap a color, then tap the areas you want. That is your logo.

@@ -49,13 +49,16 @@ const RefItem = memo(function RefItem({ r }: { r: RefImage }) {
   );
 });
 
-export function PhotoLayer() {
+/** Photos sit under the artwork, or — when asked — over it, so tracing can continue on colored areas. */
+export function PhotoLayer({ above = false }: { above?: boolean }) {
   const refs = useDoc((s) => s.doc.refs);
   return (
     <g>
-      {refs.map((r) => (
-        <RefItem key={r.id} r={r} />
-      ))}
+      {refs
+        .filter((r) => !!r.above === above)
+        .map((r) => (
+          <RefItem key={r.id} r={r} />
+        ))}
     </g>
   );
 }

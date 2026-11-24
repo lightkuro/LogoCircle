@@ -91,6 +91,7 @@ export function Stage() {
             <rect x={0} y={0} width={artboard.w} height={artboard.h} fill={paper ?? 'url(#lc-checker)'} />
             <PhotoLayer />
             <ShapesLayer />
+            <PhotoLayer above />
             <FacesLayer arr={arr} />
             {grid > 0 && <rect x={0} y={0} width={artboard.w} height={artboard.h} fill="url(#lc-grid)" style={{ pointerEvents: 'none' }} />}
             <rect x={0} y={0} width={artboard.w} height={artboard.h} className="artboard-edge" />

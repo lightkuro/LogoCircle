@@ -365,3 +365,41 @@ export async function commitText(input: TextInput, target: string | null): Promi
   if (layout.missing.length) toast(`This font has no “${layout.missing.join('')}”`, { description: 'Try another font for those characters.' });
   return true;
 }
+
+// --- clipboard (within the app) ---------------------------------------------------
+
+let clipboard: { guides: Guide[]; shapes: Shape[]; groups: Doc['groups'] } | null = null;
+let pasteCount = 0;
+
+export function copySelection(): boolean {
+  const doc = getDoc();
+  const sel = new Set(ui().selection);
+  const guides = doc.guides.filter((g) => sel.has(g.id));
+  const shapes = doc.shapes.filter((s) => sel.has(s.id));
+  if (!guides.length && !shapes.length) return false;
+  const groups: Doc['groups'] = {};
+  for (const s of shapes) if (s.group && doc.groups[s.group]) groups[s.group] = doc.groups[s.group]!;
+  clipboard = { guides, shapes, groups };
+  pasteCount = 0;
+  return true;
+}
+
+export function pasteClipboard(): void {
+  if (!clipboard) return;
+  pasteCount += 1;
+  // Paste through a scratch document so copies get fresh ids and their own word groups.
+  const doc = getDoc();
+  const scratch: Doc = { ...doc, guides: clipboard.guides, shapes: clipboard.shapes, groups: clipboard.groups, refs: [] };
+  const d = (20 / ui().view.k) * pasteCount;
+  const ids = [...clipboard.guides.map((g) => g.id), ...clipboard.shapes.map((s) => s.id)];
+  const r = duplicateItems(scratch, ids, translate(d, d));
+  const added = new Set(r.ids);
+  commit({
+    ...doc,
+    guides: [...doc.guides, ...r.doc.guides.filter((g) => added.has(g.id))],
+    shapes: [...doc.shapes, ...r.doc.shapes.filter((s) => added.has(s.id))],
+    groups: { ...doc.groups, ...Object.fromEntries(Object.entries(r.doc.groups).filter(([id]) => !(id in clipboard!.groups))) },
+    updatedAt: Date.now(),
+  });
+  useUi.setState({ selection: r.ids, tool: 'arrange', erasing: false });
+}

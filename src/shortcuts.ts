@@ -3,10 +3,12 @@ import { useDoc } from '@/store/doc';
 import { ui, useUi } from '@/store/ui';
 import {
   addOutline,
+  copySelection,
   deleteSelection,
   duplicateSelection,
   fitToScreen,
   nudge,
+  pasteClipboard,
   pickEraser,
   pickInk,
   repeatDuplicate,
@@ -46,6 +48,19 @@ export function useShortcuts(): void {
           case 'a':
             e.preventDefault();
             selectAll();
+            return;
+          case 'c':
+            if (copySelection()) e.preventDefault();
+            return;
+          case 'x':
+            if (copySelection()) {
+              e.preventDefault();
+              deleteSelection();
+            }
+            return;
+          case 'v':
+            // An image on the system clipboard is handled by the paste listener instead.
+            pasteClipboard();
             return;
           case 'e':
             e.preventDefault();

@@ -9,6 +9,7 @@ const KEYS: [string, string][] = [
   ['Color 1 · 2 · 3', '1 · 2 · 3'],
   ['Eraser', 'E'],
   ['Show or hide outlines', 'H'],
+  ['Copy · Paste', `${MOD}C · ${MOD}V`],
   ['Duplicate', `${MOD}D`],
   ['Repeat', `${MOD}⇧D`],
   ['Undo · Redo', `${MOD}Z · ${MOD}⇧Z`],

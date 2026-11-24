@@ -1,5 +1,6 @@
 import { FilePlus2, FolderOpen, Keyboard, LayoutGrid, Sparkles, Upload, Save } from 'lucide-react';
 import { useUi } from '@/store/ui';
+import { useDoc } from '@/store/doc';
 import { createNewDoc, setMode } from '@/actions';
 import { Segmented, Sheet, useIsPhone } from '../primitives';
 import { importSvgFile, openProjectFile, saveProjectFile } from '@/advanced/files';
@@ -19,11 +20,25 @@ function Row({ icon, label, hint, onClick }: { icon: React.ReactNode; label: str
 export function MenuSheet() {
   const open = useUi((s) => s.sheet === 'menu');
   const mode = useUi((s) => s.mode);
+  const name = useDoc((s) => s.doc.name);
   const phone = useIsPhone();
   const go = (sheet: 'gallery' | 'help'): void => useUi.setState({ sheet, galleryTab: 'mine' });
   const close = (): void => useUi.setState({ sheet: null });
   return (
     <Sheet open={open} onClose={close} title="LogoCircle">
+      <input
+        className="field mb-3"
+        value={name}
+        aria-label="Logo name"
+        placeholder="Name this logo"
+        spellCheck={false}
+        enterKeyHint="done"
+        onChange={(e) => {
+          const st = useDoc.getState();
+          st.patch({ ...st.doc, name: e.target.value, updatedAt: Date.now() });
+        }}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      />
       {phone && (
         <div className="pb-3">
           <Segmented

@@ -496,7 +496,10 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           drag().reset();
           const arr = arrangementRef.current;
           if (arr && faces.size) {
-            commit(paintFaces(doc, arr, faces, s.erasing ? null : s.ink));
+            const next = paintFaces(doc, arr, faces, s.erasing ? null : s.ink);
+            // A short tick where the device has one, on the same frame as the color landing.
+            if (next !== doc && e.pointerType === 'touch') navigator.vibrate?.(8);
+            commit(next);
           }
           break;
         }

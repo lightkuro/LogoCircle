@@ -8,6 +8,7 @@ import { createNewDoc, openDoc } from '@/actions';
 import { EXAMPLES, type Example } from '@/examples';
 import { svgDataUrl, thumbnail } from '@/export/svg';
 import type { Doc } from '@/model/types';
+import { isEmptyDoc } from '@/model/doc';
 import { Segmented, Sheet } from '../primitives';
 
 function Card({ thumb, name, sub, onOpen, onDelete, current }: { thumb: string; name: string; sub?: string; onOpen: () => void; onDelete?: () => void; current?: boolean }) {
@@ -76,7 +77,8 @@ export function GallerySheet() {
     if (!open) return;
     // Make sure the logo being worked on is in the list with a fresh preview.
     const cur = useDoc.getState().doc;
-    void saveDoc(cur, thumbnail(cur)).catch(() => undefined).then(refresh);
+    if (isEmptyDoc(cur)) refresh();
+    else void saveDoc(cur, thumbnail(cur)).catch(() => undefined).then(refresh);
   }, [open]);
 
   const remove = async (m: DocMeta): Promise<void> => {

@@ -30,6 +30,7 @@ import {
   Scissors,
   SlidersHorizontal,
   Square,
+  Spline,
   SquareDashed,
   SquareDashedMousePointer,
   Star,
@@ -60,8 +61,10 @@ interface Entry {
   divide?: boolean;
   /** A switch rather than a tool: shows its state, and never becomes the button's face. */
   checked?: boolean;
-  /** A heading that opens to more entries, in place. */
+  /** A heading that opens to more entries: beside the list on hover (mouse), in place (touch). */
   children?: Entry[];
+  /** For a heading: the entry a click on the heading itself picks (with a mouse). */
+  main?: string;
 }
 
 const openText = (): void =>
@@ -228,7 +231,12 @@ function Group({
     list,
   });
   const pick = (e: Entry): void => {
-    if (e.children) return setUnfolded(touch ? (unfolded === e.id ? null : e.id) : e.id);
+    if (e.children) {
+      // a heading's own click picks its main entry (with a mouse, and not partway through a slide)
+      const main = !touch && !slide.active() ? e.children.find((c) => c.id === e.main) : undefined;
+      if (!main) return setUnfolded(touch ? (unfolded === e.id ? null : e.id) : e.id);
+      e = main;
+    }
     const i = entries.indexOf(e);
     if (i >= 0 && e.checked === undefined) setLast(i);
     const from = wrap.current?.getBoundingClientRect();
@@ -481,13 +489,30 @@ function useEntries() {
       frameEdit: false,
     });
   const selects: Entry[] = [
+    // Move, or Move points, where corners and points come before resizing
     {
-      id: 'move',
+      id: 'moving',
       label: 'Move',
-      keys: key('move'),
       icon: <MousePointer2 />,
       run: select('move'),
-      active: arranging && selectMode === 'move' ? false : undefined,
+      main: 'move',
+      children: [
+        {
+          id: 'move',
+          label: 'Normal',
+          keys: key('move'),
+          icon: <MousePointer2 />,
+          run: select('move'),
+          active: arranging && selectMode === 'move' ? false : undefined,
+        },
+        {
+          id: 'points',
+          label: 'Move points',
+          icon: <Spline />,
+          run: select('points'),
+          active: arranging && selectMode === 'points',
+        },
+      ],
     },
     {
       id: 'pan',
@@ -502,7 +527,8 @@ function useEntries() {
       id: 'selecting',
       label: 'Selection',
       icon: <SquareDashedMousePointer />,
-      run: () => undefined,
+      run: select('box'),
+      main: 'box',
       children: [
         {
           id: 'box',

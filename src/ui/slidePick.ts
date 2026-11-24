@@ -76,20 +76,24 @@ export function useSlidePick({ open, isOpen, close, list }: { open: () => void; 
             if (!p || p.id !== e.pointerId) return;
             const el = p.moved ? itemAt(e.clientX, e.clientY) : null;
             const onButton = e.currentTarget.contains(document.elementFromPoint(e.clientX, e.clientY));
-            end();
             // A plain tap: the click that follows does what a tap always did, unless this press opened the list.
             if (!p.moved) {
+              end();
               skip.current = !p.wasOpen;
               return;
             }
             skip.current = true;
             setTimeout(() => (skip.current = false), 400);
+            // still sliding while the choice is made, so a heading folds out rather than picking for itself
             if (el && el !== dwelt.current) el.click();
             else if (!el && !onButton) close();
+            end();
           },
           onPointerCancel: end,
         }
       : {},
+    /** A slide is under way (a click now comes from it). */
+    active: (): boolean => press.current !== null,
     /** True for a click the slide has already dealt with: the button should ignore it. */
     handled: (): boolean => {
       const s = skip.current;

@@ -85,11 +85,19 @@ async function add(page, _phone, name) {
 async function fromGroup(page, group, item) {
   await page.getByRole('button', { name: group, exact: true }).hover();
   await page.waitForTimeout(320);
-  for (const step of item.split('/')) {
+  const steps = item.split('/');
+  for (const [i, step] of steps.entries()) {
     const name = new RegExp(`^${step}`);
     // a switch in the list (Cut lines, Sticky points) is a checkbox item; a plain item wins when both match
     const plain = page.getByRole('menuitem', { name });
-    await ((await plain.count()) ? plain : page.getByRole('menuitemcheckbox', { name })).first().click();
+    const target = ((await plain.count()) ? plain : page.getByRole('menuitemcheckbox', { name })).first();
+    if (i === steps.length - 1) {
+      await target.click();
+      break;
+    }
+    // A heading: hovering opens it with a mouse (a click would pick its main choice); a tap folds it out.
+    await target.hover();
+    if (!(await page.getByRole('menuitem', { name: new RegExp(`^${steps[i + 1]}`) }).count())) await target.click();
   }
 }
 
@@ -1245,6 +1253,56 @@ async function listsAndPhoneText(browser) {
   }
 }
 
+async function movePoints(browser) {
+  console.log('\nMove points, Move corner, heading defaults, add-point dots setting');
+  const { ctx, page, errors } = await fresh(browser, false);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  const mode = () => page.evaluate(() => window.__lc.ui().selectMode);
+  const guide = () => page.evaluate(() => window.__lc.doc().guides[0]);
+  // Select: Move and Selection are headings; clicking one picks Normal or Box select, hovering shows the rest.
+  await btn('Select').hover();
+  await page.getByRole('menuitem', { name: /^Move/ }).first().hover();
+  const sub = await page.locator('.flyout-sub .menu-item').allTextContents();
+  check(sub.some((t) => t.startsWith('Normal')) && sub.some((t) => t.startsWith('Move points')), 'hovering Move shows Normal and Move points');
+  await page.getByRole('menuitem', { name: /^Selection/ }).click();
+  check((await mode()) === 'box', 'clicking Selection itself picks Box select');
+  await btn('Select').hover();
+  await page.getByRole('menuitem', { name: /^Move/ }).first().click();
+  check((await mode()) === 'move', 'clicking Move itself picks Normal');
+  await page.mouse.move(700, 120);
+
+  // A square's corner is under a resize handle: right-click, Move corner.
+  await add(page, false, 'Square');
+  await page.mouse.move(700, 120);
+  const sq = await guide();
+  const corner = await toScreen(page, sq.cx + sq.w / 2, sq.cy + sq.h / 2);
+  await page.mouse.click(corner.x, corner.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: 'Move corner' }).click();
+  check((await mode()) === 'points' && (await page.locator('.handle-box').count()) === 0 && (await page.locator('.handle-pt').count()) === 4, 'Move corner: corners come first, the resize handles step aside');
+  await page.mouse.move(corner.x, corner.y);
+  await page.mouse.down();
+  await page.mouse.move(corner.x + 30, corner.y + 40, { steps: 5 });
+  await page.mouse.up();
+  const moved = await guide();
+  check(moved.type === 'poly' && moved.pts.length === 4 && Math.abs(moved.pts[2].x - (sq.cx + sq.w / 2)) > 10, 'dragging a corner moves just that corner');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  check((await mode()) === 'move', 'Esc goes back to Normal');
+
+  // Settings can switch the add-point dots off.
+  await add(page, false, 'Triangle');
+  await page.mouse.move(700, 120);
+  check((await page.locator('.handle-mid').count()) > 0, 'a triangle shows its add-point dots');
+  await btn('Menu').click();
+  await page.getByRole('button', { name: /^Settings/ }).click();
+  await page.getByRole('switch', { name: 'Add-point dots' }).click();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  check((await page.locator('.handle-mid').count()) === 0, 'and Settings can switch them off');
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 async function mirrorAndPicking(browser) {
   console.log('\nMirror copy, one at a time, hold and drag');
   // Mirror copy, with a mouse.
@@ -1564,7 +1622,7 @@ try {
       await fn(b, false);
       await fn(b, true);
     };
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1584,6 +1642,7 @@ try {
   await help(browser);
   await shapesAndMenus(browser);
   await listsAndPhoneText(browser);
+  await movePoints(browser);
   await textDesktop(browser);
 } catch (err) {
   if (err !== 'only') {

@@ -27,7 +27,7 @@ import {
   type Ring,
 } from '@/geom';
 import { booleanOp, strokeOutline } from '@/engine';
-import type { Band, Guide, PathGuide, PathNode, RectGuide } from './types';
+import type { Band, Guide, PathGuide, PathNode, PolyGuide, RectGuide } from './types';
 
 const centerCache = new WeakMap<Guide, Chain[]>();
 const areaCache = new WeakMap<Guide, Ring[] | null>();
@@ -372,6 +372,22 @@ export function guideHandles(g: Guide): Pt[] {
 }
 
 /** Move one draggable point of a guide. */
+/** A square's corners, in the order its corner rounding uses: top left, top right, bottom right, bottom left. */
+export function rectCorners(g: RectGuide): Pt[] {
+  const hw = g.w / 2;
+  const hh = g.h / 2;
+  const c = Math.cos(g.rot);
+  const s = Math.sin(g.rot);
+  const P = (x: number, y: number): Pt => ({ x: g.cx + x * c - y * s, y: g.cy + x * s + y * c });
+  return [P(-hw, -hh), P(hw, -hh), P(hw, hh), P(-hw, hh)];
+}
+
+/** A square as four free points, so one corner can move on its own (its rounding kept). */
+export function rectToPoly(g: RectGuide): PolyGuide {
+  const r = g.radii ?? (g.radius > 0 ? [g.radius, g.radius, g.radius, g.radius] : undefined);
+  return { id: g.id, type: 'poly', pts: rectCorners(g), radii: r && [...r], hidden: g.hidden, locked: g.locked, group: g.group, width: g.width, band: g.band, rot: g.rot };
+}
+
 export function moveGuideHandle(g: Guide, index: number, p: Pt): Guide {
   switch (g.type) {
     case 'line':

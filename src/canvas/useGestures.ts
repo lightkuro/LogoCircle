@@ -7,7 +7,7 @@ import { selectionKey, ui, useUi } from '@/store/ui';
 import { board } from '@/model/doc';
 import { paintFaces, visibleGuides } from '@/model/paint';
 import { followSet, syncLinks } from '@/model/link';
-import { insertGuidePoint, moveGuideHandle, movePathControl, removeGuidePoint, togglePathNode } from '@/model/guides';
+import { insertGuidePoint, moveGuideHandle, movePathControl, rectToPoly, removeGuidePoint, togglePathNode } from '@/model/guides';
 import { itemBBox, selectionBBox, transformItems, updateGuide } from '@/model/ops';
 import type { Doc, Guide } from '@/model/types';
 import { expandToGroup, transformSelection } from '@/actions';
@@ -154,7 +154,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       let bestD = radius;
       // On a polygon, stretching wins over moving a single point where the two meet.
       const stretchy = s.selection.length === 1 && doc.guides.find((x) => x.id === s.selection[0])?.type === 'poly';
-      for (const h of placeHandles(doc, s.selection, frame, s.view.k, s.moveOnly === selectionKey(s.selection))) {
+      for (const h of placeHandles(doc, s.selection, frame, s.view.k, s.moveOnly === selectionKey(s.selection), s.selectMode === 'points')) {
         const sp = toScreen(s.view, h.p);
         // Otherwise point handles win ties against the box handles they may sit on.
         const bias = h.handle.kind === 'pt' ? -4 : h.handle.kind === 'mid' ? 2 : h.handle.kind === 'box' && stretchy ? -6 : 0;
@@ -304,7 +304,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         g = { kind: 'marquee', startDoc: press.startDoc, additive: false };
         return;
       }
-      if (!press.handle && !press.fromColor && s.selectMode !== 'move' && s.selectMode !== 'single') {
+      if (!press.handle && !press.fromColor && s.selectMode !== 'move' && s.selectMode !== 'points' && s.selectMode !== 'single') {
         // A chosen select mode decides what every drag does.
         if (s.selectMode === 'pan') g = { kind: 'pan', start: press.start, view: s.view };
         else if (s.selectMode === 'box') g = { kind: 'marquee', startDoc: press.startDoc, additive: press.shift };
@@ -323,6 +323,8 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           let guide = singleGuide(doc, s.selection);
           if (!guide) return void (g = { kind: 'ignore' });
           let index = h.index;
+          // A square's corner, moved on its own: from now on it is four free points.
+          if (guide.type === 'rect') guide = rectToPoly(guide);
           if (h.kind === 'mid') {
             // Dragging one of the small dots between points adds a point there and keeps dragging it.
             guide = insertGuidePoint(guide, index, press.startDoc);

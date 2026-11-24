@@ -1,6 +1,7 @@
 import { evalC, mul, rotate, scale, translate, type Mat, type Pt } from '@/geom';
 import type { Doc, Guide } from '@/model/types';
-import { guideCenterline, guideHandles, guidePoints, guideRot } from '@/model/guides';
+import { guideCenterline, guideHandles, guidePoints, guideRot, rectCorners } from '@/model/guides';
+import { settings } from '@/store/settings';
 import { refCorners, shapePolygons } from '@/model/ops';
 import { board } from '@/model/doc';
 
@@ -176,10 +177,26 @@ export const ROT_OFFSET_PX = 30;
  * Which handles to offer. `k` is the zoom (screen px per document unit), used
  * to drop handles that would crowd each other on a small selection.
  */
-export function placeHandles(doc: Doc, ids: string[], frame: Frame, k: number, moveOnly = false): PlacedHandle[] {
+export function placeHandles(doc: Doc, ids: string[], frame: Frame, k: number, moveOnly = false, pointsFirst = false): PlacedHandle[] {
   const out: PlacedHandle[] = [];
+  const knob = (): PlacedHandle => ({ handle: { kind: 'rot' }, p: frameLocalToDoc(frame, 0, -frame.h / 2 - ROT_OFFSET_PX / k) });
   // "Move": only the knob for turning; the rest of it is for dragging.
-  if (moveOnly) return [{ handle: { kind: 'rot' }, p: frameLocalToDoc(frame, 0, -frame.h / 2 - ROT_OFFSET_PX / k) }];
+  if (moveOnly) return [knob()];
+  const lone = singleGuide(doc, ids);
+  // Move points: a square's or polygon's corners come before resizing, which steps aside.
+  if (pointsFirst && lone && (lone.type === 'rect' || lone.type === 'poly')) {
+    out.push(knob());
+    (lone.type === 'rect' ? rectCorners(lone) : lone.pts).forEach((p, index) => out.push({ handle: { kind: 'pt', index }, p }));
+    if (lone.type === 'poly' && settings().addDots) {
+      const n = lone.pts.length;
+      for (let i = 0; i < n; i++) {
+        const a = lone.pts[i]!;
+        const b = lone.pts[(i + 1) % n]!;
+        if (Math.hypot(b.x - a.x, b.y - a.y) * k >= 70) out.push({ handle: { kind: 'mid', index: i }, p: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } });
+      }
+    }
+    return out;
+  }
   const g = singleGuide(doc, ids);
   const hw = frame.w / 2;
   const hh = frame.h / 2;
@@ -215,8 +232,8 @@ export function placeHandles(doc: Doc, ids: string[], frame: Frame, k: number, m
       });
     }
     pts.forEach((p, index) => out.push({ handle: { kind: 'pt', index }, p }));
-    // The small dots that add a point, on each side long enough for one.
-    if (g.type === 'curve' || g.type === 'poly') {
+    // The small dots that add a point, on each side long enough for one (unless switched off in Settings).
+    if ((g.type === 'curve' || g.type === 'poly') && settings().addDots) {
       const closed = g.type === 'poly' || g.closed;
       const n = pts.length;
       const count = closed ? n : n - 1;

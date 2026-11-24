@@ -11,7 +11,7 @@ export type Tool = 'arrange' | 'color' | 'pen' | 'brush' | 'draw' | 'cut' | 'mir
  * What a drag does while no drawing tool is on. `move` is the everyday one:
  * drag a thing to move it, drag empty canvas to pan.
  */
-export type SelectMode = 'move' | 'pan' | 'box' | 'lasso' | 'single';
+export type SelectMode = 'move' | 'points' | 'pan' | 'box' | 'lasso' | 'single';
 export type SheetName = null | 'export' | 'text' | 'gallery' | 'menu' | 'help' | 'code' | 'settings' | 'changes';
 
 export interface MenuItem {

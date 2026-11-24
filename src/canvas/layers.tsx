@@ -3,7 +3,7 @@ import { apply, chainsToPath, polygonToPath, ringsToPath, toCss, type Mat, type 
 import { withFollowers, type Arrangement } from '@/engine';
 import { useDoc } from '@/store/doc';
 import { selectionKey, useUi } from '@/store/ui';
-import { useIsDark } from '@/store/settings';
+import { useIsDark, useSettings } from '@/store/settings';
 import { imageUrl } from '@/store/persist';
 import { board, resolveFill } from '@/model/doc';
 import { useTextPreview } from './textPreview';
@@ -343,6 +343,9 @@ export function SelectionOverlay() {
   const corner = useUi((s) => s.corner);
   const frameEdit = useUi((s) => s.frameEdit);
   const moveOnly = useUi((s) => s.moveOnly);
+  const selectMode = useUi((s) => s.selectMode);
+  // redraw when the add-point dots are switched on or off
+  useSettings((s) => s.addDots);
   const mat = useDrag((s) => s.mat);
   const dragIds = useDrag((s) => s.ids);
   const override = useDrag((s) => s.guide);
@@ -358,7 +361,7 @@ export function SelectionOverlay() {
   const corners = transformFrameCorners(frame, moving ? mat : null).map((p) => toScreen(view, p));
   const isLine = selection.length === 1 && d.guides.find((g) => g.id === selection[0])?.type === 'line';
   const lockedPhoto = selection.length === 1 && !!d.refs.find((r) => r.id === selection[0])?.locked;
-  const handles = moving || lockedPhoto || mirroring ? [] : placeHandles(d, selection, frame, view.k, moveOnly === selectionKey(selection));
+  const handles = moving || lockedPhoto || mirroring ? [] : placeHandles(d, selection, frame, view.k, moveOnly === selectionKey(selection), selectMode === 'points');
   const rot = handles.find((h) => h.handle.kind === 'rot');
   const top = { x: (corners[0]!.x + corners[1]!.x) / 2, y: (corners[0]!.y + corners[1]!.y) / 2 };
   const points = corners.map((p) => `${p.x},${p.y}`).join(' ');

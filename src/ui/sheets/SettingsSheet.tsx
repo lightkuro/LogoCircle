@@ -225,6 +225,7 @@ export function SettingsSheet() {
   const haptics = useSettings((s) => s.haptics);
   const toolLabels = useSettings((s) => s.toolLabels);
   const slidePick = useSettings((s) => s.slidePick);
+  const addDots = useSettings((s) => s.addDots);
   const touch = useIsTouch();
   const set = settings().set;
   const drag = (v: DragEmpty) => (): void => set({ dragEmpty: v });
@@ -282,6 +283,7 @@ export function SettingsSheet() {
       <Switch label="Hold and drag to pick" hint="Press tool button, slide to choice, release to pick." checked={slidePick} onChange={(v) => set({ slidePick: v })} />
 
       <div className="label">Helpers</div>
+      <Switch label="Add-point dots" hint="Small dots on the sides of a shape. Drag one to add a point." checked={addDots} onChange={(v) => set({ addDots: v })} />
       <Switch label="Snapping" hint="Items line up with nearby outlines, edges and centres while dragging." checked={snap} onChange={(v) => useUi.setState({ snap: v })} />
       {touch && <Switch label="Vibration" hint="Short tick when coloring or opening hold menu, if supported." checked={haptics} onChange={(v) => set({ haptics: v })} />}
 

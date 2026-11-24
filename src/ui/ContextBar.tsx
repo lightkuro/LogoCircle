@@ -173,6 +173,7 @@ function Done({ onClick = doneTool, label = 'Done' }: { onClick?: () => void; la
 
 const MODE_HINT = (tap: string): Record<string, string> => ({
   pan: 'Pan: drag to move view',
+  points: 'Move points: drag corners and points',
   box: 'Box select: drag around items',
   lasso: 'Lasso: draw around items to select',
   single: `One at a time: ${tap.toLowerCase()} pieces to select, even in groups`,
@@ -201,6 +202,7 @@ function useHint(): string | null {
   if (tool === 'mirror') return `${tap} line to mirror across, or draw one`;
   if (corner) return corner.index < 0 ? 'Rounding all corners' : 'Rounding one corner';
   if (multi) return `${tap} items to add to selection`;
+  if (selectMode === 'points' && tool === 'arrange' && !none) return 'Move points: drag corners and points';
   if (selectMode === 'single' && tool === 'arrange' && !none) return `${count} selected. ${tap} pieces to add or remove.`;
   if (none && selectMode !== 'move') return MODE_HINT(tap)[selectMode] ?? null;
   return null;

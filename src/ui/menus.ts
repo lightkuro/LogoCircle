@@ -2,6 +2,7 @@
  * Right-click (and press-and-hold) menus. One place decides what is offered
  * for whatever is under the pointer, so the menu always matches the thing.
  */
+import { toast } from 'sonner';
 import { flattenEdge, type Pt } from '@/geom';
 import { commit, getDoc, useDoc } from '@/store/doc';
 import { selectionKey, ui, useUi, type MenuItem } from '@/store/ui';
@@ -143,24 +144,43 @@ function cornerItems(g: Guide, index: number | undefined): MenuItem[] {
   return items;
 }
 
-function pointMenu(g: Guide, h: Handle, d: Pt): MenuItem[] {
+/** A corner under a resize handle: Move points puts corners and points first, so it can be dragged. */
+function moveCornerItem(): MenuItem | null {
+  if (ui().selectMode === 'points') return null;
+  return {
+    label: 'Move corner',
+    icon: Move,
+    onSelect: () => {
+      useUi.setState({ selectMode: 'points', tool: 'arrange' });
+      toast('Move points on', { description: 'Drag any corner or point. Select › Move goes back.' });
+    },
+  };
+}
+
+function pointMenu(g: Guide, h: Handle, d: Pt, covered = false): MenuItem[] {
   const items: MenuItem[] = [];
   // On a side's small dot: the whole menu, which starts with "Add a point here".
   if (h.kind === 'mid') return items;
   if (h.kind === 'box') {
     // A square's corner handles round that one corner; its side handles offer all four.
-    if (g.type === 'rect') items.push(...cornerItems(g, RECT_CORNER[h.at]));
-    else {
+    if (g.type === 'rect') {
+      const at = RECT_CORNER[h.at];
+      const move = at !== undefined ? moveCornerItem() : null;
+      if (move) items.push(move);
+      items.push(...cornerItems(g, at).map((it, i) => (i === 0 && move ? { ...it, divide: true } : it)));
+    } else {
       // A point under the stretch handle (a triangle's corners, a polygon's top): its menu, as if clicked directly.
       const tol = 10 / ui().view.k;
       const i = guideHandles(g).findIndex((p) => Math.hypot(p.x - d.x, p.y - d.y) <= tol);
-      if (i >= 0) return pointMenu(g, { kind: 'pt', index: i }, d);
+      if (i >= 0) return pointMenu(g, { kind: 'pt', index: i }, d, true);
     }
     return items;
   }
   if (h.kind !== 'pt') return items;
   const i = h.index;
-  if (g.type === 'poly') items.push(...cornerItems(g, i));
+  const move = covered && g.type === 'poly' ? moveCornerItem() : null;
+  if (move) items.push(move);
+  if (g.type === 'poly') items.push(...cornerItems(g, i).map((it, k) => (k === 0 && move ? { ...it, divide: true } : it)));
   if (g.type === 'path') {
     const n = g.nodes[i];
     const smooth = !!n && (n.ix !== undefined || n.ox !== undefined);

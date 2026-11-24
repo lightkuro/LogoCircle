@@ -33,11 +33,13 @@ export interface Settings {
   dockLevel: number;
   /** Desktop: the tools that get a button of their own when the bar is opened out (null = the usual ones). */
   pins: string[] | null;
+  /** The small dots on the sides of a selected polygon or curve that add a point. */
+  addDots: boolean;
   /** Key bindings that differ from the defaults: command id → combo ('' = no key). */
   keys: Record<string, string>;
 }
 
-const DEFAULTS: Settings = { layout: 'auto', theme: 'auto', dragEmpty: 'pan', haptics: true, toolLabels: true, slidePick: false, dockLevel: 0, pins: null, keys: {} };
+const DEFAULTS: Settings = { layout: 'auto', theme: 'auto', dragEmpty: 'pan', haptics: true, toolLabels: true, slidePick: false, dockLevel: 0, pins: null, addDots: true, keys: {} };
 const KEY = 'lc.settings';
 
 function load(): Settings {
@@ -52,6 +54,7 @@ function load(): Settings {
       slidePick: raw.slidePick === true,
       dockLevel: typeof raw.dockLevel === 'number' && raw.dockLevel >= 0 ? Math.round(raw.dockLevel) : 0,
       pins: Array.isArray(raw.pins) ? raw.pins.filter((x): x is string => typeof x === 'string') : null,
+      addDots: raw.addDots !== false,
       keys: raw.keys && typeof raw.keys === 'object' ? { ...raw.keys } : {},
     };
   } catch {
@@ -74,8 +77,8 @@ export const settings = (): SettingsState => useSettings.getState();
 
 useSettings.subscribe((s) => {
   try {
-    const { layout, theme, dragEmpty, haptics, toolLabels, slidePick, dockLevel, pins, keys } = s;
-    localStorage.setItem(KEY, JSON.stringify({ layout, theme, dragEmpty, haptics, toolLabels, slidePick, dockLevel, pins, keys }));
+    const { layout, theme, dragEmpty, haptics, toolLabels, slidePick, dockLevel, pins, addDots, keys } = s;
+    localStorage.setItem(KEY, JSON.stringify({ layout, theme, dragEmpty, haptics, toolLabels, slidePick, dockLevel, pins, addDots, keys }));
   } catch {
     /* private mode: preferences simply do not persist */
   }

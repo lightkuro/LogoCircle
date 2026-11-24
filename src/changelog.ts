@@ -11,6 +11,16 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.12',
+    date: '24 Nov 2026',
+    changes: [
+      'Move points: corners and points come before resizing, so covered corners can be dragged',
+      'Right-click a corner: Move corner',
+      'Select: hover Move for Normal or Move points; clicking Move or Selection picks the usual one',
+      'Setting to hide the dots that add a point',
+    ],
+  },
+  {
     version: '1.11',
     date: '24 Nov 2026',
     changes: [

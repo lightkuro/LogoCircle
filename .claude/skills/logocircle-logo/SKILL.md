@@ -20,27 +20,39 @@ the areas, so the outlines stay in the file and the person can keep editing.
 2. Build it from the repository root:
 
    ```bash
-   npm run logo -- logos/fox.json
+   npm run -s logo -- logos/fox.json
    ```
 
-   It prints JSON: the files written, `warnings`, and a `summary`. Files land next to the
-   recipe (or in `--out <dir>`):
+   (`-s` keeps npm's own banner out, so the output is JSON only.) It prints the files
+   written, `warnings`, and a `summary`; a recipe it cannot build gives `error` instead and
+   exit code 1. Files land next to the recipe (or in `--out <dir>`), named after the
+   recipe's `name` (`"Ember Roast"` → `ember-roast.*`), or the recipe file's name without one:
    - `<name>.logocircle.json`: the project file to hand over
    - `<name>.png`: the logo as it exports; `<name>.outlines.png`: the same with the outlines drawn in
    - `<name>.svg`: the exported logo
+
+   The `summary`: `outlines`; `areas`, the colored shapes (areas of one color that touch
+   are joined into one shape, and letters are not counted, so this is often fewer than your
+   spots); `words` and `letters`; `colors` in use; and `layout`, the boxes `{x, y, w, h}` of
+   the `mark` (everything but the words), each of the `words`, and `all`, plus the `margins`
+   left to each edge of the frame. Use `layout` to check margins and balance.
 
 3. **Look at both PNGs** (Read them). Fix every warning; each one means something did not
    land as you meant. Adjust and rebuild until it looks right. Use `--check` to only validate.
 4. Hand over the `.logocircle.json`. To open it in LogoCircle: drag it onto the canvas, or
    LogoCircle menu › Open project file. It opens as a new logo; nothing is overwritten.
 
-Other commands: `npm run logo -- --fonts` lists the font ids; `--size 512` makes smaller
-previews; `--no-png` skips them (PNGs need Playwright with Chromium; the SVG is always written).
+Other commands: `npm run -s logo -- --fonts` lists the font ids (with each font's own
+weight); `--size 128` makes smaller previews, named `<name>.128.png` and
+`<name>.128.outlines.png` so the full-size ones stay; `--no-png` skips them (PNGs need
+Playwright with Chromium; the SVG is always written).
 
 ## Recipe format
 
 Coordinates are in the frame: (0, 0) is the top left, x grows right, **y grows down**,
 default frame 1024 × 1024. Angles are in degrees, clockwise.
+
+Recipes are JSON; `//` and `/* */` comments and trailing commas are allowed.
 
 ```jsonc
 {
@@ -68,7 +80,8 @@ default frame 1024 × 1024. Angles are in degrees, clockwise.
 | `curve`   | `points: [[x, y], ...]` (a smooth curve through them), `closed?`                                                                                        |
 
 Any outline can take `width` (> 0): it becomes a thick band (a ring for a circle, a
-stroke for a line) that is itself an area to color. Closed outlines also take
+stroke for a line) that is itself an area to color. Thick lines end round unless
+`ends: "flat"`; thick open curves always end round. Closed outlines also take
 `band`: `"in"` (default), `"mid"` or `"out"`, the side the thickness grows on.
 
 ### Coloring
@@ -85,6 +98,12 @@ area it lands in:
 **Keep spots well inside their area**, away from lines (5 units or more). Where shapes
 overlap, every overlapping piece is a separate area: color each piece you want filled.
 Check `<name>.outlines.png` to see where the areas are.
+
+A shape made of several outlines (a teardrop: a circle and a triangle meeting it) has
+the outlines' inner lines running through it, so it is several areas: put a spot in every
+piece, all in the same color, and they join into one shape. Work out where outlines meet
+(tangent points) with full precision, not rounded to a unit: a point a fraction off a
+circle leaves a hairline sliver that needs a spot of its own.
 
 ### Trim
 
@@ -116,10 +135,10 @@ a shape. A point with no outline within 6 units is skipped (warning).
 - `size` is the font size in frame units (capitals are about 0.7 × size tall).
 - `color` and `border.color`: a palette index or a hex color.
 - `spacing`: letter spacing as a fraction of the size.
-- `weight` (300–900) and `italic` where the font has them; `features` are OpenType tags
+- `weight` (300–900; without it, the font's own weight shown by `--fonts`) and `italic` where the font has them; `features` are OpenType tags
   (Paper Mono: `ss01` code ligatures, `cv01` single-story a, `zero` slashed zero).
 - `border` draws behind the letters (they keep their weight); `hollow: true` leaves only the outline.
-- Fonts: `npm run logo -- --fonts`. Good defaults: `poppins`, `montserrat`, `archivo-black`,
+- Fonts: `npm run -s logo -- --fonts`. Good defaults: `poppins`, `montserrat`, `archivo-black`,
   `bebas-neue`, `unbounded`, `paper-mono`, `playfair-display`, `dm-serif-display`, `pacifico`.
 
 ## Designing well
@@ -142,5 +161,5 @@ overlapping circles, a trimmed vein, a Paper Mono word), `badge.json` (a rounded
 with a star and a word). Build one to see the output:
 
 ```bash
-npm run logo -- .claude/skills/logocircle-logo/examples/peak.json --out /tmp/peak
+npm run -s logo -- .claude/skills/logocircle-logo/examples/peak.json --out /tmp/peak
 ```

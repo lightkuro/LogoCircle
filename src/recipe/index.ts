@@ -7,7 +7,7 @@
  * (.claude/skills/logocircle-logo). Not part of the app's bundle.
  */
 import { faceAt } from '@/engine';
-import { regularPoints, translate, type Pt } from '@/geom';
+import { regularPoints, ringsBBox, translate, type Pt, type Ring } from '@/geom';
 import { DEFAULT_PAPER, newDoc } from '@/model/doc';
 import { buildDocArrangement, paintFaces, visibleGuides } from '@/model/paint';
 import { pieceAt, trimPiece } from '@/model/cut';
@@ -74,8 +74,26 @@ export interface BuildResult {
   /** The project file, as LogoCircle's Open project file expects it. */
   file: { app: 'logocircle'; version: 1; doc: Doc; images: Record<string, string> };
   warnings: string[];
-  /** Outlines, colored areas (not counting letters), words and letters, and the colors in use. */
-  summary: { outlines: number; areas: number; words: number; letters: number; colors: string[] };
+  /**
+   * Outlines; colored shapes (areas of one color that touch are joined into one, letters not
+   * counted); words and letters; the colors in use; and where things sit, to check margins
+   * and balance: the mark, each word, everything, and the space left to each edge of the frame.
+   */
+  summary: {
+    outlines: number;
+    areas: number;
+    words: number;
+    letters: number;
+    colors: string[];
+    layout: { mark: Box | null; words: Box[]; all: Box | null; margins: { left: number; top: number; right: number; bottom: number } | null };
+  };
+}
+
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 const deg = (d: number | undefined): number => ((d ?? 0) * Math.PI) / 180;
@@ -211,8 +229,12 @@ export async function buildRecipe(recipe: Recipe): Promise<BuildResult> {
     spots.forEach((s, i) => {
       const f = faceAt(arr, { x: s[0], y: s[1] });
       if (f < 0) warnings.push(`color[${i}] [${s[0]}, ${s[1]}]: not inside any area (outside every outline, or right on a line); nothing colored`);
-      else if (seen.has(f) && spots[seen.get(f)!]![2] !== s[2]) warnings.push(`color[${i}]: same area as color[${seen.get(f)}] with another color; the later one wins`);
-      else seen.set(f, i);
+      else if (seen.has(f) && spots[seen.get(f)!]![2] !== s[2]) {
+        const o = spots[seen.get(f)!]!;
+        warnings.push(
+          `color[${i}] [${s[0]}, ${s[1]}]: same area as color[${seen.get(f)}] [${o[0]}, ${o[1]}] with another color; the later one wins (check the outlines preview: is the area you meant bounded the way you think?)`,
+        );
+      } else seen.set(f, i);
     });
   }
   const order: number[] = [];
@@ -228,6 +250,7 @@ export async function buildRecipe(recipe: Recipe): Promise<BuildResult> {
 
   // Words
   const texts = recipe.text ?? [];
+  const wordBoxes: Box[] = [];
   if (texts.length) {
     const { layoutText, textShapes } = await import('@/text/layout');
     for (const [i, t] of texts.entries()) {
@@ -261,6 +284,8 @@ export async function buildRecipe(recipe: Recipe): Promise<BuildResult> {
         ...(border ? { border } : null),
       };
       const { shapes, group } = textShapes(layout, info, translate(x0, t.y));
+      const inked = boxOf(shapes.flatMap((s) => s.rings));
+      if (inked) wordBoxes.push(inked);
       if (x0 < 0 || x0 + layout.width > frame.w || t.y - layout.ascent < 0 || t.y - layout.descent > frame.h) warnings.push(`${where}: runs past the frame; make it smaller or move it`);
       doc = { ...doc, shapes: [...doc.shapes, ...shapes], groups: { ...doc.groups, [group.id]: group } };
     }
@@ -272,6 +297,9 @@ export async function buildRecipe(recipe: Recipe): Promise<BuildResult> {
     if (typeof s.fill === 'number') used.add(palette[s.fill]!);
     else if (s.fill) used.add(s.fill);
   }
+  const isText = (s: Doc['shapes'][number]): boolean => !!s.group && !!doc.groups[s.group]?.text;
+  const mark = boxOf(doc.shapes.filter((s) => !isText(s)).flatMap((s) => s.rings));
+  const all = [mark, ...wordBoxes].filter((b): b is Box => !!b).reduce<Box | null>((a, b) => (a ? union(a, b) : b), null);
   return {
     file: { app: 'logocircle', version: 1, doc: { ...doc, updatedAt: Date.now() }, images: {} },
     warnings,
@@ -281,6 +309,12 @@ export async function buildRecipe(recipe: Recipe): Promise<BuildResult> {
       words: texts.length,
       letters: doc.shapes.filter((s) => s.group && doc.groups[s.group]?.text).length,
       colors: [...used],
+      layout: {
+        mark,
+        words: wordBoxes,
+        all,
+        margins: all ? { left: r1(all.x), top: r1(all.y), right: r1(frame.w - all.x - all.w), bottom: r1(frame.h - all.y - all.h) } : null,
+      },
     },
   };
 }
@@ -288,6 +322,22 @@ export async function buildRecipe(recipe: Recipe): Promise<BuildResult> {
 /** The logo as SVG (as exported), or with its outlines drawn in, to look at while working. */
 export function recipePreview(doc: Doc, outlines = false, size = 1024): string {
   return docToSvg(doc, { background: true, guides: outlines, size, guideColor: '#6b7280' });
+}
+
+const r1 = (n: number): number => Math.round(n * 10) / 10;
+
+/** The box around some rings, rounded to a tenth. */
+function boxOf(rings: Ring[]): Box | null {
+  if (!rings.length) return null;
+  const b = ringsBBox(rings);
+  if (!(b.w >= 0) || !Number.isFinite(b.x)) return null;
+  return { x: r1(b.x), y: r1(b.y), w: r1(b.w), h: r1(b.h) };
+}
+
+function union(a: Box, b: Box): Box {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: r1(Math.max(a.x + a.w, b.x + b.w) - x), h: r1(Math.max(a.y + a.h, b.y + b.h) - y) };
 }
 
 function guideBounds(g: Guide): { x0: number; y0: number; x1: number; y1: number } | null {

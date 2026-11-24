@@ -60,15 +60,18 @@ try {
   } else {
     const out = [];
     for (const path of recipes) {
-      const recipe = JSON.parse(await readFile(path, 'utf8'));
       let built;
+      let recipe;
       try {
+        // comments and trailing commas are fine, as in the examples
+        recipe = parseRecipe(await readFile(path, 'utf8'), path);
         built = await mod.buildRecipe(recipe);
       } catch (err) {
         failed = true;
         out.push({ recipe: path, error: err instanceof Error ? err.message : String(err) });
         continue;
       }
+      recipe ??= {};
       const result = { recipe: path, warnings: built.warnings, summary: built.summary };
       if (!flag('--check')) {
         const dir = resolve(option('--out') ?? dirname(path));
@@ -82,10 +85,12 @@ try {
         const file = join(dir, `${slug}.logocircle.json`);
         const svg = join(dir, `${slug}.svg`);
         await writeFile(file, JSON.stringify(built.file));
-        await writeFile(svg, mod.recipePreview(built.file.doc, false, Number(option('--size') ?? 1024)));
+        await writeFile(svg, mod.recipePreview(built.file.doc, false, built.file.doc.artboard.w));
         Object.assign(result, { file, svg });
         if (!flag('--no-png')) {
-          const png = await renderPngs(mod, built.file.doc, join(dir, slug), Number(option('--size') ?? 1024));
+          // previews at another size get their own names, so the full-size ones stay
+          const size = Number(option('--size') ?? 1024);
+          const png = await renderPngs(mod, built.file.doc, join(dir, size === 1024 ? slug : `${slug}.${size}`), size);
           Object.assign(result, png);
         }
       }
@@ -97,6 +102,40 @@ try {
   await server.close();
 }
 process.exit(failed ? 1 : 0);
+
+/** JSON, allowing line and block comments and trailing commas; a clear message when it is not. */
+function parseRecipe(text, path) {
+  let out = '';
+  let i = 0;
+  let str = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (str) {
+      out += c;
+      if (c === '\\') out += text[++i] ?? '';
+      else if (c === '"') str = false;
+      i++;
+    } else if (c === '"') {
+      str = true;
+      out += c;
+      i++;
+    } else if (c === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+    } else if (c === '/' && text[i + 1] === '*') {
+      i = text.indexOf('*/', i + 2);
+      i = i < 0 ? text.length : i + 2;
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  out = out.replace(/,(\s*[\]}])/g, '$1');
+  try {
+    return JSON.parse(out);
+  } catch (err) {
+    throw new Error(`${path} is not valid JSON: ${err instanceof Error ? err.message : err}`);
+  }
+}
 
 function slugify(s) {
   return (

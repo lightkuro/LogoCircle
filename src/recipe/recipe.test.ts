@@ -96,6 +96,16 @@ describe('logo recipes', () => {
     expect(r.file.doc.trimmed?.length).toBe(2);
   });
 
+  it('measures the mark, each word and the margins', async () => {
+    const r = await buildRecipe({ ...base, text: [{ text: 'Logo', y: 800, size: 120 }] });
+    const { mark, words, all, margins } = r.summary.layout;
+    expect(mark).toMatchObject({ x: 292, w: 438 });
+    expect(words).toHaveLength(1);
+    expect(words[0]!.y + words[0]!.h).toBeGreaterThan(780);
+    expect(all!.x).toBe(Math.min(mark!.x, words[0]!.x));
+    expect(margins!.left + all!.w + margins!.right).toBeCloseTo(1024, 0);
+  }, 30000);
+
   it('sets words, with a border, from the bundled fonts', async () => {
     const r = await buildRecipe({ ...base, text: [{ text: 'Logo', y: 800, size: 120, color: 1, border: { width: 6, color: '#ffffff' } }] });
     expect(r.warnings).toEqual([]);

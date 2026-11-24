@@ -4,6 +4,8 @@ import { normalizeRings } from '@/engine';
 import type { Fill, Group, Shape, TextInfo } from '@/model/types';
 import { uid } from '@/model/ids';
 import { loadFont } from './load';
+import { shape } from './gsub';
+import type { TextStyle } from './styles';
 
 /** Turn one glyph's drawing commands into closed rings. */
 function commandsToRings(cmds: PathCommand[]): Ring[] {
@@ -79,44 +81,62 @@ function fontFor(fonts: Font[], ch: string): Font | null {
   return null;
 }
 
+/** The word split into runs that one font draws, so features apply within each. */
+function runs(fonts: Font[], chars: string[]): { font: Font; text: string }[] {
+  const out: { font: Font; text: string }[] = [];
+  for (const ch of chars) {
+    const font = fontFor(fonts, ch) ?? fonts[0]!;
+    const last = out[out.length - 1];
+    if (last && last.font === font) last.text += ch;
+    else out.push({ font, text: ch });
+  }
+  return out;
+}
+
 /**
- * Lay a word out on a baseline starting at the origin. Each character becomes
- * its own set of rings so letters can later be moved one at a time.
+ * Lay a word out on a baseline starting at the origin. Each glyph becomes its
+ * own set of rings so letters can later be moved one at a time; a ligature is
+ * one glyph for several letters, and a spacer glyph that draws nothing gives
+ * its letters to the next one.
  */
-export async function layoutText(value: string, fontId: string, size: number, spacing: number): Promise<Layout> {
-  const fonts = await loadFont(fontId);
+export async function layoutText(value: string, fontId: string, size: number, spacing: number, style?: TextStyle): Promise<Layout> {
+  const fonts = await loadFont(fontId, style);
   const primary = fonts[0]!;
+  const features = style?.features ?? [];
   const glyphs: Glyph[] = [];
   const missing: string[] = [];
   let x = 0;
-  const chars = [...value];
-  for (let i = 0; i < chars.length; i++) {
-    const ch = chars[i]!;
-    if (ch === '\n') continue;
-    const font = fontFor(fonts, ch) ?? primary;
-    const glyph = font.charToGlyph(ch);
+  let pending = '';
+  const chars = [...value].filter((ch) => ch !== '\n');
+  for (const run of runs(fonts, chars)) {
+    const font = run.font;
     const scale = size / font.unitsPerEm;
-    if (/\s/.test(ch)) {
-      x += (glyph.advanceWidth ?? font.unitsPerEm * 0.3) * scale + spacing * size;
-      continue;
-    }
-    if (font.charToGlyphIndex(ch) === 0 && !missing.includes(ch)) missing.push(ch);
-    const path = glyph.getPath(x, 0, size);
-    let rings = commandsToRings(path.commands);
-    if (rings.length) {
-      try {
-        // Many fonts build letters from overlapping pieces; merge them so cuts are clean.
-        const clean = normalizeRings(rings);
-        if (clean.length) rings = clean;
-      } catch {
-        /* keep the raw outline */
+    const items = shape(font, run.text, features);
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]!;
+      const glyph = font.glyphs.get(item.index);
+      if (/^\s+$/.test(item.chars)) {
+        x += (glyph.advanceWidth ?? font.unitsPerEm * 0.3) * scale + spacing * size;
+        continue;
       }
-      glyphs.push({ char: ch, rings });
+      if (item.index === 0) for (const ch of item.chars) if (!missing.includes(ch)) missing.push(ch);
+      let rings = commandsToRings(glyph.getPath(x, 0, size).commands);
+      if (rings.length) {
+        try {
+          // Many fonts build letters from overlapping pieces; merge them so cuts are clean.
+          const clean = normalizeRings(rings);
+          if (clean.length) rings = clean;
+        } catch {
+          /* keep the raw outline */
+        }
+        glyphs.push({ char: pending + item.chars, rings });
+        pending = '';
+      } else pending += item.chars;
+      let adv = (glyph.advanceWidth ?? 0) * scale;
+      const next = items[i + 1];
+      if (next) adv += font.getKerningValue(item.index, next.index) * scale;
+      x += adv + spacing * size;
     }
-    let adv = (glyph.advanceWidth ?? 0) * scale;
-    const next = chars[i + 1];
-    if (next && fontFor(fonts, next) === font) adv += font.getKerningValue(glyph, font.charToGlyph(next)) * scale;
-    x += adv + spacing * size;
   }
   const scale = size / primary.unitsPerEm;
   return {

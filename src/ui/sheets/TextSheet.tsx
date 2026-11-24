@@ -2,16 +2,21 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { ChevronDown, Search, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import '@/styles/text.css';
-import { ringsToPath } from '@/geom';
+import { ringsBBox, ringsToPath, type Pt } from '@/geom';
 import { useDoc } from '@/store/doc';
-import { useUi } from '@/store/ui';
+import { ui, useUi } from '@/store/ui';
 import { resolveFill } from '@/model/doc';
-import { commitText } from '@/actions';
+import { buildText, commitText, placeText, viewCenter, type BuiltText, type TextInput } from '@/actions';
+import { clearTextPreview, useTextPreview } from '@/canvas/textPreview';
+import type { TextStyle } from '@/text/styles';
+import { FontSettings, rememberedStyle, rememberStyle } from './FontSettings';
 import { DEFAULT_FONT, FONTS, FONT_KINDS, type FontDef, type FontKind } from '@/text/fonts';
 import { addCustomFont, cssFontLoaded, cssFontReady, customFonts, cssFamily, isCustomFont, removeCustomFont, restoreCustomFonts } from '@/text/load';
 import type { Layout } from '@/text/layout';
 import { useIsPhone, useLayoutKind } from '@/store/settings';
 import { Segmented, Sheet, Slider } from '../primitives';
+
+type View = ReturnType<typeof ui>['view'];
 
 /** The pages of the phone panel. */
 type Page = 'font' | 'size' | 'color';
@@ -61,19 +66,7 @@ function whenVisible(el: Element, run: () => void): () => void {
   };
 }
 
-const FontTile = memo(function FontTile({
-  def,
-  word,
-  active,
-  onPick,
-  onRemove,
-}: {
-  def: FontDef;
-  word: string;
-  active: boolean;
-  onPick: (id: string) => void;
-  onRemove?: (id: string) => void;
-}) {
+const FontTile = memo(function FontTile({ def, word, active, onPick, onRemove }: { def: FontDef; word: string; active: boolean; onPick: (id: string) => void; onRemove?: (id: string) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   // null = still loading, '' = could not load (falls back to the system font)
   const [family, setFamily] = useState<string | null>(() => (cssFontLoaded(def) ? cssFamily(def) : null));
@@ -112,13 +105,14 @@ const FontTile = memo(function FontTile({
 });
 
 /** The word as it will land on the canvas, on the canvas's own background. Bigger sizes show bigger. */
-function Preview({ value, fontId, spacing, size, color, paper }: { value: string; fontId: string; spacing: number; size: number; color: string; paper: string | null }) {
+function Preview({ value, fontId, spacing, size, color, paper, style }: { value: string; fontId: string; spacing: number; size: number; color: string; paper: string | null; style: TextStyle }) {
   const [layout, setLayout] = useState<Layout | null>(null);
+  const styleKey = JSON.stringify(style);
   useEffect(() => {
     let alive = true;
     const t = setTimeout(() => {
       void import('@/text/layout')
-        .then((m) => m.layoutText(value.trim() || PLACEHOLDER, fontId, 100, spacing))
+        .then((m) => m.layoutText(value.trim() || PLACEHOLDER, fontId, 100, spacing, style))
         .then((l) => alive && setLayout(l))
         .catch(() => alive && setLayout(null));
     }, 60);
@@ -126,7 +120,9 @@ function Preview({ value, fontId, spacing, size, color, paper }: { value: string
       alive = false;
       clearTimeout(t);
     };
-  }, [value, fontId, spacing]);
+    // style is compared by value
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, fontId, spacing, styleKey]);
   const d = useMemo(() => (layout ? layout.glyphs.map((g) => ringsToPath(g.rings, 1)).join('') : ''), [layout]);
   const w = Math.max(40, layout?.width ?? 200);
   const asc = layout?.ascent ?? 100;
@@ -221,7 +217,8 @@ function HalfPanel({
     setPull(null);
     if (!d) return;
     const dy = e.clientY - d.y;
-    if (!d.moved) onExpanded(!expanded); // a tap on the grip
+    if (!d.moved)
+      onExpanded(!expanded); // a tap on the grip
     else if (dy < -36) onExpanded(true);
     else if (dy > 36) expanded ? onExpanded(false) : onClose();
   };
@@ -288,6 +285,8 @@ export function TextSheet() {
   const [size, setSize] = useState(220);
   const [spacing, setSpacing] = useState(0);
   const [fill, setFill] = useState<number | string>(0);
+  // weight, italic and OpenType features of the chosen font
+  const [style, setStyleState] = useState<TextStyle>({});
   const [busy, setBusy] = useState(false);
   const [mine, setMine] = useState<FontDef[]>(customFonts);
   const [more, setMore] = useState(false);
@@ -311,6 +310,9 @@ export function TextSheet() {
     setSize(existing?.size ?? 220);
     setSpacing(existing?.spacing ?? 0);
     setFill(existing?.fill ?? (typeof ink === 'number' && ink < palette.length ? ink : 0));
+    setStyleState(existing ? { weight: existing.weight, italic: existing.italic, features: existing.features ?? [] } : rememberedStyle(font));
+    clearTextPreview();
+    latest.current = null;
     setQuery('');
     setKind('all');
     setExpanded(false);
@@ -334,6 +336,7 @@ export function TextSheet() {
 
   const pick = (id: string): void => {
     setFontId(id);
+    setStyleState(rememberedStyle(id));
     try {
       localStorage.setItem('lc.font', id);
     } catch {
@@ -341,17 +344,149 @@ export function TextSheet() {
     }
   };
 
+  const setStyle = (next: TextStyle): void => {
+    setStyleState(next);
+    rememberStyle(fontId, next);
+  };
+
   const close = (): void => useUi.setState({ sheet: null, textTarget: null });
   // Nothing typed? Then it says "Test": a word to place now and change later.
   const text = value.trim() ? value : PLACEHOLDER;
+  const safeFill = typeof fill === 'number' && fill >= palette.length ? 0 : fill;
+  const params: TextInput = { value: text, fontId, size, spacing, fill: safeFill, weight: style.weight, italic: style.italic, features: style.features };
+  const inputKey = JSON.stringify([params, target]);
+
+  // Desktop: the word is drawn on the canvas as it is typed, and lands when the panel closes.
+  const live = !upright;
+  const latest = useRef<{ key: string; built: BuiltText } | null>(null);
+  // Where a new word lands, fixed when the panel opens, so moving the canvas aside does not move it.
+  const anchor = useRef<Pt | undefined>(undefined);
+  // The view before the canvas slid aside to keep the word clear of the panel.
+  const savedView = useRef<View | null>(null);
+  const restoreView = (): void => {
+    if (savedView.current) useUi.setState({ view: savedView.current });
+    savedView.current = null;
+  };
+  /** Slide the canvas just enough that the word is not under the panel. */
+  const reveal = (built: BuiltText | null | undefined): void => {
+    const panel = document.querySelector('.dialog[data-place="left"]')?.getBoundingClientRect();
+    const stage = document.querySelector('.stage-svg')?.getBoundingClientRect();
+    if (!built || !panel || !stage) return;
+    const base = savedView.current ?? ui().view;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const sh of built.shapes) {
+      const b = ringsBBox(sh.rings);
+      lo = Math.min(lo, b.x);
+      hi = Math.max(hi, b.x + b.w);
+    }
+    if (!Number.isFinite(lo)) return;
+    const l = lo * base.k + base.x;
+    const r = hi * base.k + base.x;
+    const free = panel.right - stage.left + 24;
+    const room = stage.width - 24 - free;
+    if (l >= free) return restoreView();
+    // centred in the room beside the panel when it fits, else starting at its edge
+    const dx = r - l <= room ? free + (room - (r - l)) / 2 - l : free - l;
+    savedView.current ??= ui().view;
+    useUi.setState({ view: { ...base, x: base.x + dx } });
+  };
+  useEffect(() => {
+    if (!open || !live) return;
+    anchor.current = viewCenter();
+    // Dragging the panel wider can cover the word: slide again.
+    let ro: ResizeObserver | null = null;
+    const id = requestAnimationFrame(() => {
+      const el = document.querySelector('.dialog[data-place="left"]');
+      if (!el || typeof ResizeObserver !== 'function') return;
+      ro = new ResizeObserver(() => reveal(latest.current?.built));
+      ro.observe(el);
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      ro?.disconnect();
+      // the canvas slides back when the panel goes
+      restoreView();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, live]);
+  useEffect(() => {
+    if (!open || !live) return;
+    let alive = true;
+    const key = inputKey;
+    const t = setTimeout(() => {
+      buildText(params, target, anchor.current).then(
+        (built) => {
+          // a newer change has started since: this one is out of date
+          if (!alive) return;
+          latest.current = built ? { key, built } : null;
+          useTextPreview.setState(built ? { d: built.shapes.map((sh) => ringsToPath(sh.rings)).join(''), fill: built.group.text!.fill, hide: built.replaces } : { d: null, hide: null });
+          reveal(built);
+        },
+        () => undefined,
+      );
+    }, 30);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+    // the input is compared by value, through its key
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, live, inputKey]);
+
+  /** Is the word being retyped exactly as it was? Then closing changes nothing. */
+  const unchanged = (): boolean => {
+    if (!existing) return false;
+    const same = (a?: string[], b?: string[]): boolean => [...(a ?? [])].sort().join() === [...(b ?? [])].sort().join();
+    return (
+      existing.value === text.trim() &&
+      existing.fontId === fontId &&
+      existing.size === size &&
+      existing.spacing === spacing &&
+      existing.fill === safeFill &&
+      existing.weight === style.weight &&
+      !!existing.italic === !!style.italic &&
+      same(existing.features, style.features)
+    );
+  };
+
+  /** Desktop: put the word on the canvas. The panel goes at once; the preview stays until the word lands. */
+  const land = async (): Promise<void> => {
+    const key = inputKey;
+    const ready = latest.current?.key === key ? latest.current.built : null;
+    latest.current = null;
+    close();
+    try {
+      if (unchanged()) return;
+      const built = ready ?? (await buildText(params, target, anchor.current));
+      if (built) placeText(built);
+    } catch {
+      toast.error("Font didn't load. Check connection and try again.");
+    } finally {
+      clearTextPreview();
+    }
+  };
+
+  /** X or Esc: nothing changes. Anything else that closes the panel puts the word down. */
+  const finish = (reason?: string): void => {
+    if (!live) return close();
+    if (reason === 'close-press' || reason === 'escape-key') {
+      latest.current = null;
+      clearTextPreview();
+      return close();
+    }
+    void land();
+  };
+
   const submit = async (): Promise<void> => {
+    if (live) return land();
     if (busy) return;
     setBusy(true);
     try {
-      const ok = await commitText({ value: text, fontId, size, spacing, fill }, target);
+      const ok = await commitText(params, target);
       if (ok) close();
     } catch {
-      toast.error('That font could not be loaded. Check your connection and try again.');
+      toast.error("Font didn't load. Check connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -364,7 +499,7 @@ export function TextSheet() {
       setMine(customFonts());
       pick(def.id);
     } catch {
-      toast.error('That file is not a font this app can read (TTF, OTF or WOFF).');
+      toast.error("Can't read that font. Use TTF, OTF or WOFF.");
     }
   };
 
@@ -387,11 +522,17 @@ export function TextSheet() {
     return pool.filter((f) => (kind === 'all' || f.kind === kind) && (!q || f.name.toLowerCase().includes(q)));
   }, [q, kind, mine]);
 
-  const safeFill = typeof fill === 'number' && fill >= palette.length ? 0 : fill;
-
   const title = existing ? 'Edit text' : 'Add text';
   const add = (
-    <button type="button" className="btn" data-variant="primary" data-size={upright ? undefined : 'lg'} style={upright ? { height: 46, flexShrink: 0 } : { width: '100%' }} disabled={busy} onClick={() => void submit()}>
+    <button
+      type="button"
+      className="btn"
+      data-variant="primary"
+      data-size={upright ? undefined : 'lg'}
+      style={upright ? { height: 46, flexShrink: 0 } : { width: '100%' }}
+      disabled={busy}
+      onClick={() => void submit()}
+    >
       {existing ? 'Update' : upright ? 'Add' : 'Add to canvas'}
     </button>
   );
@@ -415,13 +556,16 @@ export function TextSheet() {
       }}
     />
   );
-  const preview = <Preview value={value} fontId={fontId} spacing={spacing} size={size} color={resolveFill({ palette }, safeFill)} paper={paper} />;
+  const preview = <Preview value={value} fontId={fontId} spacing={spacing} size={size} color={resolveFill({ palette }, safeFill)} paper={paper} style={style} />;
 
   const ownFont = (
-    <button type="button" className="tx-pill" onClick={() => file.current?.click()}>
-      <Upload />
-      Your font
-    </button>
+    <span className="tx-own">
+      <FontSettings fontId={fontId} style={style} onChange={setStyle} />
+      <button type="button" className="tx-pill" onClick={() => file.current?.click()}>
+        <Upload />
+        Your font
+      </button>
+    </span>
   );
   const fonts = (
     <>
@@ -453,9 +597,7 @@ export function TextSheet() {
       </div>
 
       <button type="button" className="tx-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>
-        <span>
-          More fonts
-        </span>
+        <span>More fonts</span>
         <ChevronDown />
       </button>
 
@@ -494,7 +636,7 @@ export function TextSheet() {
               ))}
             </div>
           ) : (
-            <p className="tx-empty">No font by that name here. Your font adds one from a file.</p>
+            <p className="tx-empty">No font by that name. Add one with Your font.</p>
           )}
         </>
       )}
@@ -503,9 +645,7 @@ export function TextSheet() {
   );
 
   const sizeSlider = <Slider label="Size" min={40} max={480} step={2} typeMax={1200} value={size} onChange={setSize} format={(v) => String(Math.round(v))} />;
-  const spacingSlider = (
-    <Slider label="Letter spacing" min={-8} max={40} typeMax={200} value={Math.round(spacing * 100)} onChange={(v) => setSpacing(v / 100)} format={(v) => String(Math.round(v))} />
-  );
+  const spacingSlider = <Slider label="Letter spacing" min={-8} max={40} typeMax={200} value={Math.round(spacing * 100)} onChange={(v) => setSpacing(v / 100)} format={(v) => String(Math.round(v))} />;
   const sliders = upright ? (
     // Phones: one line each, so both fit in the half-height panel.
     <div className="txp-sliders">
@@ -578,17 +718,30 @@ export function TextSheet() {
     );
   }
 
+  // Desktop: the word shows on the canvas, so the panel is the field, the fonts (which scroll),
+  // and size, spacing and color, always in view at the bottom.
   return (
-    <Sheet open={open} onClose={close} title={title} place="left">
-      <div className="tx-top">
-        {preview}
-        <div className="mt-2.5">{field}</div>
+    <Sheet open={open} onClose={finish} title={title} place="left" name="text">
+      <div className="tx-desk">
+        <div className="tx-desk-field">{field}</div>
+        <div className="tx-desk-fonts" ref={body}>
+          {fonts}
+        </div>
+        <div className="tx-desk-controls">
+          <div className="txp-sliders">
+            <div className="txp-slider">
+              <span>Size</span>
+              {sizeSlider}
+            </div>
+            <div className="txp-slider">
+              <span>Spacing</span>
+              {spacingSlider}
+            </div>
+          </div>
+          {colors}
+          {add}
+        </div>
       </div>
-      {fonts}
-      {sliders}
-      <div className="label">Color</div>
-      {colors}
-      <div className="tx-foot">{add}</div>
     </Sheet>
   );
 }

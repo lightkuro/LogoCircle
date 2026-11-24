@@ -9,7 +9,7 @@ import { ui, useUi, remember, type Mode, type Tool } from '@/store/ui';
 import { putImage, saveNow } from '@/store/persist';
 import { isPhone, isSide, isTouch } from '@/store/settings';
 import { keyLabel } from '@/keys';
-import { CLASSIC_COLORS, type Doc, type Guide, type RefImage, type Shape } from '@/model/types';
+import { CLASSIC_COLORS, type Doc, type Group, type Guide, type RefImage, type Shape } from '@/model/types';
 import { addGuide, addRef, applyPalette, duplicateItems, removeColor, removeItems, selectionBBox, transformItems, contentBBox } from '@/model/ops';
 import { visibleGuides } from '@/model/paint';
 import { board, groupMembers, newDoc } from '@/model/doc';
@@ -610,33 +610,65 @@ export interface TextInput {
   size: number;
   spacing: number;
   fill: number | string;
+  weight?: number;
+  italic?: boolean;
+  features?: string[];
+}
+
+/** A word laid out where it will land, ready to go on the canvas. */
+export interface BuiltText {
+  shapes: Shape[];
+  group: Group;
+  /** The word it takes the place of, when retyping one. */
+  replaces: string | null;
+  missing: string[];
+}
+
+/**
+ * Lay a word out where it will land: centred on `center` (the middle of the
+ * view unless given), or in place of the word being retyped.
+ */
+export async function buildText(input: TextInput, target: string | null, center?: Pt): Promise<BuiltText | null> {
+  const { layoutText, textShapes } = await import('@/text/layout');
+  const value = input.value.trim();
+  if (!value) return null;
+  const features = input.features?.length ? [...input.features].sort() : undefined;
+  const layout = await layoutText(value, input.fontId, input.size, input.spacing, { weight: input.weight, italic: input.italic, features });
+  if (!layout.glyphs.length) return null;
+  const info = {
+    value,
+    fontId: input.fontId,
+    size: input.size,
+    spacing: input.spacing,
+    fill: input.fill,
+    ...(input.weight !== undefined ? { weight: input.weight } : null),
+    ...(input.italic ? { italic: true } : null),
+    ...(features ? { features } : null),
+  };
+  const existing = target ? getDoc().groups[target] : undefined;
+  if (existing?.text) return { ...textShapes(layout, info, existing.text.m, existing.id), replaces: existing.id, missing: layout.missing };
+  const c = center ?? viewCenter();
+  const m = translate(c.x - layout.width / 2, c.y + (layout.ascent + layout.descent) / 2 - layout.descent * 0.15);
+  return { ...textShapes(layout, info, m), replaces: null, missing: layout.missing };
+}
+
+/** Put a built word on the canvas (one undo step) and select it. */
+export function placeText(built: BuiltText): void {
+  const doc = getDoc();
+  const { shapes, group } = built;
+  const at = built.replaces ? doc.shapes.findIndex((s) => s.group === built.replaces) : -1;
+  const rest = built.replaces ? doc.shapes.filter((s) => s.group !== built.replaces) : [...doc.shapes];
+  rest.splice(at < 0 ? rest.length : Math.min(at, rest.length), 0, ...shapes);
+  commit({ ...doc, shapes: rest, groups: { ...doc.groups, [group.id]: group }, updatedAt: Date.now() });
+  useUi.setState({ selection: shapes.map((s) => s.id), tool: 'arrange', erasing: false });
+  if (built.missing.length) toast(`This font has no “${built.missing.join('')}”`, { description: 'Try another font for these.' });
 }
 
 /** Add a word to the canvas, or retype an existing (untouched) one. */
 export async function commitText(input: TextInput, target: string | null): Promise<boolean> {
-  const { layoutText, textShapes } = await import('@/text/layout');
-  const value = input.value.trim();
-  if (!value) return false;
-  const layout = await layoutText(value, input.fontId, input.size, input.spacing);
-  if (!layout.glyphs.length) return false;
-  const doc = getDoc();
-  const info = { value, fontId: input.fontId, size: input.size, spacing: input.spacing, fill: input.fill };
-  const existing = target ? doc.groups[target] : undefined;
-  if (existing?.text) {
-    const { shapes, group } = textShapes(layout, info, existing.text.m, existing.id);
-    const at = doc.shapes.findIndex((s) => s.group === existing.id);
-    const rest = doc.shapes.filter((s) => s.group !== existing.id);
-    rest.splice(at < 0 ? rest.length : Math.min(at, rest.length), 0, ...shapes);
-    commit({ ...doc, shapes: rest, groups: { ...doc.groups, [group.id]: group }, updatedAt: Date.now() });
-    useUi.setState({ selection: shapes.map((s) => s.id), tool: 'arrange', erasing: false });
-  } else {
-    const c = viewCenter();
-    const m = translate(c.x - layout.width / 2, c.y + (layout.ascent + layout.descent) / 2 - layout.descent * 0.15);
-    const { shapes, group } = textShapes(layout, info, m);
-    commit({ ...doc, shapes: [...doc.shapes, ...shapes], groups: { ...doc.groups, [group.id]: group }, updatedAt: Date.now() });
-    useUi.setState({ selection: shapes.map((s) => s.id), tool: 'arrange', erasing: false });
-  }
-  if (layout.missing.length) toast(`This font has no “${layout.missing.join('')}”`, { description: 'Try another font for these.' });
+  const built = await buildText(input, target);
+  if (!built) return false;
+  placeText(built);
   return true;
 }
 

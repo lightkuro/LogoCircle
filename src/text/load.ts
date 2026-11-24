@@ -1,6 +1,7 @@
 import type { Font } from 'opentype.js';
 import { createStore, del, get, keys, set } from 'idb-keyval';
 import { DEFAULT_FONT, FONTS, type FontDef } from './fonts';
+import { styleTable, type TextStyle } from './styles';
 
 const parsed = new Map<string, Promise<Font>>();
 const custom = new Map<string, { def: FontDef; data: ArrayBuffer }>();
@@ -74,8 +75,8 @@ export function restoreCustomFonts(): Promise<FontDef[]> {
   return restored.then(() => customFonts());
 }
 
-/** The font files for an id, parsed. The first one is the primary. */
-export async function loadFont(id: string): Promise<Font[]> {
+/** The font files for an id (in a weight and slant, where it has them), parsed. The first one is the primary. */
+export async function loadFont(id: string, style?: Pick<TextStyle, 'weight' | 'italic'>): Promise<Font[]> {
   if (isCustomFont(id) && !custom.has(id)) await restoreCustomFonts();
   const c = custom.get(id);
   if (c) {
@@ -89,8 +90,11 @@ export async function loadFont(id: string): Promise<Font[]> {
     return [await p];
   }
   const def = FONTS.find((f) => f.id === id) ?? FONTS.find((f) => f.id === DEFAULT_FONT) ?? FONTS[0]!;
-  const primary = await parse(def.urls[0]!);
-  return [primary, ...(await Promise.all(def.urls.slice(1).map((u) => parse(u).catch(() => null)))).filter((f): f is Font => !!f)];
+  // a weight or slant other than the default: look its files up (the table loads on first use)
+  const other = style?.italic || (style?.weight !== undefined && style.weight !== def.weight);
+  const urls = (other ? (await styleTable()).styleUrls(def, style?.weight, style?.italic) : null) ?? def.urls;
+  const primary = await parse(urls[0]!);
+  return [primary, ...(await Promise.all(urls.slice(1).map((u) => parse(u).catch(() => null)))).filter((f): f is Font => !!f)];
 }
 
 /** Register a font file the person uploaded. Returns its definition. */
@@ -105,7 +109,12 @@ export async function addCustomFont(file: File): Promise<FontDef> {
     /* some fonts carry no usable name table */
   }
   name = (name || file.name.replace(/\.[^.]+$/, '')).trim().slice(0, 60) || 'My font';
-  const id = `custom-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'font'}`;
+  const id = `custom-${
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'font'
+  }`;
   custom.delete(id); // uploading the same font again replaces it
   cssReady.delete(id);
   cssLoaded.delete(id);

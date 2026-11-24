@@ -242,6 +242,69 @@ export function Slider({
 
 export type SheetPlace = 'center' | 'top-left' | 'top-right' | 'left';
 
+const MIN_PANEL = 300;
+const panelMax = (): number => Math.min(960, window.innerWidth - 40);
+
+/**
+ * The width of a side panel that can be dragged wider by its edge, kept per
+ * panel for next time. Null until the panel has been dragged (the stylesheet's
+ * width applies).
+ */
+export function usePanelWidth(key: string): [number | null, (w: number | null) => void] {
+  const store = `lc.width.${key}`;
+  const [w, setW] = useState<number | null>(() => {
+    try {
+      const v = Number(localStorage.getItem(store));
+      return v >= MIN_PANEL ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const set = (next: number | null): void => {
+    setW(next);
+    try {
+      if (next === null) localStorage.removeItem(store);
+      else localStorage.setItem(store, String(Math.round(next)));
+    } catch {
+      /* private mode: the width lasts for this visit */
+    }
+  };
+  return [w === null ? null : Math.min(w, panelMax()), set];
+}
+
+/**
+ * The edge of a side panel, to drag it wider or narrower. Double-click puts it
+ * back. `side` is the edge it sits on: right for a panel on the left.
+ */
+export function PanelEdge({ side, width, onWidth }: { side: 'left' | 'right'; width: number | null; onWidth: (w: number | null) => void }) {
+  const from = useRef<{ x: number; w: number } | null>(null);
+  return (
+    <div
+      className="panel-edge"
+      data-side={side}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Drag to resize"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const panel = e.currentTarget.parentElement!;
+        from.current = { x: e.clientX, w: width ?? panel.getBoundingClientRect().width };
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        const f = from.current;
+        if (!f) return;
+        const d = (e.clientX - f.x) * (side === 'right' ? 1 : -1);
+        onWidth(Math.max(MIN_PANEL, Math.min(panelMax(), f.w + d)));
+      }}
+      onPointerUp={() => (from.current = null)}
+      onPointerCancel={() => (from.current = null)}
+      onDoubleClick={() => onWidth(null)}
+    />
+  );
+}
+
 export function Sheet({
   open,
   onClose,
@@ -250,6 +313,7 @@ export function Sheet({
   wide,
   actions,
   place = 'center',
+  name,
 }: {
   open: boolean;
   onClose: () => void;
@@ -263,9 +327,15 @@ export function Sheet({
    * Phones always get a bottom sheet.
    */
   place?: SheetPlace;
+  /** Remembers the panel's width under this name; defaults to the title. */
+  name?: string;
 }) {
   // Upright phones get a sheet from the bottom; a phone on its side has the room for a side panel.
-  const phone = useLayoutKind() === 'phone';
+  const kind = useLayoutKind();
+  const phone = kind === 'phone';
+  // Side panels on a desktop can be dragged wider by their inner edge.
+  const [width, setWidth] = usePanelWidth(name ?? title);
+  const resizable = kind === 'desktop' && place !== 'center';
   const head = (Title: typeof Dialog.Title | typeof Drawer.Title, Close: typeof Dialog.Close | typeof Drawer.Close) => (
     <div className="sheet-head">
       <Title className="sheet-title">{title}</Title>
@@ -297,9 +367,10 @@ export function Sheet({
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Backdrop className="backdrop" data-clear={place !== 'center' || undefined} />
-        <Dialog.Popup className="dialog" data-wide={wide || undefined} data-place={place}>
+        <Dialog.Popup className="dialog" data-wide={wide || undefined} data-place={place} style={resizable && width ? { width } : undefined}>
           {head(Dialog.Title, Dialog.Close)}
           <div className="sheet-body">{children}</div>
+          {resizable && <PanelEdge side={place === 'top-right' ? 'left' : 'right'} width={width} onWidth={setWidth} />}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

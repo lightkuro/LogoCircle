@@ -979,6 +979,39 @@ select {
   bottom: 96px;
   max-height: none;
 }
+/* The inner edge of a side panel: drag to make it wider. */
+.panel-edge {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  width: 12px;
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 2;
+}
+.panel-edge[data-side='right'] {
+  right: -6px;
+}
+.panel-edge[data-side='left'] {
+  left: -6px;
+}
+.panel-edge::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 4px;
+  height: 36px;
+  margin-top: -18px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
+}
+.panel-edge:hover::after,
+.panel-edge:active::after {
+  opacity: 1;
+}
 .dialog[data-place='top-left'][data-starting-style],
 .dialog[data-place='top-left'][data-ending-style],
 .dialog[data-place='top-right'][data-starting-style],

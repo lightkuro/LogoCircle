@@ -11,7 +11,7 @@ import { expandToGroup, transformSelection } from '@/actions';
 import { useDrag } from './drag';
 import { hitItems } from './hit';
 import { boxHandleMatrix, placeHandles, rotateMatrix, selectionFrame, singleGuide, type Frame, type Handle } from './frame';
-import { snapMove, snapPoint } from './snapping';
+import { snapMove, snapPoint, snapTangent } from './snapping';
 import { toDoc, toScreen, zoomAt } from './view';
 
 /** Custom drawing tools (pen, brush) plug in here; they take over the pointer while active. */
@@ -322,7 +322,10 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           }
           let lines: { a: Pt; b: Pt }[] = [];
           if (g.box && !e.altKey && s.snap) {
-            const sn = snapMove(doc, g.ids, g.box, dx, dy, 6 / s.view.k, s.grid);
+            // A lone circle first tries to sit exactly against its neighbours.
+            const only = g.ids.size === 1 ? [...g.ids][0]! : null;
+            const tan = only ? snapTangent(doc, only, dx, dy, 5 / s.view.k) : null;
+            const sn = tan ?? snapMove(doc, g.ids, g.box, dx, dy, 6 / s.view.k, s.grid);
             dx = sn.dx;
             dy = sn.dy;
             lines = sn.lines;

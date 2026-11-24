@@ -246,3 +246,60 @@ function nearestCrossing(doc: Doc, excludeId: string, p: Pt, tol: number): Pt | 
   }
   return best;
 }
+
+/**
+ * While a single circle is being moved: if it comes close to just touching
+ * another circle or a line, make it touch exactly. Touching outlines are what
+ * geometric marks are built from, and a near-miss leaves a hairline gap.
+ */
+export function snapTangent(doc: Doc, id: string, dx: number, dy: number, tol: number): { dx: number; dy: number; lines: SnapLine[] } | null {
+  const me = doc.guides.find((g) => g.id === id);
+  if (!me || me.type !== 'ellipse' || Math.abs(me.rx - me.ry) > 1e-6 * me.rx) return null;
+  if (doc.guides.length > 150) return null;
+  const r = me.rx;
+  const cx = me.cx + dx;
+  const cy = me.cy + dy;
+  let best: { dx: number; dy: number; line: SnapLine } | null = null;
+  let bestD = tol;
+  for (const g of doc.guides) {
+    if (g.id === id || g.hidden) continue;
+    if (g.type === 'ellipse' && Math.abs(g.rx - g.ry) <= 1e-6 * g.rx) {
+      const ox = cx - g.cx;
+      const oy = cy - g.cy;
+      const d = Math.hypot(ox, oy);
+      if (d < 1e-6) continue;
+      // touching from outside, or from inside (one within the other)
+      for (const want of [g.rx + r, Math.abs(g.rx - r)]) {
+        if (want < 1e-6) continue;
+        const off = Math.abs(d - want);
+        if (off < bestD) {
+          bestD = off;
+          const k = want / d;
+          const nx = g.cx + ox * k;
+          const ny = g.cy + oy * k;
+          const touch = { x: g.cx + (ox / d) * g.rx, y: g.cy + (oy / d) * g.rx };
+          best = { dx: dx + (nx - cx), dy: dy + (ny - cy), line: { a: { x: g.cx, y: g.cy }, b: touch } };
+        }
+      }
+    } else if (g.type === 'line' && g.width === 0) {
+      const lx = g.x1 - g.x0;
+      const ly = g.y1 - g.y0;
+      const len = Math.hypot(lx, ly);
+      if (len < 1e-6) continue;
+      const t = ((cx - g.x0) * lx + (cy - g.y0) * ly) / (len * len);
+      if (t < 0 || t > 1) continue;
+      // signed distance from the line
+      const sd = ((cx - g.x0) * ly - (cy - g.y0) * lx) / len;
+      const off = Math.abs(Math.abs(sd) - r);
+      if (off < bestD) {
+        bestD = off;
+        const push = (Math.sign(sd) || 1) * r - sd;
+        const nx = ly / len;
+        const ny = -lx / len;
+        const foot = { x: g.x0 + lx * t, y: g.y0 + ly * t };
+        best = { dx: dx + nx * push, dy: dy + ny * push, line: { a: foot, b: { x: cx + nx * push, y: cy + ny * push } } };
+      }
+    }
+  }
+  return best ? { dx: best.dx, dy: best.dy, lines: [best.line] } : null;
+}

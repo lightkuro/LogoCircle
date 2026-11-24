@@ -37,6 +37,8 @@ npm test
 npm run build
 ```
 
+`npm test` runs the region engine's unit and property tests. `npm run e2e` (after a build) drives the built app in a real browser on a desktop and a phone viewport and rebuilds the three kinds of logo the app was designed around; it needs Playwright (`npm i -D playwright && npx playwright install chromium`).
+
 ## Deploy to Cloudflare (free)
 
 The app is a static site served by Cloudflare Workers static assets. There is no server code, and asset requests are free and unlimited.

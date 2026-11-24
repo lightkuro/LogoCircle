@@ -14,7 +14,17 @@ import { finishPen, undoPenPoint, usePen } from '@/advanced/tools';
 function Chip({ label, icon, onClick, disabled, tone, tip, keys, active }: { label?: string; icon: React.ReactNode; onClick?: () => void; disabled?: boolean; tone?: 'danger'; tip: string; keys?: string; active?: boolean }) {
   return (
     <Tip label={tip} keys={keys}>
-      <button type="button" className="chip" data-tone={tone} data-active={active || undefined} aria-label={tip} disabled={disabled} onClick={onClick}>
+      <button
+        type="button"
+        className="chip"
+        data-tone={tone}
+        data-active={active || undefined}
+        aria-pressed={active}
+        // A visible label is the name; the tooltip only names icon-only buttons.
+        aria-label={label ? undefined : tip}
+        disabled={disabled}
+        onClick={onClick}
+      >
         {icon}
         {label}
       </button>

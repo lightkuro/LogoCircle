@@ -922,6 +922,7 @@ async function firstVisit(browser, phone) {
   await addBtn.click();
   const newPanel = page.getByRole('dialog', { name: 'New color' });
   check((await newPanel.locator('.basic-dot[data-active]').count()) === 0 && (await newPanel.getByLabel('Hex color').inputValue()) === '#2a9d55', 'a new color starts on green, with nothing marked as chosen');
+  check((await newPanel.getByRole('button', { name: /^Sets/ }).count()) === 1 && (await newPanel.getByRole('button', { name: 'Remove color' }).count()) === 0, 'the new color panel has Sets (and nothing to remove)');
   await page.keyboard.press('Escape');
   check((await page.evaluate(() => window.__lc.doc().palette.length)) === 2, 'opening Add and leaving adds nothing');
   await addBtn.click();

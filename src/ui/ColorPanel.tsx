@@ -230,7 +230,7 @@ export function ColorPanel({ target, align }: { target: number | 'paper' | 'new'
           onBlur={() => setText(value)}
           onKeyDown={(e) => e.key === 'Enter' && useUi.setState({ colorPanel: null })}
         />
-        {target !== 'paper' && slot !== null && target !== 'new' && (
+        {target !== 'paper' && (
           <>
             <button type="button" className="chip" style={{ height: 34, padding: '0 9px' }} aria-expanded={more} onClick={() => setMore(!more)}>
               Sets
@@ -243,21 +243,16 @@ export function ColorPanel({ target, align }: { target: number | 'paper' | 'new'
                 }}
               />
             </button>
-            <button
-              type="button"
-              className="ib"
-              style={{ width: 34, height: 34 }}
-              aria-label="Remove color"
-              title="Remove color"
-              disabled={palette.length <= 1}
-              onClick={() => removeSwatch(slot)}
-            >
-              <Trash2 style={{ width: 16, height: 16 }} />
-            </button>
+            {/* only a color that exists can be removed */}
+            {target !== 'new' && slot !== null && (
+              <button type="button" className="ib" style={{ width: 34, height: 34 }} aria-label="Remove color" title="Remove color" disabled={palette.length <= 1} onClick={() => removeSwatch(slot)}>
+                <Trash2 style={{ width: 16, height: 16 }} />
+              </button>
+            )}
           </>
         )}
       </div>
-      {more && target !== 'paper' && target !== 'new' && (
+      {more && target !== 'paper' && (
         <div className="pt-2">
           <div className="grid grid-cols-2 gap-1" role="group" aria-label="Color sets">
             {PALETTES.map((p) => (

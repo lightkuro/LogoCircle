@@ -5,6 +5,7 @@ import { useDoc } from '@/store/doc';
 import { loadCurrent, startAutosave } from '@/store/persist';
 import { openDoc, addPhoto } from '@/actions';
 import { remember } from '@/store/ui';
+import { useDocumentAttributes, useIsDark } from '@/store/settings';
 import { useShortcuts } from '@/shortcuts';
 import { TopBar } from '@/ui/TopBar';
 import { Dock } from '@/ui/Dock';
@@ -28,6 +29,8 @@ const seenBefore = (): boolean => {
 export function App() {
   const [, setReady] = useState(false);
   const phone = useIsPhone();
+  const dark = useIsDark();
+  useDocumentAttributes();
   useShortcuts();
 
   useEffect(() => {
@@ -92,7 +95,7 @@ export function App() {
         <AdvancedPanel />
         <Sheets />
         <ContextMenu />
-        <Toaster position="top-center" offset={phone ? 76 : 72} mobileOffset={76} toastOptions={{ style: { borderRadius: 14 } }} />
+        <Toaster theme={dark ? 'dark' : 'light'} position="top-center" offset={phone ? 76 : 72} mobileOffset={76} toastOptions={{ style: { borderRadius: 14 } }} />
       </div>
     </TipProvider>
   );

@@ -5,18 +5,8 @@ import { Slider as BaseSlider } from '@base-ui/react/slider';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { X } from 'lucide-react';
 
-/** True on narrow (phone-sized) viewports. */
-export function useIsPhone(): boolean {
-  const q = '(max-width: 639px)';
-  const [phone, setPhone] = useState(() => (typeof matchMedia === 'function' ? matchMedia(q).matches : false));
-  useEffect(() => {
-    const m = matchMedia(q);
-    const on = (): void => setPhone(m.matches);
-    m.addEventListener('change', on);
-    return () => m.removeEventListener('change', on);
-  }, []);
-  return phone;
-}
+export { useIsPhone, useIsTouch } from '@/store/settings';
+import { useIsPhone } from '@/store/settings';
 
 /** Wide enough to lay the whole dock out in one row. */
 export function useIsWide(): boolean {

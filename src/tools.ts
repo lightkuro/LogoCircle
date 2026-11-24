@@ -1,4 +1,5 @@
 /** Drawing tools: pen (click points, drag to bend), brush, freehand draw, and cut. */
+import { buzz } from '@/store/settings';
 import { create } from 'zustand';
 import { chainsToPath, ellipseChain, fmt, splineChain, type Pt, type Ring } from '@/geom';
 import { strokeOutline } from '@/engine';
@@ -276,7 +277,7 @@ registerDrawTool('cut', {
       toast('Nothing to cut there', { description: 'Drag the line all the way across a shape or an outline.' });
       return;
     }
-    navigator.vibrate?.(8);
+    buzz(8);
     commit(next);
     useUi.setState({ showCuts: true });
   },

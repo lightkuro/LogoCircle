@@ -1,3 +1,4 @@
+import { buzz } from '@/store/settings';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Brush,
@@ -165,7 +166,7 @@ function Swatch({ index, color, last }: { index: number; color: string; last: bo
             clearTimeout(hold.current);
             hold.current = setTimeout(() => {
               held.current = true;
-              navigator.vibrate?.(10);
+              buzz();
               openSwatchMenu(at, index, true);
             }, 520);
           }}

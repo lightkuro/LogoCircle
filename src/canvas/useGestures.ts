@@ -1,3 +1,4 @@
+import { buzz } from '@/store/settings';
 import { useEffect, type RefObject } from 'react';
 import { polygonToPath, translate, windingOfPolygon, type BBox, type Mat, type Pt, type Ring } from '@/geom';
 import { faceAt, type Arrangement } from '@/engine';
@@ -288,7 +289,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         press.hold = setTimeout(() => {
           if (g !== press) return;
           press.held = true;
-          navigator.vibrate?.(10);
+          buzz();
           drag().set({ hold: press.start }); // a ring under the finger: let go for the menu, or drag to box-select
         }, HOLD_MS);
       }
@@ -703,7 +704,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           if (arr && faces.size) {
             const next = paintFaces(doc, arr, faces, s.erasing ? null : s.ink, shown());
             // A short tick where the device has one, on the same frame as the color landing.
-            if (next !== doc && e.pointerType === 'touch') navigator.vibrate?.(8);
+            if (next !== doc && e.pointerType === 'touch') buzz(8);
             commit(next);
           }
           break;

@@ -2,13 +2,20 @@ import { useUi } from '@/store/ui';
 import { useIsTouch, useSettings } from '@/store/settings';
 import { COMMANDS, GROUPS, combosFor, formatCombo } from '@/keys';
 import { Sheet } from '../primitives';
+import { HowItWorksAnimation } from '../HowItWorks';
 
 type Rows = [string, string][];
 
 const steps = (tap: string, hold: string): Rows => [
   ['Outlines', 'Add circles, shapes, lines and curves. They are only guides: move, resize and overlap them freely. Trace over a photo if you like.'],
-  ['Color', `${tap} a color, then ${tap.toLowerCase()} or drag across the areas the outlines make. Neighbouring areas of the same color join into one shape. Or select an outline and ${tap.toLowerCase()} a color to color it directly.`],
-  ['Refine', `Under Cut: Cut removes the piece of an outline you ${tap.toLowerCase()}, between two crossings, or slices shapes along a line you drag; Erase clears areas. Show cut lines brings removed pieces back. A fill follows its outlines when you move them. Words work the same way.`],
+  [
+    'Color',
+    `${tap} a color, then ${tap.toLowerCase()} or drag across the areas the outlines make. Neighbouring areas of the same color join into one shape. Or select an outline and ${tap.toLowerCase()} a color to color it directly.`,
+  ],
+  [
+    'Refine',
+    `Under Cut: Cut removes the piece of an outline you ${tap.toLowerCase()}, between two crossings, or slices shapes along a line you drag; Erase clears areas. Show cut lines brings removed pieces back. A fill follows its outlines when you move them. Words work the same way.`,
+  ],
   ['Export', 'Hide the outlines to see the result, adjust the frame size if you need to, then export a clean SVG or PNG. Everything stays on this device; nothing is uploaded.'],
   ['More', `${hold} anything for what can be done with it: round one corner, edit a word, change the order, group, and more.`],
 ];
@@ -81,33 +88,42 @@ export function HelpSheet() {
   const list = steps(touch ? 'Tap' : 'Click', touch ? 'Press and hold' : 'Right-click');
   return (
     <Sheet open={open} onClose={() => useUi.setState({ sheet: null })} title="Guide" place="top-left">
-      <ol className="m-0 list-none p-0">
-        {list.map(([t, d], i) => (
-          <li key={t} className="flex gap-3 py-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-              {i + 1}
-            </span>
-            <span>
-              <span className="block text-[15px] font-semibold">{t}</span>
-              <span className="block text-[13.5px] leading-snug text-muted">{d}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-      {touch ? (
-        <>
-          <div className="label">Touch</div>
-          <Table rows={TOUCH} />
-        </>
-      ) : (
-        <>
-          <div className="label">Mouse</div>
-          <Table rows={mouse(leftPans)} />
-          <div className="label">Keyboard</div>
-          <Table rows={keys} />
-          <p className="mb-0 mt-2 text-[12.5px] leading-snug text-muted">Keys and the mouse buttons can be changed in Settings, in the LogoCircle menu.</p>
-        </>
-      )}
+      <div className="guide-sheet">
+        <HowItWorksAnimation />
+        <ol className="guide-steps m-0 list-none p-0">
+          {list.map(([t, d], i) => (
+            <li key={t} className="flex gap-3 py-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                {i + 1}
+              </span>
+              <span>
+                <span className="block text-[15px] font-semibold">{t}</span>
+                <span className="block text-[13.5px] leading-snug text-muted">{d}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        {touch ? (
+          <>
+            <div className="label">Touch</div>
+            <Table rows={TOUCH} />
+          </>
+        ) : (
+          <>
+            <div className="guide-tables">
+              <div>
+                <div className="label">Mouse</div>
+                <Table rows={mouse(leftPans)} />
+              </div>
+              <div>
+                <div className="label">Keyboard</div>
+                <Table rows={keys} />
+              </div>
+            </div>
+            <p className="mb-0 mt-2 text-[12.5px] leading-snug text-muted">Keys and the mouse buttons can be changed in Settings, in the LogoCircle menu.</p>
+          </>
+        )}
+      </div>
     </Sheet>
   );
 }

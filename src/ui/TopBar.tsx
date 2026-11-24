@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CircleHelp, Ellipsis, FileUp, Eye, EyeOff, Layers, Redo2, RotateCcw, Save, Share, Undo2 } from 'lucide-react';
+import { BookOpen, CircleHelp, Ellipsis, FileUp, Eye, EyeOff, Layers, LayoutGrid, Redo2, RotateCcw, Save, Share, Undo2 } from 'lucide-react';
 import { Popover } from '@base-ui/react/popover';
 import { useDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
@@ -8,9 +8,10 @@ import { useKeys } from '@/keys';
 import { resetToStarter, saveToDevice, setMode } from '@/actions';
 import { IconButton, Segmented } from './primitives';
 import { LogoMark } from './icons';
+import { HowItWorksDiagram } from './HowItWorks';
 import { importSvgFile } from '@/advanced/files';
 
-/** A one-glance explanation, with the way to more. */
+/** A one-glance explanation, with the way to more. Grows with the screen. */
 function HelpButton() {
   return (
     <Popover.Root>
@@ -19,18 +20,27 @@ function HelpButton() {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={12} collisionPadding={8} style={{ zIndex: 30 }}>
-          <Popover.Popup className="pop" style={{ width: 220, padding: '14px 16px 12px' }}>
-            <div className="text-[15px] font-semibold tracking-[-0.01em]">Simply:</div>
-            <ol className="m-0 mt-1.5 list-decimal space-y-0.5 pl-5 text-[14px] leading-snug">
-              <li>Add shapes</li>
-              <li>Trim</li>
-              <li>Color areas</li>
+          <Popover.Popup className="pop help-pop">
+            <div className="help-pop-title">Simply:</div>
+            <HowItWorksDiagram />
+            <ol className="help-steps">
+              <li>
+                <b>1</b>Add shapes
+              </li>
+              <li>
+                <b>2</b>Trim
+              </li>
+              <li>
+                <b>3</b>Color areas
+              </li>
             </ol>
-            <div className="mt-3 flex flex-wrap gap-1">
-              <Popover.Close className="chip" style={{ background: 'var(--sunken)' }} onClick={() => useUi.setState({ sheet: 'help' })}>
+            <div className="help-actions">
+              <Popover.Close className="chip help-action" onClick={() => useUi.setState({ sheet: 'help' })}>
+                <BookOpen aria-hidden />
                 Guide
               </Popover.Close>
-              <Popover.Close className="chip" style={{ background: 'var(--sunken)' }} onClick={() => useUi.setState({ sheet: 'gallery', galleryTab: 'examples' })}>
+              <Popover.Close className="chip help-action" onClick={() => useUi.setState({ sheet: 'gallery', galleryTab: 'examples' })}>
+                <LayoutGrid aria-hidden />
                 Examples
               </Popover.Close>
             </div>

@@ -4,10 +4,12 @@ import { toast } from 'sonner';
 import '@/styles/text.css';
 import { ringsBBox, ringsToPath, type Pt } from '@/geom';
 import { useDoc } from '@/store/doc';
+import { resolveFill } from '@/model/doc';
 import { ui, useUi } from '@/store/ui';
 import { buildText, commitText, placeText, viewCenter, type BuiltText, type TextInput } from '@/actions';
 import { clearTextPreview, useTextPreview } from '@/canvas/textPreview';
 import type { TextStyle } from '@/text/styles';
+import type { Layout } from '@/text/layout';
 import { FontSettings, rememberedStyle, rememberStyle } from './FontSettings';
 import { DEFAULT_FONT, FONTS, FONT_KINDS, type FontDef, type FontKind } from '@/text/fonts';
 import { addCustomFont, cssFontLoaded, cssFontReady, customFonts, cssFamily, isCustomFont, removeCustomFont, restoreCustomFonts } from '@/text/load';
@@ -101,6 +103,40 @@ const FontTile = memo(function FontTile({ def, word, active, onPick, onRemove }:
     </div>
   );
 });
+
+/** The word as it will land on the canvas, on the canvas's own background. Bigger sizes show bigger. */
+function Preview({ value, fontId, spacing, size, color, paper, style }: { value: string; fontId: string; spacing: number; size: number; color: string; paper: string | null; style: TextStyle }) {
+  const [layout, setLayout] = useState<Layout | null>(null);
+  const styleKey = JSON.stringify(style);
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      void import('@/text/layout')
+        .then((m) => m.layoutText(value.trim() || PLACEHOLDER, fontId, 100, spacing, style))
+        .then((l) => alive && setLayout(l))
+        .catch(() => alive && setLayout(null));
+    }, 60);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+    // style is compared by value
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, fontId, spacing, styleKey]);
+  const d = useMemo(() => (layout ? layout.glyphs.map((g) => ringsToPath(g.rings, 1)).join('') : ''), [layout]);
+  const w = Math.max(40, layout?.width ?? 200);
+  const asc = layout?.ascent ?? 100;
+  const desc = layout?.descent ?? -25;
+  // From half the box at the smallest size to all of it at the largest on the slider.
+  const k = 0.5 + 0.5 * Math.max(0, Math.min(1, (size - 40) / 440));
+  return (
+    <div className={`tx-preview${paper ? '' : ' tx-checker'}`} style={paper ? { background: paper } : undefined} data-paper={paper ?? 'none'}>
+      <svg viewBox={`${-6} ${-asc} ${w + 12} ${asc - desc}`} style={{ height: `${Math.round(k * 100)}%` }} aria-label="Preview">
+        <path d={d} fill={color} />
+      </svg>
+    </div>
+  );
+}
 
 /** How much of the bottom of the screen the on-screen keyboard is covering. */
 function useKeyboardInset(active: boolean): number {
@@ -243,6 +279,7 @@ export function TextSheet() {
   const ink = useUi((s) => s.ink);
   const palette = useDoc((s) => s.doc.palette);
   const existing = useDoc((s) => (target ? s.doc.groups[target]?.text : undefined));
+  const paper = useDoc((s) => s.doc.paper);
 
   const [value, setValue] = useState('');
   const [fontId, setFontId] = useState(lastFont);
@@ -549,6 +586,8 @@ export function TextSheet() {
     />
   );
 
+  const preview = <Preview value={value} fontId={fontId} spacing={spacing} size={size} color={resolveFill({ palette }, safeFill)} paper={paper} style={style} />;
+
   const ownFont = (
     <span className="tx-own">
       <FontSettings fontId={fontId} style={style} onChange={setStyle} />
@@ -681,6 +720,7 @@ export function TextSheet() {
         bodyRef={body}
         top={
           <>
+            {preview}
             <div className="txp-entry">
               {field}
               {add}
@@ -713,7 +753,10 @@ export function TextSheet() {
   return (
     <Sheet open={open} onClose={finish} title={title} place="left" name="text">
       <div className="tx-desk">
-        <div className="tx-desk-field">{field}</div>
+        <div className="tx-desk-field">
+          {preview}
+          {field}
+        </div>
         <div className="tx-desk-fonts" ref={body}>
           {fonts}
         </div>

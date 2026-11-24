@@ -682,6 +682,14 @@ async function refinements(browser) {
   check((await privacy.getAttribute('href')) === '/privacy', 'the menu links to Privacy & terms');
   const res = await page.request.get(`${URL}privacy`);
   check(res.ok() && (await res.text()).includes('Terms of use'), 'and that page is there');
+  check((await page.getByRole('link', { name: 'Kurolight.dev' }).count()) === 1, 'the menu says whose project it is');
+  // The version opens the list of what's new.
+  await page.getByRole('button', { name: /^Version .*what's new/ }).click();
+  const news = page.getByRole('dialog', { name: "What's new" });
+  check((await news.count()) === 1 && (await news.getByRole('region').count()) >= 10, 'the version number opens what changed in each version');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await btn('Menu').click();
   await page.getByRole('button', { name: /^Settings/ }).click();
   await page.getByRole('button', { name: /^Shortcut for Circle/ }).click();
   await page.keyboard.press('k');
@@ -1429,6 +1437,10 @@ async function help(browser) {
   await guide.locator('.panel-edge').dblclick();
   await page.waitForTimeout(100);
   check(Math.abs((await guide.boundingBox()).width - before) < 2, 'a double-click on the edge puts it back');
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.waitForTimeout(150);
+  check((await guide.boundingBox()).width > before + 60, `on a big screen the panel is wider (${Math.round(before)} → ${Math.round((await guide.boundingBox()).width)} px)`);
+  await page.setViewportSize({ width: 1440, height: 900 });
   check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
   await ctx.close();
 }

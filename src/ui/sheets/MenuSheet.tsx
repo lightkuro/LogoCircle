@@ -6,6 +6,7 @@ import { useIsPhone } from '@/store/settings';
 import { createNewDoc, setMode } from '@/actions';
 import { Segmented, Sheet, Tip } from '../primitives';
 import { openProjectFile, saveProjectFile } from '@/advanced/files';
+import { VERSION } from '@/changelog';
 
 /** A menu row. Its `hint` shows on hover with a mouse; on a phone the label says enough. */
 function Row({ icon, label, hint, onClick }: { icon: ReactNode; label: string; hint?: string; onClick: () => void }) {
@@ -32,7 +33,21 @@ export function MenuSheet() {
   const phone = useIsPhone();
   const close = (): void => useUi.setState({ sheet: null });
   return (
-    <Sheet open={open} onClose={close} title="LogoCircle" place="top-left">
+    <Sheet
+      open={open}
+      onClose={close}
+      title="LogoCircle"
+      place="top-left"
+      note={
+        <>
+          – a{' '}
+          <a href="https://kurolight.dev" target="_blank" rel="noopener">
+            Kurolight.dev
+          </a>{' '}
+          project
+        </>
+      }
+    >
       <input
         className="field mb-3"
         value={name}
@@ -77,6 +92,10 @@ export function MenuSheet() {
       )}
       <Row icon={<Settings />} label="Settings" hint="Layout, appearance, mouse and keyboard" onClick={() => useUi.setState({ sheet: 'settings' })} />
       <div className="menu-foot">
+        <button type="button" className="menu-foot-version" aria-label={`Version ${VERSION}: what's new`} onClick={() => useUi.setState({ sheet: 'changes' })}>
+          v{VERSION}
+        </button>
+        <span aria-hidden>·</span>
         <a href="/privacy" target="_blank" rel="noopener">
           Privacy &amp; terms
         </a>

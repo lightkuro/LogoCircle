@@ -314,6 +314,7 @@ export function Sheet({
   actions,
   place = 'center',
   name,
+  note,
 }: {
   open: boolean;
   /** `reason` says how: 'close-press' for the X, 'escape-key', 'outside-press' for a click elsewhere. */
@@ -330,6 +331,8 @@ export function Sheet({
   place?: SheetPlace;
   /** Remembers the panel's width under this name; defaults to the title. */
   name?: string;
+  /** A quiet line after the title. */
+  note?: ReactNode;
 }) {
   // Upright phones get a sheet from the bottom; a phone on its side has the room for a side panel.
   const kind = useLayoutKind();
@@ -339,7 +342,10 @@ export function Sheet({
   const resizable = kind === 'desktop' && place !== 'center';
   const head = (Title: typeof Dialog.Title | typeof Drawer.Title, Close: typeof Dialog.Close | typeof Drawer.Close) => (
     <div className="sheet-head">
-      <Title className="sheet-title">{title}</Title>
+      <div className="flex min-w-0 items-baseline">
+        <Title className="sheet-title">{title}</Title>
+        {note && <span className="sheet-note">{note}</span>}
+      </div>
       <div className="flex items-center gap-1">
         {actions}
         <Close className="ib" aria-label="Close">

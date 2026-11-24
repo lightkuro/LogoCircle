@@ -8,7 +8,7 @@ import { useKeys } from '@/keys';
 import { resetToStarter, saveToDevice, setMode } from '@/actions';
 import { IconButton, Segmented } from './primitives';
 import { LogoMark } from './icons';
-import { HowItWorksDiagram } from './HowItWorks';
+import { HowItWorksPicture } from './HowItWorks';
 import { importSvgFile } from '@/advanced/files';
 
 /** A one-glance explanation, with the way to more. Grows with the screen. */
@@ -21,19 +21,23 @@ function HelpButton() {
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={12} collisionPadding={8} style={{ zIndex: 30 }}>
           <Popover.Popup className="pop help-pop">
-            <div className="help-pop-title">Simply:</div>
-            <HowItWorksDiagram />
-            <ol className="help-steps">
-              <li>
-                <b>1</b>Add shapes
-              </li>
-              <li>
-                <b>2</b>Trim
-              </li>
-              <li>
-                <b>3</b>Color areas
-              </li>
-            </ol>
+            <div className="help-pop-body">
+              <div>
+                <div className="help-pop-title">Simply:</div>
+                <ol className="help-steps">
+                  <li>
+                    <b>1</b>Add shapes
+                  </li>
+                  <li>
+                    <b>2</b>Trim
+                  </li>
+                  <li>
+                    <b>3</b>Color areas
+                  </li>
+                </ol>
+              </div>
+              <HowItWorksPicture />
+            </div>
             <div className="help-actions">
               <Popover.Close className="chip help-action" onClick={() => useUi.setState({ sheet: 'help' })}>
                 <BookOpen aria-hidden />

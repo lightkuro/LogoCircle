@@ -22,6 +22,8 @@ Two modes share one document:
 - **Classic** (default): up to four linked colors, one reference photo, and only the essentials.
 - **Advanced**: unlimited colors, layers, strokes, opacity, boolean operations, pen, point editing, alignment, numeric sizes, grid, SVG import, more export formats, project files.
 
+The version number at the foot of the LogoCircle menu opens What's new, kept in `src/changelog.ts` (features people can see or use only; add an entry, newest first, with each release and keep `package.json` in step).
+
 Everything is stored on your device (IndexedDB). Nothing is uploaded. The privacy and terms page is `public/privacy.html`, served at `/privacy`.
 
 ## Develop

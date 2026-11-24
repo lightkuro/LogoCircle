@@ -12,7 +12,7 @@ export type Tool = 'arrange' | 'color' | 'pen' | 'brush' | 'draw' | 'cut' | 'mir
  * drag a thing to move it, drag empty canvas to pan.
  */
 export type SelectMode = 'move' | 'pan' | 'box' | 'lasso' | 'single';
-export type SheetName = null | 'export' | 'text' | 'gallery' | 'menu' | 'help' | 'code' | 'settings';
+export type SheetName = null | 'export' | 'text' | 'gallery' | 'menu' | 'help' | 'code' | 'settings' | 'changes';
 
 export interface MenuItem {
   label: string;

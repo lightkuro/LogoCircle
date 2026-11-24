@@ -42,39 +42,17 @@ function scene(cx: number, cy: number, r: number) {
 
 const mini = scene(50, 50, 30);
 
-function Panel({ x, children }: { x: number; children: React.ReactNode }) {
+/** All three steps in one picture: the outlines, their ends trimmed away (dotted), the areas colored. */
+export function HowItWorksPicture() {
   return (
-    <g transform={`translate(${x} 0)`}>
+    <svg className="hiw-picture" viewBox="0 0 100 100" role="img" aria-label="Add shapes, trim, color areas">
       <rect x={0.5} y={0.5} width={99} height={99} rx={14} className="hiw-paper" />
-      {children}
-    </g>
-  );
-}
-
-function Arrow({ x }: { x: number }) {
-  return <path d={`M${x - 2.5} 44l5 6-5 6`} className="hiw-arrow" />;
-}
-
-/** Three steps side by side: outlines, trimmed, colored. */
-export function HowItWorksDiagram() {
-  return (
-    <svg className="hiw-diagram" viewBox="0 0 336 100" role="img" aria-label="Add shapes, trim, color areas">
-      <Panel x={0}>
-        <circle cx={50} cy={50} r={30} className="hiw-line" />
-        <path d={mini.full} className="hiw-line" />
-      </Panel>
-      <Arrow x={109} />
-      <Panel x={118}>
-        <path d={mini.outA} className="hiw-trimmed" />
-        <path d={mini.outB} className="hiw-trimmed" />
-        <circle cx={50} cy={50} r={30} className="hiw-line" />
-        <path d={mini.chord} className="hiw-line" />
-      </Panel>
-      <Arrow x={227} />
-      <Panel x={236}>
-        <path d={mini.top} fill={TEAL} />
-        <path d={mini.bottom} fill={ORANGE} />
-      </Panel>
+      <path d={mini.top} fill={TEAL} />
+      <path d={mini.bottom} fill={ORANGE} />
+      <path d={mini.outA} className="hiw-trimmed" />
+      <path d={mini.outB} className="hiw-trimmed" />
+      <circle cx={50} cy={50} r={30} className="hiw-line" />
+      <path d={mini.chord} className="hiw-line" />
     </svg>
   );
 }

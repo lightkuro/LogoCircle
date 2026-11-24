@@ -88,6 +88,17 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       if (!frame) return null;
       if (s.selection.length === 1 && doc.refs.find((r) => r.id === s.selection[0])?.locked) return null;
       const radius = touch ? 22 : 11;
+      // Inside the frame the body should stay grabbable for moving, however small the thing is:
+      // there, the resize handles only answer to a touch that is clearly on them.
+      const c = toScreen(s.view, { x: frame.cx, y: frame.cy });
+      const cr = Math.cos(-frame.rot);
+      const sr = Math.sin(-frame.rot);
+      const lx = (p.x - c.x) * cr - (p.y - c.y) * sr;
+      const ly = (p.x - c.x) * sr + (p.y - c.y) * cr;
+      const wPx = frame.w * s.view.k;
+      const hPx = frame.h * s.view.k;
+      const inside = Math.abs(lx) <= wPx / 2 && Math.abs(ly) <= hPx / 2;
+      const boxRadius = inside ? Math.min(radius, Math.max(6, Math.min(wPx, hPx) * 0.26)) : radius;
       let best: Handle | null = null;
       let bestD = radius;
       for (const h of placeHandles(doc, s.selection, frame, s.view.k)) {
@@ -95,6 +106,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         // Point handles win ties against the box handles they may sit on.
         const bias = h.handle.kind === 'pt' ? -4 : h.handle.kind === 'mid' ? 2 : 0;
         const d = Math.hypot(sp.x - p.x, sp.y - p.y) + bias;
+        if (h.handle.kind === 'box' && d > boxRadius) continue;
         if (d <= bestD) {
           bestD = d;
           best = h.handle;
@@ -309,8 +321,8 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
             else dx = 0;
           }
           let lines: { a: Pt; b: Pt }[] = [];
-          if (g.box && !e.altKey) {
-            const sn = snapMove(doc, g.ids, g.box, dx, dy, 6 / s.view.k);
+          if (g.box && !e.altKey && s.snap) {
+            const sn = snapMove(doc, g.ids, g.box, dx, dy, 6 / s.view.k, s.grid);
             dx = sn.dx;
             dy = sn.dy;
             lines = sn.lines;
@@ -335,7 +347,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           if (g.guide.type === 'line') {
             anchor = g.index === 0 ? { x: g.guide.x1, y: g.guide.y1 } : { x: g.guide.x0, y: g.guide.y0 };
           }
-          const sn = e.altKey ? { p: d, lines: [] } : snapPoint(doc, g.guide.id, d, 7 / s.view.k, anchor);
+          const sn = e.altKey || !s.snap ? { p: d, lines: [] } : snapPoint(doc, g.guide.id, d, 7 / s.view.k, anchor, s.grid);
           g.current = moveGuideHandle(g.guide, g.index, sn.p);
           drag().set({ guide: g.current, snapLines: sn.lines });
           break;

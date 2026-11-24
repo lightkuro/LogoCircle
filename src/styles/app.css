@@ -182,6 +182,13 @@ select {
   pointer-events: none;
 }
 
+.grid-line {
+  fill: none;
+  stroke: rgba(60, 100, 200, 0.22);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
 .guide path {
   fill: none;
   vector-effect: non-scaling-stroke;
@@ -697,6 +704,12 @@ select {
 .backdrop[data-starting-style],
 .backdrop[data-ending-style] {
   opacity: 0;
+}
+/* A sheet that is on its way out must not swallow the next tap on the canvas. */
+.backdrop[data-ending-style],
+.dialog[data-ending-style],
+.drawer[data-ending-style] {
+  pointer-events: none;
 }
 
 .dialog {

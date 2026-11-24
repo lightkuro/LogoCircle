@@ -38,6 +38,7 @@ export function Stage() {
   const artboard = useDoc((s) => s.doc.artboard);
   const paper = useDoc((s) => s.doc.paper);
   const tool = useUi((s) => s.tool);
+  const grid = useUi((s) => (s.mode === 'advanced' ? s.grid : 0));
   const arr = useArrangement();
   useGestures(svg);
 
@@ -76,6 +77,11 @@ export function Stage() {
             <rect width="7" height="7" className="erase-a" />
             <rect width="2.2" height="7" className="erase-b" />
           </pattern>
+          {grid > 0 && (
+            <pattern id="lc-grid" width={grid} height={grid} patternUnits="userSpaceOnUse">
+              <path d={`M${grid} 0H0V${grid}`} className="grid-line" />
+            </pattern>
+          )}
           <clipPath id="lc-artboard-clip">
             <rect x={0} y={0} width={artboard.w} height={artboard.h} />
           </clipPath>
@@ -86,6 +92,7 @@ export function Stage() {
             <PhotoLayer />
             <ShapesLayer />
             <FacesLayer arr={arr} />
+            {grid > 0 && <rect x={0} y={0} width={artboard.w} height={artboard.h} fill="url(#lc-grid)" style={{ pointerEvents: 'none' }} />}
             <rect x={0} y={0} width={artboard.w} height={artboard.h} className="artboard-edge" />
             <GuidesLayer />
           </g>

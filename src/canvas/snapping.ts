@@ -14,7 +14,7 @@ interface Axis {
   hi: number;
 }
 
-function targets(doc: Doc, exclude: Set<string>): { xs: Axis[]; ys: Axis[] } {
+function targets(doc: Doc, exclude: Set<string>, grid = 0): { xs: Axis[]; ys: Axis[] } {
   const { w, h } = doc.artboard;
   const xs: Axis[] = [
     { v: 0, lo: 0, hi: h },
@@ -26,6 +26,10 @@ function targets(doc: Doc, exclude: Set<string>): { xs: Axis[]; ys: Axis[] } {
     { v: h / 2, lo: 0, hi: w },
     { v: h, lo: 0, hi: w },
   ];
+  if (grid > 0) {
+    for (let v = grid; v < w; v += grid) xs.push({ v, lo: 0, hi: h });
+    for (let v = grid; v < h; v += grid) ys.push({ v, lo: 0, hi: w });
+  }
   const ids = [...doc.guides.map((g) => g.id), ...doc.shapes.map((s) => s.id)];
   if (ids.length > 150) return { xs, ys };
   for (const id of ids) {
@@ -46,8 +50,9 @@ export function snapMove(
   dx: number,
   dy: number,
   tol: number,
+  grid = 0,
 ): { dx: number; dy: number; lines: SnapLine[] } {
-  const { xs, ys } = targets(doc, ids);
+  const { xs, ys } = targets(doc, ids, grid);
   const lines: SnapLine[] = [];
   let bestX: { d: number; t: Axis } | null = null;
   for (const own of [box.x, box.x + box.w / 2, box.x + box.w]) {
@@ -90,6 +95,7 @@ export function snapPoint(
   p: Pt,
   tol: number,
   anchor?: Pt,
+  grid = 0,
 ): { p: Pt; lines: SnapLine[] } {
   const { w, h } = doc.artboard;
   const pts: Pt[] = [
@@ -110,6 +116,16 @@ export function snapPoint(
     }
   }
   if (best) return { p: { x: best.x, y: best.y }, lines: [] };
+
+  if (grid > 0) {
+    const gx = Math.round(p.x / grid) * grid;
+    const gy = Math.round(p.y / grid) * grid;
+    if (Math.hypot(gx - p.x, gy - p.y) <= tol) return { p: { x: gx, y: gy }, lines: [] };
+  }
+
+  // Where two other outlines cross is a natural place to end a line.
+  const cross = nearestCrossing(doc, excludeId, p, tol);
+  if (cross) return { p: cross, lines: [] };
 
   // Next best: land exactly on another outline, so the two close an area.
   if (doc.guides.length <= 150) {
@@ -181,4 +197,52 @@ export function snapPoint(
   if (bx) lines.push({ a: bx, b: out });
   if (by) lines.push({ a: by, b: out });
   return { p: out, lines };
+}
+
+/** The closest point within `tol` of `p` where two different outlines cross. */
+function nearestCrossing(doc: Doc, excludeId: string, p: Pt, tol: number): Pt | null {
+  if (doc.guides.length > 150) return null;
+  // Only segments passing near the pointer can produce a crossing near it.
+  const near: { a: Pt; b: Pt; g: string }[] = [];
+  const reach = tol * 2;
+  for (const g of doc.guides) {
+    if (g.id === excludeId || g.hidden) continue;
+    const closed = isClosedGuide(g);
+    for (const poly of guidePoints(g)) {
+      const n = poly.length;
+      const count = closed ? n : n - 1;
+      for (let i = 0; i < count; i++) {
+        const a = poly[i]!;
+        const b = poly[(i + 1) % n]!;
+        if (Math.min(a.x, b.x) - reach > p.x || Math.max(a.x, b.x) + reach < p.x) continue;
+        if (Math.min(a.y, b.y) - reach > p.y || Math.max(a.y, b.y) + reach < p.y) continue;
+        near.push({ a, b, g: g.id });
+      }
+    }
+  }
+  let best: Pt | null = null;
+  let bestD = tol;
+  for (let i = 0; i < near.length; i++) {
+    for (let j = i + 1; j < near.length; j++) {
+      const s1 = near[i]!;
+      const s2 = near[j]!;
+      if (s1.g === s2.g) continue;
+      const d1x = s1.b.x - s1.a.x;
+      const d1y = s1.b.y - s1.a.y;
+      const d2x = s2.b.x - s2.a.x;
+      const d2y = s2.b.y - s2.a.y;
+      const den = d1x * d2y - d1y * d2x;
+      if (Math.abs(den) < 1e-12) continue;
+      const t = ((s2.a.x - s1.a.x) * d2y - (s2.a.y - s1.a.y) * d2x) / den;
+      const u = ((s2.a.x - s1.a.x) * d1y - (s2.a.y - s1.a.y) * d1x) / den;
+      if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+      const q = { x: s1.a.x + d1x * t, y: s1.a.y + d1y * t };
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d <= bestD) {
+        bestD = d;
+        best = q;
+      }
+    }
+  }
+  return best;
 }

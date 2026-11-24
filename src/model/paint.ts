@@ -1,11 +1,9 @@
 import { buildArrangement, neighbors, outline, withFollowers, type Arrangement, type Source } from '@/engine';
-import { derivC, evalC, lineEdge, polygonChain, type Chain, type Ring } from '@/geom';
+import { derivC, evalC, lineEdge, type Chain, type Ring } from '@/geom';
 import type { Doc, Fill, Shape } from './types';
 import { guideChains } from './guides';
 import { isPlain } from './doc';
 import { uid } from './ids';
-
-export const ARTBOARD_SOURCE = '__artboard__';
 
 /**
  * How far (document units) an open outline is allowed to fall short of another
@@ -32,16 +30,13 @@ function reach(chain: Chain): Chain {
   return { edges, closed: false };
 }
 
-/** Everything that divides the canvas into areas right now. */
+/**
+ * Everything that divides the canvas into areas right now. Only outlines and
+ * shapes count: the open background around them is not an area, so a stray tap
+ * beside the artwork never floods the whole artboard (Paper sets a background).
+ */
 export function docSources(doc: Doc, showGuides: boolean): Source[] {
-  const { w, h } = doc.artboard;
-  const sources: Source[] = [
-    {
-      id: ARTBOARD_SOURCE,
-      fill: false,
-      chains: [polygonChain([{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }])],
-    },
-  ];
+  const sources: Source[] = [];
   if (showGuides) {
     for (const g of doc.guides) {
       if (g.hidden) continue;

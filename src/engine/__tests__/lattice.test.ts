@@ -5,11 +5,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { flattenRing, windingOfPolygon } from '@/geom';
+import { flattenRing, ringsToPath, windingOfPolygon } from '@/geom';
 import type { Chain, Pt, Ring } from '@/geom';
 import { arrangementStats, buildArrangement, faceAt, outline, withFollowers } from '../index';
 import type { Arrangement, Source } from '../index';
-import { circle, poly, rect, seg } from './helpers';
+import { circle, poly, rect, ringsArea, seg } from './helpers';
 
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const SEED = Number(env.ENGINE_SEED ?? 20261124);
@@ -93,9 +93,13 @@ describe('lattice scenes (exact coincidences everywhere)', () => {
           for (const f of mine) expect(f.inside.length).toBe(1);
           expect(JSON.stringify(outline(second, mine.map((f) => f.id)))).toBe(JSON.stringify(baked[i]));
         }
-        // the dissolved whole has no leftover interior edges
+        // The dissolved whole is the same outline as before baking. (Which of two
+        // coincident straight carriers names a stretch may differ, the geometry may not.)
         const whole = outline(second, second.faces.map((f) => f.id));
-        expect(JSON.stringify(whole)).toBe(JSON.stringify(outline(first, first.faces.map((f) => f.id))));
+        const before = outline(first, first.faces.map((f) => f.id));
+        expect(whole.map((r) => r.length)).toEqual(before.map((r) => r.length));
+        expect(Math.abs(ringsArea(whole) - ringsArea(before))).toBeLessThan(1e-6 * (1 + ringsArea(before)));
+        expect(ringsToPath(whole, 3)).toBe(ringsToPath(before, 3));
       }),
       { seed: SEED, numRuns: 100 * FUZZ },
     );

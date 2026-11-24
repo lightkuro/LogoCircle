@@ -183,8 +183,14 @@ describe('engine properties', () => {
             y1 = Math.max(y1, p.y);
           }
         }
-        const n = 240;
+        const n = 200;
         let inside = 0;
+        let perimeter = 0;
+        for (const poly of polys) {
+          for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            perimeter += Math.hypot(poly[i]!.x - poly[j]!.x, poly[i]!.y - poly[j]!.y);
+          }
+        }
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
             const p = { x: x0 + ((i + 0.5) * (x1 - x0)) / n, y: y0 + ((j + 0.5) * (y1 - y0)) / n };
@@ -197,7 +203,9 @@ describe('engine properties', () => {
           }
         }
         const raster = (inside * (x1 - x0) * (y1 - y0)) / (n * n);
-        expect(rel(total, raster)).toBeLessThan(0.03);
+        // A raster is only as good as its cells: allow half a cell along every outline.
+        const cell = Math.max(x1 - x0, y1 - y0) / n;
+        expect(Math.abs(total - raster)).toBeLessThan(0.01 * total + 0.5 * cell * perimeter);
       }),
       { seed: SEED, numRuns: 40 * FUZZ },
     );

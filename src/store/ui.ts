@@ -38,6 +38,10 @@ interface UiState {
   brushWidth: number;
   /** Advanced side panel open (phones show it as a sheet). */
   panelOpen: boolean;
+  /** Snap to nearby outlines, edges and centres while dragging. */
+  snap: boolean;
+  /** Grid spacing in document units; 0 hides the grid (Advanced). */
+  grid: number;
   hintDismissed: boolean;
 
   set: (patch: Partial<UiState>) => void;
@@ -79,6 +83,8 @@ export const useUi = create<UiState>((set) => ({
   galleryTab: 'mine',
   brushWidth: 28,
   panelOpen: false,
+  snap: true,
+  grid: 0,
   hintDismissed: stored('lc.hint', '') === '1',
 
   set: (patch) => set(patch),

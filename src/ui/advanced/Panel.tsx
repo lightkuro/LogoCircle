@@ -16,7 +16,9 @@ import {
   Circle as CircleIcon,
   Eye,
   EyeOff,
+  Grid3x3,
   Group as GroupIcon,
+  Magnet,
   Image as ImageIcon,
   Lock,
   LockOpen,
@@ -34,7 +36,7 @@ import { resolveFill } from '@/model/doc';
 import { selectionBBox, updateGuide } from '@/model/ops';
 import { isClosedGuide } from '@/model/guides';
 import type { Doc, Fill, Guide } from '@/model/types';
-import { fillSelectedOutlines } from '@/actions';
+import { fillSelectedOutlines, fitToScreen } from '@/actions';
 import {
   alignSelection,
   booleanSelection,
@@ -145,14 +147,60 @@ function ColorRow({ doc, value, onPick, allowNone }: { doc: Doc; value: Fill | n
   );
 }
 
+function CanvasSettings() {
+  const artboard = useDoc((s) => s.doc.artboard);
+  const snap = useUi((s) => s.snap);
+  const grid = useUi((s) => s.grid);
+  const resize = (patch: Partial<{ w: number; h: number }>): void => {
+    const doc = getDoc();
+    const next = { ...doc.artboard, ...patch };
+    next.w = Math.max(16, Math.min(8192, Math.round(next.w)));
+    next.h = Math.max(16, Math.min(8192, Math.round(next.h)));
+    commit({ ...doc, artboard: next, updatedAt: Date.now() });
+    requestAnimationFrame(() => fitToScreen());
+  };
+  return (
+    <>
+      <Section title="Artboard">
+        <div className="grid grid-cols-2 gap-1.5">
+          <NumField label="W" value={artboard.w} onCommit={(v) => resize({ w: v })} />
+          <NumField label="H" value={artboard.h} onCommit={(v) => resize({ h: v })} />
+        </div>
+      </Section>
+      <Section title="Snapping">
+        <div className="flex gap-1.5">
+          <button type="button" className="chip flex-1 justify-center" style={{ background: 'var(--sunken)' }} data-active={snap} onClick={() => useUi.setState({ snap: !snap })}>
+            <Magnet />
+            {snap ? 'Snap on' : 'Snap off'}
+          </button>
+          <button
+            type="button"
+            className="chip flex-1 justify-center"
+            style={{ background: 'var(--sunken)' }}
+            data-active={grid > 0}
+            onClick={() => useUi.setState({ grid: grid > 0 ? 0 : 64 })}
+          >
+            <Grid3x3 />
+            Grid
+          </button>
+        </div>
+        {grid > 0 && (
+          <div className="grid grid-cols-2 gap-1.5 pt-1.5">
+            <NumField label="Every" value={grid} onCommit={(v) => useUi.setState({ grid: Math.max(4, Math.min(512, v)) })} />
+          </div>
+        )}
+      </Section>
+      <p className="m-0 px-3.5 py-3 text-[13px] leading-snug text-muted">Select something to see its size, color and options.</p>
+    </>
+  );
+}
+
 function Inspector() {
   const doc = useDoc((s) => s.doc);
   const selection = useUi((s) => s.selection);
   const live = useLiveEdit();
   const [turn, setTurn] = useState(0);
-  if (!selection.length) {
-    return <p className="m-0 px-3.5 py-4 text-[13px] leading-snug text-muted">Select something to see its size, color and options.</p>;
-  }
+  if (!selection.length) return <CanvasSettings />;
   const box = selectionBBox(doc, selection);
   const shapes = doc.shapes.filter((s) => selection.includes(s.id));
   const guides = doc.guides.filter((g) => selection.includes(g.id));

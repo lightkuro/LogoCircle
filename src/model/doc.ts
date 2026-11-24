@@ -23,15 +23,18 @@ export const PALETTES: PaletteDef[] = [
   { name: 'Soda', colors: ['#f40009', '#ffffff'] },
 ];
 
-/** A few plain colors for quick picking. */
-export const BASIC_COLORS = ['#000000', '#ffffff', '#8e8e93', '#e5383b', '#ff8a00', '#f4b942', '#2a9d55', '#16a3b8', '#2f6bff', '#7c3aed', '#ec4899', '#8b5e3c'];
+/** A few plain colors for quick picking, in two rows of six: the colorful ones, then the warm ones and the neutrals. */
+export const BASIC_COLORS = ['#2a9d55', '#16a3b8', '#2f6bff', '#7c3aed', '#ec4899', '#8b5e3c', '#e5383b', '#ff8a00', '#f4b942', '#8e8e93', '#000000', '#ffffff'];
 
 export const DEFAULT_PALETTE = ['#16877f', '#f29e4c'];
 
-/** The color a newly added swatch starts with: black first, then whatever is not there yet. */
+/** The order new swatches take their color in: black first, then whatever is not there yet. */
+const NEXT_COLORS = ['#000000', '#ffffff', '#8e8e93', '#e5383b', '#ff8a00', '#f4b942', '#2a9d55', '#16a3b8', '#2f6bff', '#7c3aed', '#ec4899', '#8b5e3c'];
+
+/** The color a newly added swatch starts with. */
 export function nextColor(palette: string[]): string {
   const have = new Set(palette.map((c) => c.toLowerCase()));
-  return BASIC_COLORS.find((c) => !have.has(c)) ?? '#000000';
+  return NEXT_COLORS.find((c) => !have.has(c)) ?? '#000000';
 }
 
 /** The background a new logo starts on: a warm, paper-like off-white. */

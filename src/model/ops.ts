@@ -13,7 +13,8 @@ import {
   type Pt,
 } from '@/geom';
 import type { Doc, Fill, Guide, RefImage, Shape } from './types';
-import { guideBBox, transformGuide } from './guides';
+import { guideBBox, transformGuide, turned } from './guides';
+import { followSet, linkWithin } from './link';
 import { uid } from './ids';
 
 function touch(doc: Doc): Doc {
@@ -24,6 +25,7 @@ function touch(doc: Doc): Doc {
 function pruneGroups(doc: Doc): Doc {
   const used = new Set<string>();
   for (const s of doc.shapes) if (s.group) used.add(s.group);
+  for (const g of doc.guides) if (g.group) used.add(g.group);
   let changed = false;
   const groups: Doc['groups'] = {};
   for (const [id, g] of Object.entries(doc.groups)) {
@@ -107,7 +109,8 @@ function partialGroups(doc: Doc, set: Set<string>): Set<string> {
 }
 
 export function transformItems(doc: Doc, ids: Iterable<string>, m: Mat): Doc {
-  const set = new Set(ids);
+  // Fills that follow outlines are moved through those outlines (see followSet).
+  const set = followSet(doc, ids);
   if (set.size === 0) return doc;
   const partial = partialGroups(doc, set);
   let groups = doc.groups;
@@ -125,7 +128,10 @@ export function transformItems(doc: Doc, ids: Iterable<string>, m: Mat): Doc {
     ...doc,
     groups,
     guides: doc.guides.map((g) => (set.has(g.id) ? transformGuide(g, m) : g)),
-    shapes: doc.shapes.map((s) => (set.has(s.id) ? { ...s, rings: transformRings(s.rings, m) } : s)),
+    // A fill moved together with all of its outlines keeps following them; moved on its own, it is set free.
+    shapes: doc.shapes.map((s) =>
+      set.has(s.id) ? { ...s, rings: transformRings(s.rings, m), rot: turned(s.rot, m), from: s.from && linkWithin(s.from, set) ? s.from : undefined } : s,
+    ),
     refs: doc.refs.map((r) => (set.has(r.id) ? transformRef(r, m) : r)),
   };
   return touch(unpristine(next, partial));
@@ -141,31 +147,46 @@ export function duplicateItems(doc: Doc, ids: Iterable<string>, m: Mat): { doc: 
   const groups = { ...doc.groups };
   const groupMap = new Map<string, string>();
   const partial = partialGroups(doc, set);
+  const mapGroup = (group: string | undefined, alone: boolean): string | undefined => {
+    if (!group) return undefined;
+    if (alone) return undefined; // one member copied out of a group stands on its own
+    let ng = groupMap.get(group);
+    if (!ng) {
+      ng = uid('w');
+      groupMap.set(group, ng);
+      const src = doc.groups[group];
+      if (src) groups[ng] = { ...src, id: ng, text: src.text ? { ...src.text, m: mul(m, src.text.m) } : undefined };
+    }
+    return ng;
+  };
+  const guideIds = new Map<string, string>();
   for (const g of doc.guides) {
     if (!set.has(g.id)) continue;
     const id = uid('g');
-    guides.push({ ...transformGuide(g, m), id });
+    guideIds.set(g.id, id);
+    guides.push({ ...transformGuide(g, m), id, group: mapGroup(g.group, false) });
     newIds.push(id);
   }
+  // A copied fill follows the copies of its outlines when they were all copied with it.
+  const relink = (from: Shape['from']): Shape['from'] => {
+    if (!from) return undefined;
+    const ids = 'area' in from ? [from.area] : from.guides;
+    if (!ids.every((id) => guideIds.has(id))) return undefined;
+    if ('area' in from) return { area: guideIds.get(from.area)! };
+    const swap = (key: string): string => {
+      const at = key.lastIndexOf('#');
+      return `${guideIds.get(key.slice(0, at))}${key.slice(at)}`;
+    };
+    return {
+      guides: from.guides.map((id) => guideIds.get(id)!),
+      seeds: from.seeds.map((sd) => ({ in: sd.in.map(swap).sort(), sides: Object.fromEntries(Object.entries(sd.sides).map(([k, v]) => [swap(k), v])) })),
+    };
+  };
   for (const s of doc.shapes) {
     if (!set.has(s.id)) continue;
     const id = uid('s');
-    let group = s.group;
-    if (group) {
-      if (partial.has(group)) {
-        group = undefined; // a lone copied letter stands on its own
-      } else {
-        let ng = groupMap.get(group);
-        if (!ng) {
-          ng = uid('w');
-          groupMap.set(group, ng);
-          const src = doc.groups[group];
-          if (src) groups[ng] = { ...src, id: ng, text: src.text ? { ...src.text, m: mul(m, src.text.m) } : undefined };
-        }
-        group = ng;
-      }
-    }
-    shapes.push({ ...s, id, group, rings: transformRings(s.rings, m) });
+    const group = mapGroup(s.group, !!s.group && partial.has(s.group));
+    shapes.push({ ...s, id, group, rings: transformRings(s.rings, m), rot: turned(s.rot, m), from: relink(s.from) });
     newIds.push(id);
   }
   for (const r of doc.refs) {
@@ -246,4 +267,40 @@ export function reorderShape(doc: Doc, id: string, toIndex: number): Doc {
   const [s] = shapes.splice(from, 1);
   shapes.splice(Math.max(0, Math.min(shapes.length, toIndex)), 0, s!);
   return touch({ ...doc, shapes });
+}
+
+/** Add a swatch. Returns the document and the new swatch's index. */
+export function addColor(doc: Doc, color: string): { doc: Doc; index: number } {
+  return { doc: touch({ ...doc, palette: [...doc.palette, color] }), index: doc.palette.length };
+}
+
+/**
+ * Remove a swatch. Whatever was painted with it keeps its look (as a fixed
+ * color); later swatches move down one place. The last swatch cannot go.
+ */
+export function removeColor(doc: Doc, index: number): Doc {
+  if (doc.palette.length <= 1 || index < 0 || index >= doc.palette.length) return doc;
+  const gone = doc.palette[index]!;
+  const fix = (f: Fill): Fill => (typeof f !== 'number' ? f : f === index ? gone : f > index ? f - 1 : f);
+  return touch({
+    ...doc,
+    palette: doc.palette.filter((_, i) => i !== index),
+    shapes: doc.shapes.map((s) => ({
+      ...s,
+      fill: s.fill === null ? null : fix(s.fill),
+      stroke: s.stroke ? { ...s.stroke, color: fix(s.stroke.color) } : undefined,
+    })),
+    groups: Object.fromEntries(Object.entries(doc.groups).map(([id, g]) => [id, g.text ? { ...g, text: { ...g.text, fill: fix(g.text.fill) } } : g])),
+  });
+}
+
+/** Replace the swatches with a color set, keeping what each position painted. */
+export function applyPalette(doc: Doc, colors: string[]): Doc {
+  const gone = doc.palette.slice(colors.length);
+  const fix = (f: Fill): Fill => (typeof f === 'number' && f >= colors.length ? (gone[f - colors.length] ?? '#000000') : f);
+  return touch({
+    ...doc,
+    palette: [...colors],
+    shapes: doc.shapes.map((s) => ({ ...s, fill: s.fill === null ? null : fix(s.fill), stroke: s.stroke ? { ...s.stroke, color: fix(s.stroke.color) } : undefined })),
+  });
 }

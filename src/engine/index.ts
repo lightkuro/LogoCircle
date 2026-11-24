@@ -47,6 +47,67 @@ export function neighbors(arr: Arrangement, faceId: number): number[] {
   return Array.from(seen).sort((a, b) => a - b);
 }
 
+/**
+ * Like `neighbors`, but two faces whose only shared edges lie on one of the
+ * given carriers do not count as neighbours. This is how a cut line separates
+ * the two sides of a shape while everything else still hangs together.
+ */
+export function neighborsNotAcross(arr: Arrangement, faceId: number, carrierKeys: ReadonlySet<string>): number[] {
+  const I = internals(arr);
+  if (faceId < 0 || faceId >= I.follow.length) return [];
+  const seen = new Set<number>();
+  for (let k = I.faceHeStart[faceId]!; k < I.faceHeStart[faceId + 1]!; k++) {
+    const he = I.faceHeList[k]!;
+    const g = I.faceOfHe[he ^ 1]!;
+    if (g < 0 || g === faceId || seen.has(g)) continue;
+    const labels = I.labels[he >> 1]!;
+    let onlyCut = labels.length > 0;
+    for (const l of labels) {
+      if (!carrierKeys.has(I.carrierKeys[l.c]!)) {
+        onlyCut = false;
+        break;
+      }
+    }
+    if (!onlyCut) seen.add(g);
+  }
+  return Array.from(seen).sort((a, b) => a - b);
+}
+
+/** The carriers (by key) that run along a face's boundary. */
+export function faceBoundaryKeys(arr: Arrangement, faceId: number): string[] {
+  const I = internals(arr);
+  if (faceId < 0 || faceId >= I.follow.length) return [];
+  const keys = new Set<string>();
+  for (let k = I.faceHeStart[faceId]!; k < I.faceHeStart[faceId + 1]!; k++) {
+    for (const l of I.labels[I.faceHeList[k]! >> 1]!) keys.add(I.carrierKeys[l.c]!);
+  }
+  return [...keys];
+}
+
+/**
+ * For every stretch of the outer boundary of a set of faces: the carriers that
+ * run along it. (Edges between two faces of the set are not boundary.)
+ */
+export function regionBoundaryKeys(arr: Arrangement, faceIds: Iterable<number>): string[][] {
+  const I = internals(arr);
+  const set = faceIds instanceof Set ? (faceIds as Set<number>) : new Set(faceIds);
+  const out: string[][] = [];
+  const seen = new Set<string>();
+  for (const f of set) {
+    if (f < 0 || f >= I.follow.length) continue;
+    for (let k = I.faceHeStart[f]!; k < I.faceHeStart[f + 1]!; k++) {
+      const he = I.faceHeList[k]!;
+      if (set.has(I.faceOfHe[he ^ 1]!)) continue;
+      const keys = I.labels[he >> 1]!.map((l) => I.carrierKeys[l.c]!);
+      const id = keys.join('|');
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(keys);
+    }
+  }
+  return out;
+}
+
 /** The given faces plus every sliver that follows one of them (transitively). */
 export function withFollowers(arr: Arrangement, faceIds: Iterable<number>): Set<number> {
   const I = internals(arr);

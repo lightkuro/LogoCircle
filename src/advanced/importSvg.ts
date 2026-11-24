@@ -22,6 +22,7 @@ import { commit, getDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
 import type { Shape, Stroke } from '@/model/types';
 import { uid } from '@/model/ids';
+import { board } from '@/model/doc';
 
 interface Paint {
   fill: string | null;
@@ -156,8 +157,9 @@ export function importSvg(text: string): number {
   let box = emptyBBox();
   for (const f of found) box = unionBBox(box, ringsBBox(f.rings));
   const doc = getDoc();
-  const k = Math.min((doc.artboard.w * 0.84) / Math.max(1e-6, box.w), (doc.artboard.h * 0.84) / Math.max(1e-6, box.h));
-  const fit = mul(translate(doc.artboard.w / 2, doc.artboard.h / 2), mul(scale(k, k), translate(-(box.x + box.w / 2), -(box.y + box.h / 2))));
+  const b = board(doc);
+  const k = Math.min((b.w * 0.84) / Math.max(1e-6, box.w), (b.h * 0.84) / Math.max(1e-6, box.h));
+  const fit = mul(translate(b.x + b.w / 2, b.y + b.h / 2), mul(scale(k, k), translate(-(box.x + box.w / 2), -(box.y + box.h / 2))));
   void apply;
 
   const group = found.length > 1 ? uid('w') : undefined;

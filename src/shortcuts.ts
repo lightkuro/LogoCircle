@@ -5,6 +5,9 @@ import {
   addOutline,
   copySelection,
   deleteSelection,
+  doneTool,
+  groupSelection,
+  ungroupSelection,
   duplicateSelection,
   fitToScreen,
   nudge,
@@ -49,6 +52,11 @@ export function useShortcuts(): void {
             e.preventDefault();
             selectAll();
             return;
+          case 'g':
+            e.preventDefault();
+            if (e.shiftKey) ungroupSelection();
+            else groupSelection();
+            return;
           case 'c':
             if (copySelection()) e.preventDefault();
             return;
@@ -92,9 +100,12 @@ export function useShortcuts(): void {
           deleteSelection();
           return;
         case 'Escape':
-          if (s.trayOpen) useUi.setState({ trayOpen: false });
+          if (s.menu) useUi.setState({ menu: null });
+          else if (s.colorPanel !== null) useUi.setState({ colorPanel: null });
+          else if (s.frameEdit) useUi.setState({ frameEdit: false });
+          else if (s.tool !== 'arrange') doneTool();
           else if (s.selection.length) useUi.setState({ selection: [] });
-          else if (s.tool !== 'arrange') setTool('arrange');
+          else if (s.selectMode !== 'move') useUi.setState({ selectMode: 'move' });
           return;
         case 'ArrowLeft':
           e.preventDefault();
@@ -113,7 +124,8 @@ export function useShortcuts(): void {
           nudge(0, step);
           return;
         case 'v':
-          setTool('arrange');
+          useUi.setState({ selectMode: 'move' });
+          doneTool();
           return;
         case 'o':
           addOutline('circle');
@@ -134,8 +146,14 @@ export function useShortcuts(): void {
         case 'p':
           openPhoto();
           return;
-        case 'a':
-          useUi.setState({ trayOpen: !s.trayOpen, tool: 'arrange', erasing: false });
+        case 'd':
+          setTool('draw');
+          return;
+        case 'b':
+          setTool('brush');
+          return;
+        case 'x':
+          setTool('cut');
           return;
         case 'e':
           pickEraser();
@@ -146,13 +164,13 @@ export function useShortcuts(): void {
         case '1':
         case '2':
         case '3':
-          pickInk(Number(key) - 1);
+        case '4': {
+          const i = Number(key) - 1;
+          if (i < useDoc.getState().doc.palette.length) pickInk(i);
           return;
+        }
         case 'n':
           if (s.mode === 'advanced') setTool('pen');
-          return;
-        case 'b':
-          if (s.mode === 'advanced') setTool('brush');
           return;
         case '?':
           useUi.setState({ sheet: 'help' });

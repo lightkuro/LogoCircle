@@ -7,10 +7,11 @@ import { mul, scale, translate, type Mat, type Pt } from '@/geom';
 import { useDoc, getDoc, commit } from '@/store/doc';
 import { ui, useUi, remember, type Mode, type Tool } from '@/store/ui';
 import { putImage } from '@/store/persist';
-import type { Doc, Guide, RefImage, Shape } from '@/model/types';
-import { addGuide, addRef, addShapes, duplicateItems, removeItems, selectionBBox, transformItems, contentBBox } from '@/model/ops';
-import { groupMembers, newDoc } from '@/model/doc';
-import { guideChains, isClosedGuide } from '@/model/guides';
+import { CLASSIC_COLORS, type Doc, type Guide, type RefImage, type Shape } from '@/model/types';
+import { addColor, addGuide, addRef, applyPalette, duplicateItems, removeColor, removeItems, selectionBBox, transformItems, contentBBox } from '@/model/ops';
+import { visibleGuides } from '@/model/paint';
+import { board, groupMembers, newDoc, nextColor } from '@/model/doc';
+import { guideArea } from '@/model/guides';
 import { uid } from '@/model/ids';
 import { chromeInsets, fitView, toDoc, zoomAt } from '@/canvas/view';
 import { regularPoints } from '@/geom';
@@ -155,27 +156,64 @@ export function nudge(dx: number, dy: number): void {
   transformSelection(translate(dx, dy));
 }
 
-/** Turn selected closed outlines straight into colored shapes. */
-export function fillSelectedOutlines(): void {
-  const doc = getDoc();
-  const s = ui();
-  const fill = s.ink;
-  const shapes: Shape[] = [];
-  for (const id of s.selection) {
-    const g = doc.guides.find((x) => x.id === id);
-    if (!g || !isClosedGuide(g)) continue;
-    const rings = guideChains(g).filter((c) => c.closed).map((c) => c.edges);
-    if (rings.length) shapes.push({ id: uid('s'), rings, fill });
+/** The thickness a thin line gets when it is first given a color. */
+const INK_WIDTH = 12;
+
+/**
+ * Give the selection a color. Shapes are recolored. Outlines are colored in:
+ * a closed outline fills, a thick one colors its band, and a thin line first
+ * becomes a stroke. The colored result stays linked to its outline, so later
+ * changes to thickness or shape carry through.
+ */
+export function colorSelection(fill: number | string): boolean {
+  let doc = getDoc();
+  const sel = new Set(ui().selection);
+  if (!sel.size) return false;
+  let did = false;
+  // thin open lines need a body before they can carry a color
+  const guides = doc.guides.map((g) => {
+    if (!sel.has(g.id) || guideArea(g)) return g;
+    did = true;
+    return { ...g, width: INK_WIDTH } as Guide;
+  });
+  if (did) doc = { ...doc, guides };
+  const shapes = doc.shapes.map((s) => {
+    if (!sel.has(s.id) || s.fill === fill) return s;
+    did = true;
+    return { ...s, fill };
+  });
+  const added: Shape[] = [];
+  for (const g of doc.guides) {
+    if (!sel.has(g.id)) continue;
+    const rings = guideArea(g);
+    if (!rings) continue;
+    // already colored from this outline? then just change that color
+    const mine = shapes.findIndex((s) => s.from && 'area' in s.from && s.from.area === g.id);
+    if (mine >= 0) {
+      if (shapes[mine]!.fill !== fill) {
+        shapes[mine] = { ...shapes[mine]!, fill };
+        did = true;
+      }
+      continue;
+    }
+    added.push({ id: uid('s'), rings, fill, from: { area: g.id }, group: g.group });
+    did = true;
   }
-  if (!shapes.length) return;
-  commit(addShapes(doc, shapes));
-  useUi.setState({ selection: shapes.map((x) => x.id) });
+  if (!did) return false;
+  commit({ ...doc, shapes: [...shapes, ...added], updatedAt: Date.now() });
+  return true;
+}
+
+export function fillSelectedOutlines(): void {
+  colorSelection(ui().ink);
 }
 
 export function selectAll(): void {
   const doc = getDoc();
   const ids = [
-    ...(ui().showGuides ? doc.guides.filter((g) => !g.hidden && !g.locked).map((g) => g.id) : []),
+    ...visibleGuides(doc, ui().showGuides, ui().showCuts)
+      .filter((g) => !g.locked)
+      .map((g) => g.id),
     ...doc.shapes.filter((x) => !x.hidden && !x.locked).map((x) => x.id),
   ];
   useUi.setState({ selection: ids, tool: 'arrange', erasing: false });
@@ -183,47 +221,99 @@ export function selectAll(): void {
 
 /** A tap on a letter selects its whole word first. */
 export function expandToGroup(doc: Doc, id: string): string[] {
-  const s = doc.shapes.find((x) => x.id === id);
-  if (s?.group) return groupMembers(doc, s.group);
+  const group = doc.shapes.find((x) => x.id === id)?.group ?? doc.guides.find((x) => x.id === id)?.group;
+  if (group) return groupMembers(doc, group);
   return [id];
 }
 
 // --- tools & modes ------------------------------------------------------------
 
+/** Switch to a tool; choosing the tool that is already on switches it off again. */
 export function setTool(tool: Tool): void {
-  useUi.setState({ tool, erasing: false, trayOpen: false });
+  const s = ui();
+  const next: Tool = s.tool === tool && tool !== 'arrange' ? 'arrange' : tool;
+  useUi.setState({ tool: next, erasing: false, trayOpen: false, colorPanel: null, frameEdit: false, selection: next === 'arrange' ? s.selection : [] });
 }
 
-export function pickInk(ink: number | string): void {
+/** Back to moving things around. */
+export function doneTool(): void {
+  useUi.setState({ tool: 'arrange', erasing: false, colorPanel: null, frameEdit: false });
+}
+
+/** How many swatches the current mode works with. */
+export function colorLimit(): number {
+  return ui().mode === 'classic' ? CLASSIC_COLORS : 24;
+}
+
+/**
+ * Click on a swatch. With something selected it colors that. Otherwise it
+ * picks the color up for coloring areas; clicking the color already in hand
+ * opens its small panel.
+ */
+export function pickInk(ink: number): void {
   const s = ui();
-  if (s.tool === 'color' && !s.erasing && s.ink === ink) {
-    // Second tap on the active swatch: edit it.
-    if (typeof ink === 'number') useUi.setState({ editing: ink, sheet: 'colors' });
+  if (s.tool === 'brush' || s.tool === 'draw' || s.tool === 'pen') {
+    if (s.ink === ink) useUi.setState({ colorPanel: s.colorPanel === ink ? null : ink });
+    else useUi.setState({ ink, colorPanel: null });
     return;
   }
-  useUi.setState({ tool: 'color', ink, erasing: false, selection: [], trayOpen: false });
+  if (s.tool === 'arrange' && s.selection.length && colorSelection(ink)) {
+    useUi.setState({ ink, colorPanel: null });
+    return;
+  }
+  if (s.tool === 'color' && !s.erasing && s.ink === ink) {
+    useUi.setState({ colorPanel: s.colorPanel === ink ? null : ink });
+    return;
+  }
+  useUi.setState({ tool: 'color', ink, erasing: false, selection: [], trayOpen: false, colorPanel: null, frameEdit: false });
 }
 
 export function pickEraser(): void {
-  useUi.setState({ tool: 'color', erasing: true, selection: [], trayOpen: false });
+  const s = ui();
+  if (s.tool === 'color' && s.erasing) return doneTool();
+  useUi.setState({ tool: 'color', erasing: true, selection: [], trayOpen: false, colorPanel: null, frameEdit: false });
+}
+
+/** Add a swatch (black first, then whatever is not there yet) and open its panel. */
+export function addSwatch(): void {
+  const doc = getDoc();
+  if (doc.palette.length >= colorLimit()) return;
+  const r = addColor(doc, nextColor(doc.palette));
+  commit(r.doc);
+  useUi.setState({ ink: r.index, colorPanel: r.index });
+}
+
+export function removeSwatch(index: number): void {
+  const doc = getDoc();
+  if (doc.palette.length <= 1) return;
+  commit(removeColor(doc, index));
+  const s = ui();
+  const ink = typeof s.ink === 'number' ? (s.ink === index ? 0 : s.ink > index ? s.ink - 1 : s.ink) : 0;
+  useUi.setState({ ink, colorPanel: null });
+}
+
+export function usePalette(colors: string[]): void {
+  commit(applyPalette(getDoc(), colors));
+  const s = ui();
+  if (typeof s.ink === 'number' && s.ink >= colors.length) useUi.setState({ ink: 0 });
 }
 
 export function setMode(mode: Mode): void {
   remember('lc.mode', mode);
-  const patch: Partial<ReturnType<typeof ui>> = { mode };
+  const patch: Partial<ReturnType<typeof ui>> = { mode, colorPanel: null };
   const s = ui();
   if (mode === 'classic') {
-    if (s.tool !== 'arrange' && s.tool !== 'color') patch.tool = 'arrange';
-    if (typeof s.ink !== 'number' || s.ink > 2) patch.ink = 0;
+    if (s.tool === 'pen') patch.tool = 'arrange';
     promoteClassicColors();
+    if (typeof s.ink !== 'number' || s.ink >= CLASSIC_COLORS) patch.ink = 0;
   }
   useUi.setState(patch);
 }
 
-/** Back in Classic: make the three most-used colors the three swatches. */
+/** Back in Classic: make the most-used colors the ones on show. */
 function promoteClassicColors(): void {
   const doc = getDoc();
-  if (doc.palette.length <= 3) return;
+  if (doc.palette.length <= CLASSIC_COLORS) return;
   const use = new Array<number>(doc.palette.length).fill(0);
   for (const s of doc.shapes) if (typeof s.fill === 'number') use[s.fill] = (use[s.fill] ?? 0) + 1;
   const order = doc.palette.map((_, i) => i).sort((a, b) => (use[b]! - use[a]!) || a - b);
@@ -242,13 +332,121 @@ function promoteClassicColors(): void {
   });
 }
 
+// --- grouping and stacking --------------------------------------------------------
+
+/** Group everything selected, so it is picked up and moved as one. */
+export function groupSelection(): void {
+  const doc = getDoc();
+  const sel = new Set(ui().selection);
+  if (sel.size < 2) return;
+  const id = uid('w');
+  commit({
+    ...doc,
+    guides: doc.guides.map((g) => (sel.has(g.id) ? { ...g, group: id } : g)),
+    shapes: doc.shapes.map((s) => (sel.has(s.id) ? { ...s, group: id } : s)),
+    groups: { ...doc.groups, [id]: { id, kind: 'group', name: 'Group' } },
+    updatedAt: Date.now(),
+  });
+}
+
+export function selectionGroups(): string[] {
+  const doc = getDoc();
+  const sel = new Set(ui().selection);
+  const out = new Set<string>();
+  for (const s of doc.shapes) if (sel.has(s.id) && s.group) out.add(s.group);
+  for (const g of doc.guides) if (sel.has(g.id) && g.group) out.add(g.group);
+  return [...out];
+}
+
+export function ungroupSelection(): void {
+  const doc = getDoc();
+  const gids = new Set(selectionGroups());
+  if (!gids.size) return;
+  const groups = { ...doc.groups };
+  gids.forEach((g) => delete groups[g]);
+  commit({
+    ...doc,
+    guides: doc.guides.map((g) => (g.group && gids.has(g.group) ? { ...g, group: undefined } : g)),
+    shapes: doc.shapes.map((s) => (s.group && gids.has(s.group) ? { ...s, group: undefined } : s)),
+    groups,
+    updatedAt: Date.now(),
+  });
+}
+
+export type Order = 'front' | 'forward' | 'backward' | 'back';
+
+/** Move the selected shapes up or down the stack. */
+export function orderSelection(order: Order): void {
+  const doc = getDoc();
+  const sel = new Set(ui().selection);
+  const shapes = [...doc.shapes];
+  const picked = shapes.filter((s) => sel.has(s.id));
+  if (!picked.length) return;
+  let next: Shape[];
+  if (order === 'front') next = [...shapes.filter((s) => !sel.has(s.id)), ...picked];
+  else if (order === 'back') next = [...picked, ...shapes.filter((s) => !sel.has(s.id))];
+  else {
+    next = shapes;
+    const step = order === 'forward' ? 1 : -1;
+    const idx = shapes.map((s, i) => (sel.has(s.id) ? i : -1)).filter((i) => i >= 0);
+    if (step === 1) idx.reverse();
+    for (const i of idx) {
+      const j = i + step;
+      if (j < 0 || j >= next.length || sel.has(next[j]!.id)) continue;
+      [next[i], next[j]] = [next[j]!, next[i]!];
+    }
+  }
+  if (next.every((s, i) => s === doc.shapes[i])) return;
+  commit({ ...doc, shapes: next, updatedAt: Date.now() });
+}
+
+/** Free the selected fills from their outlines: they keep their look and stop following. */
+export function detachSelection(): void {
+  const doc = getDoc();
+  const sel = new Set(ui().selection);
+  if (!doc.shapes.some((s) => sel.has(s.id) && s.from)) return;
+  commit({ ...doc, shapes: doc.shapes.map((s) => (sel.has(s.id) && s.from ? { ...s, from: undefined } : s)), updatedAt: Date.now() });
+}
+
+// --- export frame -----------------------------------------------------------------
+
+export function setBoard(b: { x: number; y: number; w: number; h: number }): void {
+  const doc = getDoc();
+  const next = { x: Math.round(b.x), y: Math.round(b.y), w: Math.max(16, Math.round(b.w)), h: Math.max(16, Math.round(b.h)) };
+  const cur = board(doc);
+  if (cur.x === next.x && cur.y === next.y && cur.w === next.w && cur.h === next.h) return;
+  commit({ ...doc, artboard: next, updatedAt: Date.now() });
+}
+
+/** Give the frame a new proportion, keeping its centre and area. */
+export function setBoardRatio(rw: number, rh: number): void {
+  const b = board(getDoc());
+  const area = b.w * b.h;
+  const w = Math.sqrt((area * rw) / rh);
+  const h = area / w;
+  setBoard({ x: b.x + (b.w - w) / 2, y: b.y + (b.h - h) / 2, w, h });
+}
+
+/** Wrap the frame around the artwork with a little breathing room. */
+export function fitBoardToArtwork(): void {
+  const c = contentBBox(getDoc());
+  if (!c || c.w <= 0 || c.h <= 0) return;
+  const pad = Math.max(c.w, c.h) * 0.08;
+  setBoard({ x: c.x - pad, y: c.y - pad, w: c.w + pad * 2, h: c.h + pad * 2 });
+  requestAnimationFrame(() => fitToScreen());
+}
+
+export function editFrame(on = true): void {
+  useUi.setState({ frameEdit: on, tool: 'arrange', erasing: false, selection: [], sheet: null, colorPanel: null });
+}
+
 // --- view ---------------------------------------------------------------------
 
 export function fitToScreen(content = false): void {
   const { stage } = ui();
   if (!stage.w) return;
   const doc = getDoc();
-  const box = (content && contentBBox(doc)) || { x: 0, y: 0, w: doc.artboard.w, h: doc.artboard.h };
+  const box = (content && contentBBox(doc)) || board(doc);
   const pad = content ? Math.max(box.w, box.h) * 0.08 : 0;
   useUi.setState({
     view: fitView(stage, { x: box.x - pad, y: box.y - pad, w: box.w + pad * 2, h: box.h + pad * 2 }, insets()),
@@ -264,7 +462,7 @@ export function zoomBy(factor: number): void {
 
 export function openDoc(doc: Doc): void {
   useDoc.getState().load(doc);
-  useUi.setState({ selection: [], tool: 'arrange', erasing: false, sheet: null, lastDup: null, showGuides: true });
+  useUi.setState({ selection: [], tool: 'arrange', erasing: false, sheet: null, lastDup: null, showGuides: true, colorPanel: null, frameEdit: false, menu: null, ink: 0 });
   requestAnimationFrame(() => fitToScreen());
 }
 
@@ -297,12 +495,13 @@ export async function addPhoto(file: Blob): Promise<void> {
     const id = uid('i');
     await putImage(id, blob);
     const doc = getDoc();
-    const fit = Math.min((doc.artboard.w * 0.86) / w, (doc.artboard.h * 0.86) / h);
+    const b = board(doc);
+    const fit = Math.min((b.w * 0.86) / w, (b.h * 0.86) / h);
     const ref: RefImage = {
       id: uid('r'),
       blob: id,
-      cx: doc.artboard.w / 2,
-      cy: doc.artboard.h / 2,
+      cx: b.x + b.w / 2,
+      cy: b.y + b.h / 2,
       w: w * fit,
       h: h * fit,
       rot: 0,
@@ -383,6 +582,8 @@ export function copySelection(): boolean {
   pasteCount = 0;
   return true;
 }
+
+export const hasClipboard = (): boolean => clipboard !== null;
 
 export function pasteClipboard(): void {
   if (!clipboard) return;

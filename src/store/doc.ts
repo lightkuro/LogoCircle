@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Doc } from '@/model/types';
 import { newDoc } from '@/model/doc';
+import { syncLinks } from '@/model/link';
 
 const LIMIT = 200;
 
@@ -25,14 +26,15 @@ export const useDoc = create<DocState>((set, get) => ({
   past: [],
   future: [],
   rev: 0,
-  commit: (next) => {
+  commit: (change) => {
     const { doc, past, rev } = get();
-    if (next === doc) return;
+    if (change === doc) return;
+    const next = syncLinks(doc, change);
     const p = past.length >= LIMIT ? past.slice(past.length - LIMIT + 1) : past.slice();
     p.push(doc);
     set({ doc: next, past: p, future: [], rev: rev + 1 });
   },
-  patch: (next) => set((s) => ({ doc: next, rev: s.rev + 1 })),
+  patch: (next) => set((s) => ({ doc: syncLinks(s.doc, next), rev: s.rev + 1 })),
   load: (doc) => set((s) => ({ doc, past: [], future: [], rev: s.rev + 1 })),
   undo: () => {
     const { doc, past, future, rev } = get();

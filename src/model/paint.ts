@@ -1,33 +1,14 @@
 import { buildArrangement, neighbors, outline, withFollowers, type Arrangement, type Source } from '@/engine';
-import { derivC, evalC, lineEdge, type Chain } from '@/geom';
-import type { Doc, Fill, Shape } from './types';
-import { guideChains } from './guides';
-import { isPlain } from './doc';
+import type { Doc, Fill, Guide, Shape } from './types';
+import { chainIndex, linkForFaces } from './link';
+export { GAP, reach } from './guides';
+import { board, isPlain } from './doc';
 import { uid } from './ids';
 
-/**
- * How far (document units) an open outline is allowed to fall short of another
- * and still close the area. Lines that look like they touch should count.
- */
-export const GAP = 4;
-
-/** An open chain with both ends pushed out by GAP along their direction. */
-function reach(chain: Chain): Chain {
-  if (chain.closed || chain.edges.length === 0) return chain;
-  const edges = chain.edges.slice();
-  const first = edges[0]!;
-  const last = edges[edges.length - 1]!;
-  const a = evalC(first.c, first.t0);
-  const da = derivC(first.c, first.t0);
-  const sa = Math.sign(first.t1 - first.t0) || 1;
-  const la = Math.hypot(da.x, da.y);
-  if (la > 1e-9) edges.unshift(lineEdge(a.x - ((da.x * sa) / la) * GAP, a.y - ((da.y * sa) / la) * GAP, a.x, a.y));
-  const b = evalC(last.c, last.t1);
-  const db = derivC(last.c, last.t1);
-  const sb = Math.sign(last.t1 - last.t0) || 1;
-  const lb = Math.hypot(db.x, db.y);
-  if (lb > 1e-9) edges.push(lineEdge(b.x, b.y, b.x + ((db.x * sb) / lb) * GAP, b.y + ((db.y * sb) / lb) * GAP));
-  return { edges, closed: false };
+/** The outlines that currently count: shown, not hidden, and cut lines only while those are shown. */
+export function visibleGuides(doc: Doc, showGuides: boolean, showCuts = true): Guide[] {
+  if (!showGuides) return [];
+  return doc.guides.filter((g) => !g.hidden && !(g.type === 'line' && g.cut && !showCuts));
 }
 
 /**
@@ -35,15 +16,8 @@ function reach(chain: Chain): Chain {
  * shapes count: the open background around them is not an area, so a stray tap
  * beside the artwork never floods the whole artboard (Paper sets a background).
  */
-export function docSources(doc: Doc, showGuides: boolean): Source[] {
-  const sources: Source[] = [];
-  if (showGuides) {
-    for (const g of doc.guides) {
-      if (g.hidden) continue;
-      const chains = guideChains(g).map(reach);
-      if (chains.length) sources.push({ id: g.id, fill: false, chains });
-    }
-  }
+export function docSources(doc: Doc, showGuides: boolean, showCuts = true): Source[] {
+  const sources: Source[] = chainIndex(visibleGuides(doc, showGuides, showCuts)).sources;
   for (const s of doc.shapes) {
     if (s.hidden || s.rings.length === 0) continue;
     sources.push({ id: s.id, fill: true, chains: s.rings.map((r) => ({ edges: r, closed: true })) });
@@ -51,10 +25,10 @@ export function docSources(doc: Doc, showGuides: boolean): Source[] {
   return sources;
 }
 
-export function buildDocArrangement(doc: Doc, showGuides: boolean): Arrangement {
-  const { w, h } = doc.artboard;
-  return buildArrangement(docSources(doc, showGuides), {
-    bounds: { x: -w, y: -h, w: w * 3, h: h * 3 },
+export function buildDocArrangement(doc: Doc, showGuides: boolean, showCuts = true): Arrangement {
+  const { x, y, w, h } = board(doc);
+  return buildArrangement(docSources(doc, showGuides, showCuts), {
+    bounds: { x: x - w, y: y - h, w: w * 3, h: h * 3 },
   });
 }
 
@@ -78,9 +52,12 @@ export function faceTopShape(doc: Doc, arr: Arrangement, faceId: number): Shape 
  * which merge into one. Shapes that are not involved are left untouched.
  * Returns the same document object when nothing would change.
  */
-export function paintFaces(doc: Doc, arr: Arrangement, faceIds: Iterable<number>, fill: Fill | null): Doc {
+export function paintFaces(doc: Doc, arr: Arrangement, faceIds: Iterable<number>, fill: Fill | null, guides: Guide[] = visibleGuides(doc, true)): Doc {
   const P = withFollowers(arr, faceIds);
   if (P.size === 0) return doc;
+  // The outlines the arrangement was built from: new shapes stay linked to them and follow when they move.
+  const idx = chainIndex(guides);
+  const link = (faces: Iterable<number>) => linkForFaces(arr, faces, idx);
 
   // Faces covered by each shape.
   const facesOf = new Map<string, number[]>();
@@ -205,11 +182,11 @@ export function paintFaces(doc: Doc, arr: Arrangement, faceIds: Iterable<number>
     if (after.length <= before) {
       // Still as many islands as it had (the dot of an i stays with its stem).
       const rings = rest.length ? outline(arr, rest) : [];
-      if (rings.length) out.push({ ...s, rings });
+      if (rings.length) out.push({ ...s, rings, from: link(rest) });
     } else {
       after.forEach((piece, i) => {
         const rings = outline(arr, piece);
-        if (rings.length) out.push({ ...s, id: i === 0 ? s.id : uid('s'), rings });
+        if (rings.length) out.push({ ...s, id: i === 0 ? s.id : uid('s'), rings, from: link(piece) });
       });
     }
     replaced.set(id, out);
@@ -236,7 +213,7 @@ export function paintFaces(doc: Doc, arr: Arrangement, faceIds: Iterable<number>
       const rings = outline(arr, c.faces);
       if (!rings.length) continue;
       if (!c.shapes.length) {
-        fresh.push({ id: uid('s'), rings, fill });
+        fresh.push({ id: uid('s'), rings, fill, from: link(c.faces) });
         continue;
       }
       // Takes the place (and identity) of the topmost shape it absorbed.
@@ -249,7 +226,7 @@ export function paintFaces(doc: Doc, arr: Arrangement, faceIds: Iterable<number>
         else if (group !== g) group = undefined;
       });
       const keep = doc.shapes[top]!;
-      placed.set(top, { ...keep, rings, fill, group });
+      placed.set(top, { ...keep, rings, fill, group, from: link(c.faces) });
     }
   }
 

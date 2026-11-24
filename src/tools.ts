@@ -1,4 +1,4 @@
-/** Advanced drawing tools: the pen (click points, drag to bend) and the freehand brush. */
+/** Drawing tools: pen (click points, drag to bend), brush, freehand draw, and cut. */
 import { create } from 'zustand';
 import { chainsToPath, ellipseChain, fmt, splineChain, type Pt, type Ring } from '@/geom';
 import { strokeOutline } from '@/engine';
@@ -6,7 +6,9 @@ import { commit, getDoc } from '@/store/doc';
 import { ui, useUi } from '@/store/ui';
 import { addGuide, addShapes } from '@/model/ops';
 import { guideCenterline } from '@/model/guides';
-import type { PathGuide, PathNode, Shape } from '@/model/types';
+import type { CurveGuide, PathGuide, PathNode, Shape } from '@/model/types';
+import { cutAlong } from '@/model/cut';
+import { toast } from 'sonner';
 import { uid } from '@/model/ids';
 import { registerDrawTool } from '@/canvas/useGestures';
 import { useDrag } from '@/canvas/drag';
@@ -179,6 +181,108 @@ registerDrawTool('brush', {
   cancel() {
     stroke = [];
     useDrag.getState().set({ draft: null, draftWidth: 0 });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Draw: a freehand line that comes out as a smooth, editable curve
+// ---------------------------------------------------------------------------
+
+let sketch: Pt[] = [];
+
+function showSketch(): void {
+  if (!sketch.length) return void useDrag.getState().set({ draft: null, draftWidth: 0, draftDashed: false });
+  let d = `M${fmt(sketch[0]!.x)} ${fmt(sketch[0]!.y)}`;
+  for (let i = 1; i < sketch.length; i++) d += `L${fmt(sketch[i]!.x)} ${fmt(sketch[i]!.y)}`;
+  useDrag.getState().set({ draft: d, draftWidth: 0, draftDashed: false });
+}
+
+registerDrawTool('draw', {
+  down(p) {
+    sketch = [p];
+    showSketch();
+  },
+  move(p) {
+    const last = sketch[sketch.length - 1];
+    if (last && dist(p, last) < 1.5 / ui().view.k) return;
+    sketch.push(p);
+    showSketch();
+  },
+  up() {
+    const pts = sketch;
+    sketch = [];
+    useDrag.getState().set({ draft: null, draftWidth: 0 });
+    const k = ui().view.k;
+    if (pts.length < 3 || dist(pts[0]!, pts[pts.length - 1]!) + pts.length < 6) return;
+    // Keep only the points that carry the shape; the curve through them is the smoothing.
+    let keep = simplify(pts, 7 / k);
+    if (keep.length < 2) return;
+    const closed = keep.length >= 4 && dist(keep[0]!, keep[keep.length - 1]!) < 18 / k;
+    if (closed) keep = keep.slice(0, -1);
+    const g: CurveGuide = { id: uid('g'), type: 'curve', pts: keep.map((q) => ({ x: q.x, y: q.y })), closed, width: 0 };
+    commit(addGuide(getDoc(), g));
+    useUi.setState({ showGuides: true });
+  },
+  cancel() {
+    sketch = [];
+    useDrag.getState().set({ draft: null, draftWidth: 0 });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Cut: drag a line across things to separate them along it
+// ---------------------------------------------------------------------------
+
+let cutFrom: Pt | null = null;
+let cutTo: Pt | null = null;
+
+function showCut(): void {
+  if (!cutFrom || !cutTo) return void useDrag.getState().set({ draft: null, draftDashed: false });
+  useDrag.getState().set({ draft: `M${fmt(cutFrom.x)} ${fmt(cutFrom.y)}L${fmt(cutTo.x)} ${fmt(cutTo.y)}`, draftWidth: 0, draftDashed: true });
+}
+
+registerDrawTool('cut', {
+  down(p) {
+    cutFrom = p;
+    cutTo = p;
+    showCut();
+  },
+  move(p, e) {
+    if (!cutFrom) return;
+    let q = p;
+    if (e.shiftKey) {
+      // hold Shift for a cut at a clean angle
+      const a = Math.round(Math.atan2(p.y - cutFrom.y, p.x - cutFrom.x) / (Math.PI / 12)) * (Math.PI / 12);
+      const len = dist(p, cutFrom);
+      q = { x: cutFrom.x + Math.cos(a) * len, y: cutFrom.y + Math.sin(a) * len };
+    }
+    cutTo = q;
+    showCut();
+  },
+  up() {
+    const a = cutFrom;
+    const b = cutTo;
+    cutFrom = cutTo = null;
+    useDrag.getState().set({ draft: null, draftDashed: false });
+    if (!a || !b || dist(a, b) < 6 / ui().view.k) return;
+    const doc = getDoc();
+    let next = doc;
+    try {
+      next = cutAlong(doc, a, b, { outlines: ui().showGuides });
+    } catch {
+      next = doc;
+    }
+    if (next === doc) {
+      toast('Nothing to cut there', { description: 'Drag the line all the way across a shape or an outline.' });
+      return;
+    }
+    navigator.vibrate?.(8);
+    commit(next);
+    useUi.setState({ showCuts: true });
+  },
+  cancel() {
+    cutFrom = cutTo = null;
+    useDrag.getState().set({ draft: null, draftDashed: false });
   },
 });
 

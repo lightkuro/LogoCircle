@@ -7,24 +7,27 @@ import { fitToScreen } from '@/actions';
 import { arrangementRef, useGestures } from './useGestures';
 import { FacesLayer, GuidesLayer, PhotoLayer, SceneOverlays, SelectionOverlay, ShapesLayer } from './layers';
 import { Loupe } from './Loupe';
+import { useDrag } from './drag';
+import { board } from '@/model/doc';
 
 function useArrangement(): Arrangement | null {
   const tool = useUi((s) => s.tool);
   const showGuides = useUi((s) => s.showGuides);
+  const showCuts = useUi((s) => s.showCuts);
   const guides = useDoc((s) => s.doc.guides);
   const shapes = useDoc((s) => s.doc.shapes);
   const artboard = useDoc((s) => s.doc.artboard);
   const arr = useMemo(() => {
     if (tool !== 'color') return null;
     try {
-      return buildDocArrangement(useDoc.getState().doc, showGuides);
+      return buildDocArrangement(useDoc.getState().doc, showGuides, showCuts);
     } catch (err) {
       console.error('Could not divide the canvas into areas', err);
       return null;
     }
     // `guides`, `shapes` and `artboard` are what the arrangement is made of.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tool, showGuides, guides, shapes, artboard]);
+  }, [tool, showGuides, showCuts, guides, shapes, artboard]);
   useLayoutEffect(() => {
     arrangementRef.current = arr;
   }, [arr]);
@@ -35,7 +38,11 @@ export function Stage() {
   const wrap = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const view = useUi((s) => s.view);
-  const artboard = useDoc((s) => s.doc.artboard);
+  const art = useDoc((s) => s.doc.artboard);
+  const liveBoard = useDrag((s) => s.board);
+  const hold = useDrag((s) => s.hold);
+  // While the export frame is dragged it follows the pointer; the document changes on release.
+  const artboard = liveBoard ?? board({ artboard: art });
   const paper = useDoc((s) => s.doc.paper);
   const tool = useUi((s) => s.tool);
   const grid = useUi((s) => (s.mode === 'advanced' ? s.grid : 0));
@@ -83,23 +90,24 @@ export function Stage() {
             </pattern>
           )}
           <clipPath id="lc-artboard-clip">
-            <rect x={0} y={0} width={artboard.w} height={artboard.h} />
+            <rect x={artboard.x} y={artboard.y} width={artboard.w} height={artboard.h} />
           </clipPath>
         </defs>
         <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
           <g id="lc-scene-inner">
-            <rect x={0} y={0} width={artboard.w} height={artboard.h} fill={paper ?? 'url(#lc-checker)'} />
+            <rect x={artboard.x} y={artboard.y} width={artboard.w} height={artboard.h} fill={paper ?? 'url(#lc-checker)'} />
             <PhotoLayer />
             <ShapesLayer />
             <PhotoLayer above />
             <FacesLayer arr={arr} />
-            {grid > 0 && <rect x={0} y={0} width={artboard.w} height={artboard.h} fill="url(#lc-grid)" style={{ pointerEvents: 'none' }} />}
-            <rect x={0} y={0} width={artboard.w} height={artboard.h} className="artboard-edge" />
+            {grid > 0 && <rect x={artboard.x} y={artboard.y} width={artboard.w} height={artboard.h} fill="url(#lc-grid)" style={{ pointerEvents: 'none' }} />}
+            <rect x={artboard.x} y={artboard.y} width={artboard.w} height={artboard.h} className="artboard-edge" />
             <GuidesLayer />
           </g>
           <SceneOverlays />
         </g>
         <SelectionOverlay />
+        {hold && <circle cx={hold.x} cy={hold.y} r={30} className="hold-ring" />}
       </svg>
       <Loupe />
     </div>

@@ -130,3 +130,74 @@ export function regularPoints(cx: number, cy: number, r: number, sides: number, 
   }
   return pts;
 }
+
+/**
+ * Closed polygon whose corners may be rounded. `radii[i]` rounds the corner at
+ * `pts[i]`; the rounding is an exact circular arc tangent to both sides, and is
+ * held back to half of the shorter side so neighbouring corners never collide.
+ */
+export function roundedPolygonChain(pts: Pt[], radii?: number[]): Chain {
+  const n = pts.length;
+  if (!radii || n < 3 || !radii.some((r) => r > 0)) return polygonChain(pts);
+  // For each corner: where the straight side stops (entry) and resumes (exit), and the arc between.
+  const entry: Pt[] = [];
+  const exit: Pt[] = [];
+  const arcs: (Edge | null)[] = [];
+  for (let i = 0; i < n; i++) {
+    const v = pts[i]!;
+    const a = pts[(i - 1 + n) % n]!;
+    const b = pts[(i + 1) % n]!;
+    const la = Math.hypot(a.x - v.x, a.y - v.y);
+    const lb = Math.hypot(b.x - v.x, b.y - v.y);
+    let r = radii[i] ?? 0;
+    if (r <= 0 || la < 1e-9 || lb < 1e-9) {
+      entry.push(v);
+      exit.push(v);
+      arcs.push(null);
+      continue;
+    }
+    const ux = (a.x - v.x) / la;
+    const uy = (a.y - v.y) / la;
+    const wx = (b.x - v.x) / lb;
+    const wy = (b.y - v.y) / lb;
+    const cos = Math.max(-1, Math.min(1, ux * wx + uy * wy));
+    const tanHalf = Math.sqrt((1 - cos) / (1 + cos + 1e-12));
+    if (!isFinite(tanHalf) || tanHalf < 1e-6 || tanHalf > 1e6) {
+      entry.push(v);
+      exit.push(v);
+      arcs.push(null);
+      continue;
+    }
+    let d = r / tanHalf;
+    const max = Math.min(la, lb) / 2;
+    if (d > max) {
+      d = max;
+      r = d * tanHalf;
+    }
+    const p1 = { x: v.x + ux * d, y: v.y + uy * d };
+    const p2 = { x: v.x + wx * d, y: v.y + wy * d };
+    const bx = ux + wx;
+    const by = uy + wy;
+    const bl = Math.hypot(bx, by) || 1;
+    const dist = Math.hypot(d, r);
+    const cx = v.x + (bx / bl) * dist;
+    const cy = v.y + (by / bl) * dist;
+    const a1 = Math.atan2(p1.y - cy, p1.x - cx);
+    let sweep = Math.atan2(p2.y - cy, p2.x - cx) - a1;
+    if (sweep > Math.PI) sweep -= Math.PI * 2;
+    if (sweep <= -Math.PI) sweep += Math.PI * 2;
+    entry.push(p1);
+    exit.push(p2);
+    arcs.push(arcEdge(cx, cy, r, a1, a1 + sweep));
+  }
+  const edges: Edge[] = [];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const from = exit[i]!;
+    const to = entry[j]!;
+    if (Math.hypot(to.x - from.x, to.y - from.y) > 1e-9) edges.push(lineEdge(from.x, from.y, to.x, to.y));
+    const arc = arcs[j];
+    if (arc) edges.push(arc);
+  }
+  return { edges, closed: true };
+}

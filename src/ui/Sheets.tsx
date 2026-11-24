@@ -1,5 +1,4 @@
 import { CodeSheet } from './sheets/CodeSheet';
-import { ColorsSheet } from './sheets/ColorsSheet';
 import { ExportSheet } from './sheets/ExportSheet';
 import { GallerySheet } from './sheets/GallerySheet';
 import { HelpSheet } from './sheets/HelpSheet';
@@ -10,7 +9,6 @@ export function Sheets() {
   return (
     <>
       <MenuSheet />
-      <ColorsSheet />
       <ExportSheet />
       <GallerySheet />
       <TextSheet />

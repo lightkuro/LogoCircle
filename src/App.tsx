@@ -4,20 +4,29 @@ import { Stage } from '@/canvas/Stage';
 import { useDoc } from '@/store/doc';
 import { loadCurrent, startAutosave } from '@/store/persist';
 import { openDoc, addPhoto } from '@/actions';
+import { remember } from '@/store/ui';
 import { useShortcuts } from '@/shortcuts';
 import { TopBar } from '@/ui/TopBar';
 import { Dock } from '@/ui/Dock';
 import { ContextBar } from '@/ui/ContextBar';
 import { TipProvider, useIsPhone } from '@/ui/primitives';
 import { Sheets } from '@/ui/Sheets';
-import { Welcome } from '@/ui/Welcome';
+import { ContextMenu } from '@/ui/ContextMenu';
 import { ZoomControl } from '@/ui/ZoomControl';
 import { AdvancedPanel } from '@/ui/advanced/Panel';
 import { thumbnail } from '@/export/svg';
 import { isTyping } from '@/canvas/useGestures';
 
+const seenBefore = (): boolean => {
+  try {
+    return localStorage.getItem('lc.seen') === '1';
+  } catch {
+    return false;
+  }
+};
+
 export function App() {
-  const [ready, setReady] = useState(false);
+  const [, setReady] = useState(false);
   const phone = useIsPhone();
   useShortcuts();
 
@@ -25,11 +34,17 @@ export function App() {
     let stop: (() => void) | undefined;
     void loadCurrent()
       .catch(() => undefined)
-      .then((doc) => {
-        if (doc && doc.v === 1) useDoc.getState().load(doc);
+      .then(async (doc) => {
+        let first = doc && doc.v === 1 ? doc : undefined;
+        if (!first && !seenBefore()) {
+          // A first visit starts with a small example to take apart instead of a blank page.
+          first = await import('@/examples/starter').then((m) => m.buildStarter()).catch(() => undefined);
+          remember('lc.seen', '1');
+        }
+        if (first) useDoc.getState().load(first);
         setReady(true);
         stop = startAutosave(thumbnail);
-        if (doc) requestAnimationFrame(() => openDoc(useDoc.getState().doc));
+        if (first) requestAnimationFrame(() => openDoc(useDoc.getState().doc));
       });
     return () => stop?.();
   }, []);
@@ -68,7 +83,6 @@ export function App() {
     <TipProvider delay={500} closeDelay={0} timeout={400}>
       <div className="app">
         <Stage />
-        {ready && <Welcome />}
         <TopBar />
         <div className="chrome-bottom">
           <ContextBar />
@@ -77,6 +91,7 @@ export function App() {
         {!phone && <ZoomControl />}
         <AdvancedPanel />
         <Sheets />
+        <ContextMenu />
         <Toaster position="top-center" offset={phone ? 76 : 72} mobileOffset={76} toastOptions={{ style: { borderRadius: 14 } }} />
       </div>
     </TipProvider>

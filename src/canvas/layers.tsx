@@ -4,11 +4,11 @@ import { withFollowers, type Arrangement } from '@/engine';
 import { useDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
 import { imageUrl } from '@/store/persist';
-import { resolveFill } from '@/model/doc';
+import { board, resolveFill } from '@/model/doc';
 import { guideCenterline, guideChains, guideWidth } from '@/model/guides';
 import type { Doc, Guide, RefImage, Shape } from '@/model/types';
 import { useDrag } from './drag';
-import { frameCorners, placeHandles, selectionFrame, type Frame } from './frame';
+import { boxHandles, frameCorners, placeHandles, selectionFrame, type Frame } from './frame';
 import { toScreen } from './view';
 
 // ---------------------------------------------------------------------------
@@ -67,37 +67,49 @@ export function PhotoLayer({ above = false }: { above?: boolean }) {
 // Shapes
 // ---------------------------------------------------------------------------
 
-const ShapeItem = memo(function ShapeItem({ shape, fill, stroke }: { shape: Shape; fill: string; stroke: string | null }) {
-  const d = useMemo(() => ringsToPath(shape.rings), [shape.rings]);
+const ShapeItem = memo(function ShapeItem({ shape, fill, stroke, ghost }: { shape: Shape; fill: string; stroke: string | null; ghost: boolean }) {
+  // While an outline is dragged, the fills that follow it are shown as they will end up.
+  const live = useDrag((s) => (s.shapeRings && shape.id in s.shapeRings ? s.shapeRings[shape.id] : undefined));
+  const rings = live === undefined ? shape.rings : live;
+  const d = useMemo(() => (rings ? ringsToPath(rings) : ''), [rings]);
   const mat = useDrag((s) => (s.ids?.has(shape.id) ? s.mat : null));
-  if (shape.hidden) return null;
+  if (shape.hidden || !d) return null;
   return (
-    <path
-      d={d}
-      fill={fill}
-      stroke={stroke ?? undefined}
-      strokeWidth={shape.stroke?.width}
-      strokeLinejoin={shape.stroke?.join ?? 'round'}
-      strokeLinecap={shape.stroke?.cap ?? 'round'}
-      opacity={shape.opacity}
-      transform={mat ? toCss(mat) : undefined}
-    />
+    <g transform={mat ? toCss(mat) : undefined}>
+      <path
+        d={d}
+        fill={fill}
+        stroke={stroke ?? undefined}
+        strokeWidth={shape.stroke?.width}
+        strokeLinejoin={shape.stroke?.join ?? 'round'}
+        strokeLinecap={shape.stroke?.cap ?? 'round'}
+        opacity={shape.opacity}
+      />
+      {ghost && <path d={d} className="ghost" />}
+    </g>
   );
 });
 
 export function ShapesLayer() {
   const shapes = useDoc((s) => s.doc.shapes);
   const palette = useDoc((s) => s.doc.palette);
+  const paper = useDoc((s) => s.doc.paper);
+  const showGuides = useUi((s) => s.showGuides);
   return (
     <g>
-      {shapes.map((s) => (
-        <ShapeItem
-          key={s.id}
-          shape={s}
-          fill={resolveFill({ palette }, s.fill)}
-          stroke={s.stroke ? resolveFill({ palette }, s.stroke.color) : null}
-        />
-      ))}
+      {shapes.map((s) => {
+        const fill = resolveFill({ palette }, s.fill);
+        return (
+          <ShapeItem
+            key={s.id}
+            shape={s}
+            fill={fill}
+            stroke={s.stroke ? resolveFill({ palette }, s.stroke.color) : null}
+            // a white shape on white paper would otherwise be invisible while editing
+            ghost={showGuides && !!paper && fill.toLowerCase() === paper.toLowerCase() && !s.stroke}
+          />
+        );
+      })}
     </g>
   );
 }
@@ -113,8 +125,9 @@ const GuideItem = memo(function GuideItem({ guide, selected, quiet }: { guide: G
   const d = useMemo(() => chainsToPath(guideChains(g)), [g]);
   const spine = useMemo(() => (guideWidth(g) > 0 ? chainsToPath(guideCenterline(g)) : null), [g]);
   if (g.hidden) return null;
+  const cut = g.type === 'line' && g.cut;
   return (
-    <g transform={mat ? toCss(mat) : undefined} className={selected ? 'guide is-selected' : quiet ? 'guide is-quiet' : 'guide'}>
+    <g transform={mat ? toCss(mat) : undefined} className={`guide${selected ? ' is-selected' : quiet ? ' is-quiet' : ''}${cut ? ' is-cut' : ''}`}>
       <path d={d} className="guide-halo" />
       <path d={d} className="guide-line" />
       {spine && <path d={spine} className="guide-spine" />}
@@ -126,13 +139,12 @@ export function GuidesLayer() {
   const guides = useDoc((s) => s.doc.guides);
   const selection = useUi((s) => s.selection);
   const show = useUi((s) => s.showGuides);
+  const showCuts = useUi((s) => s.showCuts);
   const quiet = useUi((s) => s.tool === 'color');
   if (!show) return null;
   return (
     <g>
-      {guides.map((g) => (
-        <GuideItem key={g.id} guide={g} selected={selection.includes(g.id)} quiet={quiet} />
-      ))}
+      {guides.map((g) => (g.type === 'line' && g.cut && !showCuts ? null : <GuideItem key={g.id} guide={g} selected={selection.includes(g.id)} quiet={quiet} />))}
     </g>
   );
 }
@@ -181,6 +193,7 @@ export function SceneOverlays() {
   const marquee = useDrag((s) => s.marquee);
   const draft = useDrag((s) => s.draft);
   const draftWidth = useDrag((s) => s.draftWidth);
+  const dashed = useDrag((s) => s.draftDashed);
   const ink = useUi((s) => s.ink);
   const palette = useDoc((s) => s.doc.palette);
   return (
@@ -193,7 +206,10 @@ export function SceneOverlays() {
         (draftWidth > 0 ? (
           <path d={draft} fill="none" stroke={resolveFill({ palette }, ink)} strokeWidth={draftWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} />
         ) : (
-          <path d={draft} className="draft" />
+          <>
+            <path d={draft} className="draft-halo" />
+            <path d={draft} className={dashed ? 'draft is-dashed' : 'draft'} />
+          </>
         ))}
     </g>
   );
@@ -218,13 +234,17 @@ export function SelectionOverlay() {
   const selection = useUi((s) => s.selection);
   const view = useUi((s) => s.view);
   const tool = useUi((s) => s.tool);
+  const selRot = useUi((s) => s.selRot);
+  const corner = useUi((s) => s.corner);
+  const frameEdit = useUi((s) => s.frameEdit);
   const mat = useDrag((s) => s.mat);
   const dragIds = useDrag((s) => s.ids);
   const override = useDrag((s) => s.guide);
 
+  if (frameEdit) return <BoardOverlay />;
   if (tool !== 'arrange' || !selection.length) return null;
   const d = previewDoc(doc, override);
-  const frame = selectionFrame(d, selection);
+  const frame = selectionFrame(d, selection, selRot);
   if (!frame) return null;
   const moving = !!(mat && dragIds);
   const corners = transformFrameCorners(frame, moving ? mat : null).map((p) => toScreen(view, p));
@@ -233,19 +253,17 @@ export function SelectionOverlay() {
   const handles = moving || lockedPhoto ? [] : placeHandles(d, selection, frame, view.k);
   const rot = handles.find((h) => h.handle.kind === 'rot');
   const top = { x: (corners[0]!.x + corners[1]!.x) / 2, y: (corners[0]!.y + corners[1]!.y) / 2 };
+  const points = corners.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
     <g style={{ pointerEvents: 'none' }}>
-      {!isLine && <polygon points={corners.map((p) => `${p.x},${p.y}`).join(' ')} className="sel-frame" />}
-      {rot && (
-        <line
-          x1={top.x}
-          y1={top.y}
-          x2={toScreen(view, rot.p).x}
-          y2={toScreen(view, rot.p).y}
-          className="sel-stem"
-        />
+      {!isLine && (
+        <>
+          <polygon points={points} className="sel-halo" />
+          <polygon points={points} className="sel-frame" />
+        </>
       )}
+      {rot && <line x1={top.x} y1={top.y} x2={toScreen(view, rot.p).x} y2={toScreen(view, rot.p).y} className="sel-stem" />}
       {handles.map((h, i) => {
         const p = toScreen(view, h.p);
         switch (h.handle.kind) {
@@ -256,8 +274,10 @@ export function SelectionOverlay() {
                 <path d="M-3.6 -1.2A3.9 3.9 0 1 1 -2.6 2.9M-3.9 -4.1V-1H-0.8" className="handle-rot-glyph" />
               </g>
             );
-          case 'pt':
-            return <circle key={i} cx={p.x} cy={p.y} r={6} className="handle-pt" />;
+          case 'pt': {
+            const picked = corner && corner.id === selection[0] && (corner.index === h.handle.index || corner.index < 0);
+            return <circle key={i} cx={p.x} cy={p.y} r={5.5} className={picked ? 'handle-pt is-picked' : 'handle-pt'} />;
+          }
           case 'hin':
           case 'hout': {
             const g0 = d.guides.find((x) => x.id === selection[0]);
@@ -265,22 +285,42 @@ export function SelectionOverlay() {
             const a = node ? toScreen(view, node) : p;
             return (
               <g key={i}>
-                <line x1={a.x} y1={a.y} x2={p.x} y2={p.y} className="sel-stem" opacity={0.7} />
+                <line x1={a.x} y1={a.y} x2={p.x} y2={p.y} className="sel-stem" />
                 <rect x={p.x - 4} y={p.y - 4} width={8} height={8} rx={1.5} className="handle-box" />
               </g>
             );
           }
           case 'mid':
-            return (
-              <g key={i} transform={`translate(${p.x} ${p.y})`}>
-                <circle r={7} className="handle-mid" />
-                <path d="M-3 0H3M0 -3V3" className="handle-mid-glyph" />
-              </g>
-            );
+            return <circle key={i} cx={p.x} cy={p.y} r={3.2} className="handle-mid" />;
           default:
-            return <circle key={i} cx={p.x} cy={p.y} r={5.5} className="handle-box" />;
+            return <circle key={i} cx={p.x} cy={p.y} r={5} className="handle-box" />;
         }
       })}
+    </g>
+  );
+}
+
+/** While the export frame is being adjusted: everything outside it dims, and it gets handles. */
+function BoardOverlay() {
+  const art = useDoc((s) => s.doc.artboard);
+  const live = useDrag((s) => s.board);
+  const view = useUi((s) => s.view);
+  const stage = useUi((s) => s.stage);
+  const b = live ?? board({ artboard: art });
+  const a = toScreen(view, { x: b.x, y: b.y });
+  const c = toScreen(view, { x: b.x + b.w, y: b.y + b.h });
+  const frame: Frame = { cx: b.x + b.w / 2, cy: b.y + b.h / 2, w: b.w, h: b.h, rot: 0 };
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <path d={`M0 0H${stage.w}V${stage.h}H0ZM${a.x} ${a.y}V${c.y}H${c.x}V${a.y}Z`} className="frame-dim" fillRule="evenodd" />
+      <rect x={a.x} y={a.y} width={c.x - a.x} height={c.y - a.y} className="frame-edge" />
+      {boxHandles(frame).map((h, i) => {
+        const p = toScreen(view, h.p);
+        return <circle key={i} cx={p.x} cy={p.y} r={6} className="handle-box" />;
+      })}
+      <text x={(a.x + c.x) / 2} y={a.y - 10} textAnchor="middle" fontSize={12} fontWeight={600} fill="#fff" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {Math.round(b.w)} × {Math.round(b.h)}
+      </text>
     </g>
   );
 }

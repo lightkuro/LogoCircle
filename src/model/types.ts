@@ -1,4 +1,4 @@
-import type { Mat, Pt, Ring } from '@/geom';
+import type { Edge, Mat, Pt, Ring } from '@/geom';
 
 /** A color: an index into the document palette (a linked swatch) or a fixed hex string. */
 export type Fill = number | string;
@@ -22,13 +22,43 @@ export interface Shape {
   name?: string;
   hidden?: boolean;
   locked?: boolean;
+  /** Angle of the selection box, so it turns with the shape instead of snapping back upright. */
+  rot?: number;
+  /** How this shape follows the outlines it was colored in from. Absent = it stands on its own. */
+  from?: Link;
 }
+
+/**
+ * One kind of area between outlines, described by where it lies relative to
+ * each of them rather than by coordinates — which is what lets a fill follow
+ * its outlines when they move. Keys are "<guide id>#<chain index>".
+ */
+export interface Seed {
+  /** Closed outlines this area is inside of. */
+  in: string[];
+  /** For open outlines along its edge: which side of them it is on. */
+  sides: Record<string, 1 | -1>;
+}
+
+export type Link =
+  /** Exactly the area one outline encloses (or the band of a thick one). */
+  | { area: string }
+  /** The areas matching these seeds between these outlines. */
+  | { guides: string[]; seeds: Seed[] };
+
+/**
+ * Where a thick closed outline grows: into the shape (the default), evenly on
+ * both sides, or outward.
+ */
+export type Band = 'in' | 'mid' | 'out';
 
 interface GuideBase {
   id: string;
   hidden?: boolean;
   locked?: boolean;
   name?: string;
+  /** Group id: grouped things are selected and moved together. */
+  group?: string;
 }
 
 export interface EllipseGuide extends GuideBase {
@@ -38,6 +68,9 @@ export interface EllipseGuide extends GuideBase {
   rx: number;
   ry: number;
   rot: number;
+  /** 0 or absent = a hairline; > 0 = a ring you can color in. */
+  width?: number;
+  band?: Band;
 }
 
 export interface RectGuide extends GuideBase {
@@ -48,6 +81,8 @@ export interface RectGuide extends GuideBase {
   h: number;
   rot: number;
   radius: number;
+  width?: number;
+  band?: Band;
 }
 
 export interface LineGuide extends GuideBase {
@@ -58,12 +93,19 @@ export interface LineGuide extends GuideBase {
   y1: number;
   /** 0 = a hairline guide; > 0 = a band you can color in. */
   width: number;
+  /** A cut line: drawn dashed, has its own show/hide switch. */
+  cut?: boolean;
 }
 
 /** Closed straight-sided outline: triangle, polygon, star. */
 export interface PolyGuide extends GuideBase {
   type: 'poly';
   pts: Pt[];
+  /** Corner rounding per point (same order as pts); missing or 0 = sharp. */
+  radii?: number[];
+  width?: number;
+  band?: Band;
+  rot?: number;
 }
 
 /** Smooth curve through points. */
@@ -72,6 +114,8 @@ export interface CurveGuide extends GuideBase {
   pts: Pt[];
   closed: boolean;
   width: number;
+  band?: Band;
+  rot?: number;
 }
 
 /** A pen-tool node: anchor plus optional handles (absolute positions). */
@@ -92,9 +136,24 @@ export interface PathGuide extends GuideBase {
   nodes: PathNode[];
   closed: boolean;
   width: number;
+  band?: Band;
+  rot?: number;
 }
 
-export type Guide = EllipseGuide | RectGuide | LineGuide | PolyGuide | CurveGuide | PathGuide;
+/**
+ * An outline given directly as exact edges: what is left when an outline is
+ * cut into pieces (an arc of a circle, a stretch of a curve).
+ */
+export interface EdgesGuide extends GuideBase {
+  type: 'edges';
+  edges: Edge[];
+  closed: boolean;
+  width: number;
+  band?: Band;
+  rot?: number;
+}
+
+export type Guide = EllipseGuide | RectGuide | LineGuide | PolyGuide | CurveGuide | PathGuide | EdgesGuide;
 export type GuideType = Guide['type'];
 
 export interface TextInfo {
@@ -138,10 +197,11 @@ export interface Doc {
   v: 1;
   id: string;
   name: string;
-  artboard: { w: number; h: number };
+  /** The export frame. x and y are absent (0) in documents saved before it could be moved. */
+  artboard: { x?: number; y?: number; w: number; h: number };
   /** Background color, or null for transparent. */
   paper: string | null;
-  /** Linked swatches. Classic mode shows the first three. */
+  /** Linked swatches. Classic works with one to four of them. */
   palette: string[];
   guides: Guide[];
   shapes: Shape[];
@@ -154,3 +214,5 @@ export interface Doc {
 export type ItemKind = 'guide' | 'shape' | 'ref';
 
 export const ARTBOARD = 1024;
+/** Classic mode's limit on colors. */
+export const CLASSIC_COLORS = 4;

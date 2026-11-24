@@ -1,20 +1,35 @@
 import { useEffect, type RefObject } from 'react';
-import { translate, type BBox, type Mat, type Pt } from '@/geom';
+import { polygonToPath, translate, windingOfPolygon, type BBox, type Mat, type Pt, type Ring } from '@/geom';
 import { faceAt, type Arrangement } from '@/engine';
 import { commit, getDoc } from '@/store/doc';
-import { ui, useUi } from '@/store/ui';
-import { paintFaces } from '@/model/paint';
-import { moveGuideHandle, movePathControl, removeGuidePoint, togglePathNode } from '@/model/guides';
+import { selectionKey, ui, useUi } from '@/store/ui';
+import { board } from '@/model/doc';
+import { paintFaces, visibleGuides } from '@/model/paint';
+import { followSet, syncLinks } from '@/model/link';
+import { insertGuidePoint, moveGuideHandle, movePathControl, removeGuidePoint, togglePathNode } from '@/model/guides';
 import { itemBBox, selectionBBox, transformItems, updateGuide } from '@/model/ops';
-import type { Guide } from '@/model/types';
+import type { Doc, Guide } from '@/model/types';
 import { expandToGroup, transformSelection } from '@/actions';
+import { openCanvasMenu } from '@/ui/menus';
 import { useDrag } from './drag';
 import { hitItems } from './hit';
-import { boxHandleMatrix, placeHandles, rotateMatrix, selectionFrame, singleGuide, type Frame, type Handle } from './frame';
+import {
+  boardFrame,
+  boxHandleMatrix,
+  boxHandles,
+  placeHandles,
+  resizeBoard,
+  rotateMatrix,
+  selectionFrame,
+  singleGuide,
+  type BoxHandle,
+  type Frame,
+  type Handle,
+} from './frame';
 import { snapMove, snapPoint, snapTangent } from './snapping';
 import { toDoc, toScreen, zoomAt } from './view';
 
-/** Custom drawing tools (pen, brush) plug in here; they take over the pointer while active. */
+/** Drawing tools (pen, brush, draw, cut) plug in here; they take over the pointer while active. */
 export interface DrawTool {
   down(p: Pt, e: PointerEvent): void;
   move(p: Pt, e: PointerEvent): void;
@@ -29,6 +44,8 @@ export function registerDrawTool(name: string, tool: DrawTool): void {
   drawTools[name] = tool;
 }
 
+type Rect = { x: number; y: number; w: number; h: number };
+
 type Gesture =
   | { kind: 'none' }
   | { kind: 'ignore' }
@@ -36,23 +53,33 @@ type Gesture =
       kind: 'press';
       start: Pt;
       startDoc: Pt;
+      client: Pt;
       hits: string[];
       handle: Handle | null;
       frame: Frame | null;
       touch: boolean;
       shift: boolean;
+      /** Began while a color was active, on something that is not an area. */
+      fromColor: boolean;
+      hold?: ReturnType<typeof setTimeout>;
+      /** Touch held still long enough: dragging now box-selects, letting go opens the menu. */
+      held?: boolean;
     }
   | { kind: 'move'; startDoc: Pt; ids: Set<string>; box: BBox | null; mat: Mat }
   | { kind: 'box'; frame: Frame; handle: Handle; ids: Set<string>; startDoc: Pt; mat: Mat }
   | { kind: 'pt'; guide: Guide; index: number; current: Guide; part: 'pt' | 'in' | 'out' }
   | { kind: 'pan'; start: Pt; view: { x: number; y: number; k: number } }
   | { kind: 'marquee'; startDoc: Pt; additive: boolean }
+  | { kind: 'lasso'; pts: Pt[]; additive: boolean }
   | { kind: 'paint'; faces: Set<number>; last: Pt }
   | { kind: 'draw'; tool: DrawTool }
+  | { kind: 'board'; at: BoxHandle | 'move'; from: Rect; startDoc: Pt; now: Rect }
   | { kind: 'pinch'; dist: number; mid: Pt; view: { x: number; y: number; k: number } };
 
 const TOUCH_SLOP = 8;
 const MOUSE_SLOP = 3;
+const HOLD_MS = 520;
+const DOUBLE_MS = 340;
 
 /** Shared with the faces layer: the arrangement the Color tool is painting on. */
 export const arrangementRef: { current: Arrangement | null } = { current: null };
@@ -60,6 +87,34 @@ export const arrangementRef: { current: Arrangement | null } = { current: null }
 let lastTap: { p: Pt; id: string | null; t: number } = { p: { x: -99, y: -99 }, id: null, t: 0 };
 let lastPoint: { id: string; index: number; t: number } = { id: '', index: -1, t: 0 };
 let spaceDown = false;
+
+const shown = (): Guide[] => {
+  const s = ui();
+  return visibleGuides(getDoc(), s.showGuides, s.showCuts);
+};
+
+/** While outlines are dragged, show the fills that follow them as they will end up. */
+function previewLinked(doc: Doc, next: Doc, moved: ReadonlySet<string>): Record<string, Ring[] | null> | null {
+  if (!doc.shapes.some((s) => s.from)) return null;
+  let synced: Doc;
+  try {
+    synced = syncLinks(doc, next);
+  } catch {
+    return null;
+  }
+  if (synced === next) return null;
+  const now = new Map(synced.shapes.map((s) => [s.id, s]));
+  const out: Record<string, Ring[] | null> = {};
+  let any = false;
+  for (const s of next.shapes) {
+    if (moved.has(s.id) || !s.from) continue;
+    const t = now.get(s.id);
+    if (t === s) continue;
+    out[s.id] = t ? t.rings : null;
+    any = true;
+  }
+  return any ? out : null;
+}
 
 export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
   useEffect(() => {
@@ -74,7 +129,12 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
 
+    const stopHold = (): void => {
+      if (g.kind === 'press' && g.hold) clearTimeout(g.hold);
+    };
+
     const cancel = (): void => {
+      stopHold();
       if (g.kind === 'draw') g.tool.cancel();
       g = { kind: 'none' };
       drag().reset();
@@ -84,7 +144,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       const s = ui();
       if (s.tool !== 'arrange' || !s.selection.length) return null;
       const doc = getDoc();
-      const frame = selectionFrame(doc, s.selection);
+      const frame = selectionFrame(doc, s.selection, s.selRot);
       if (!frame) return null;
       if (s.selection.length === 1 && doc.refs.find((r) => r.id === s.selection[0])?.locked) return null;
       const radius = touch ? 22 : 11;
@@ -115,6 +175,23 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       return best ? { handle: best, frame } : null;
     };
 
+    /** A handle of the export frame under the pointer, while the frame is being adjusted. */
+    const findBoardHandle = (p: Pt, touch: boolean): BoxHandle | null => {
+      const s = ui();
+      const radius = touch ? 22 : 12;
+      let best: BoxHandle | null = null;
+      let bestD = radius;
+      for (const h of boxHandles(boardFrame(getDoc()))) {
+        const sp = toScreen(s.view, h.p);
+        const d = Math.hypot(sp.x - p.x, sp.y - p.y);
+        if (d <= bestD && h.handle.kind === 'box') {
+          bestD = d;
+          best = h.handle.at;
+        }
+      }
+      return best;
+    };
+
     const paintAt = (faces: Set<number>, d: Pt): boolean => {
       const arr = arrangementRef.current;
       if (!arr) return false;
@@ -124,9 +201,19 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       return true;
     };
 
+    const openMenu = (client: Pt, p: Pt, touch: boolean): void => {
+      const s = ui();
+      const d = toDoc(s.view, p);
+      const h = s.frameEdit ? null : findHandle(p, touch);
+      const hits = h ? [] : hitItems(getDoc(), d, (touch ? 16 : 7) / s.view.k, shown());
+      openCanvasMenu(client, d, h?.handle ?? null, hits, touch);
+    };
+
     const onDown = (e: PointerEvent): void => {
-      if (e.pointerType === 'mouse' && e.button === 2) return;
+      if (e.pointerType === 'mouse' && e.button === 2) return; // the context menu takes it from here
       (document.activeElement as HTMLElement | null)?.blur?.();
+      if (ui().menu) useUi.setState({ menu: null });
+      if (ui().colorPanel !== null) useUi.setState({ colorPanel: null });
       svg.setPointerCapture(e.pointerId);
       const p = local(e);
       pointers.set(e.pointerId, p);
@@ -154,6 +241,15 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         return;
       }
 
+      if (s.frameEdit) {
+        const b = board(getDoc());
+        const at = findBoardHandle(p, touch);
+        const inside = d.x >= b.x && d.x <= b.x + b.w && d.y >= b.y && d.y <= b.y + b.h;
+        if (at || inside) g = { kind: 'board', at: at ?? 'move', from: b, startDoc: d, now: b };
+        else g = { kind: 'pan', start: p, view: s.view };
+        return;
+      }
+
       const custom = drawTools[s.tool];
       if (custom) {
         g = { kind: 'draw', tool: custom };
@@ -161,31 +257,61 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         return;
       }
 
+      let fromColor = false;
       if (s.tool === 'color') {
         const faces = new Set<number>();
-        paintAt(faces, d);
-        g = { kind: 'paint', faces, last: d };
-        drag().set({ paint: [...faces], hover: -1, loupe: touch ? p : null });
-        return;
+        if (paintAt(faces, d)) {
+          g = { kind: 'paint', faces, last: d };
+          drag().set({ paint: [...faces], hover: -1, loupe: touch ? p : null });
+          return;
+        }
+        // Not an area: this touch behaves as if no color were active (select an outline, pan, or tap away to finish).
+        fromColor = true;
       }
 
-      const h = findHandle(p, touch);
+      const h = fromColor ? null : findHandle(p, touch);
       const tol = (touch ? 16 : 7) / s.view.k;
-      g = {
+      const press: Extract<Gesture, { kind: 'press' }> = {
         kind: 'press',
         start: p,
         startDoc: d,
-        hits: h ? [] : hitItems(getDoc(), d, tol, s.showGuides),
+        client: { x: e.clientX, y: e.clientY },
+        hits: h ? [] : hitItems(getDoc(), d, tol, shown()),
         handle: h?.handle ?? null,
         frame: h?.frame ?? null,
         touch,
         shift: e.shiftKey || s.multi,
+        fromColor,
       };
+      if (touch) {
+        // Press and hold: letting go opens the same menu a right-click gives; dragging on box-selects.
+        press.hold = setTimeout(() => {
+          if (g !== press) return;
+          press.held = true;
+          navigator.vibrate?.(10);
+          drag().set({ hold: press.start }); // a ring under the finger: let go for the menu, or drag to box-select
+        }, HOLD_MS);
+      }
+      g = press;
     };
 
-    const beginDrag = (press: Extract<Gesture, { kind: 'press' }>, p: Pt): void => {
+    const beginDrag = (press: Extract<Gesture, { kind: 'press' }>): void => {
+      stopHold();
       const s = ui();
       const doc = getDoc();
+      if (press.held) {
+        drag().set({ hold: null });
+        if (press.fromColor) useUi.setState({ tool: 'arrange', erasing: false });
+        g = { kind: 'marquee', startDoc: press.startDoc, additive: false };
+        return;
+      }
+      if (!press.handle && !press.fromColor && s.selectMode !== 'move' && s.selectMode !== 'single') {
+        // A chosen select mode decides what every drag does.
+        if (s.selectMode === 'pan') g = { kind: 'pan', start: press.start, view: s.view };
+        else if (s.selectMode === 'box') g = { kind: 'marquee', startDoc: press.startDoc, additive: press.shift };
+        else g = { kind: 'lasso', pts: [press.startDoc], additive: press.shift };
+        return;
+      }
       if (press.handle && press.frame) {
         const h = press.handle;
         if (h.kind === 'hin' || h.kind === 'hout') {
@@ -198,47 +324,47 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           let guide = singleGuide(doc, s.selection);
           if (!guide) return void (g = { kind: 'ignore' });
           let index = h.index;
-          if (h.kind === 'mid' && (guide.type === 'curve' || guide.type === 'poly')) {
-            // Dragging a "+" adds a point there and keeps dragging it.
-            const pts = guide.pts.slice();
-            pts.splice(index + 1, 0, { ...press.startDoc });
-            guide = { ...guide, pts };
+          if (h.kind === 'mid') {
+            // Dragging one of the small dots between points adds a point there and keeps dragging it.
+            guide = insertGuidePoint(guide, index, press.startDoc);
             index += 1;
           }
           g = { kind: 'pt', guide, index, current: guide, part: 'pt' };
           return;
         }
-        g = { kind: 'box', frame: press.frame, handle: h, ids: new Set(s.selection), startDoc: press.startDoc, mat: translate(0, 0) };
+        g = { kind: 'box', frame: press.frame, handle: h, ids: followSet(doc, s.selection), startDoc: press.startDoc, mat: translate(0, 0) };
         return;
       }
       // Dragging from anywhere inside the current selection moves that selection,
       // even when something else happens to lie on top at that spot.
       let hit = press.hits.find((id) => s.selection.includes(id)) ?? press.hits[0];
-      if (s.selection.length && !press.hits.some((id) => s.selection.includes(id))) {
-        const box = selectionBBox(doc, s.selection);
-        const d0 = press.startDoc;
+      if (!press.fromColor && s.selection.length && !press.hits.some((id) => s.selection.includes(id))) {
+        const f = selectionFrame(doc, s.selection, s.selRot);
         const locked = s.selection.length === 1 && doc.refs.find((r) => r.id === s.selection[0])?.locked;
-        if (!locked && box && d0.x >= box.x && d0.x <= box.x + box.w && d0.y >= box.y && d0.y <= box.y + box.h) hit = s.selection[0];
+        if (!locked && f) {
+          const c = Math.cos(-f.rot);
+          const sn = Math.sin(-f.rot);
+          const lx = (press.startDoc.x - f.cx) * c - (press.startDoc.y - f.cy) * sn;
+          const ly = (press.startDoc.x - f.cx) * sn + (press.startDoc.y - f.cy) * c;
+          if (Math.abs(lx) <= f.w / 2 && Math.abs(ly) <= f.h / 2) hit = s.selection[0];
+        }
       }
-      if (hit) {
+      if (hit && !press.shift) {
         let ids = s.selection;
+        if (press.fromColor) useUi.setState({ tool: 'arrange', erasing: false });
         if (!ids.includes(hit)) {
-          ids = press.shift ? [...ids, ...expandToGroup(doc, hit)] : expandToGroup(doc, hit);
+          ids = s.selectMode === 'single' ? [hit] : expandToGroup(doc, hit);
           useUi.setState({ selection: ids });
         }
         // A locked photo shows its controls when selected but never moves.
         const movable = ids.filter((id) => !doc.refs.find((r) => r.id === id)?.locked);
-        if (!movable.length) return void (g = press.touch ? { kind: 'pan', start: press.start, view: s.view } : { kind: 'ignore' });
-        g = { kind: 'move', startDoc: press.startDoc, ids: new Set(movable), box: selectionBBox(doc, movable), mat: translate(0, 0) };
+        if (!movable.length) return void (g = { kind: 'pan', start: press.start, view: s.view });
+        g = { kind: 'move', startDoc: press.startDoc, ids: followSet(doc, movable), box: selectionBBox(doc, movable), mat: translate(0, 0) };
         return;
       }
-      if (press.touch) {
-        g = { kind: 'pan', start: p, view: s.view };
-        // start panning from where the finger first landed, not where the slop was crossed
-        (g as Extract<Gesture, { kind: 'pan' }>).start = press.start;
-        return;
-      }
-      g = { kind: 'marquee', startDoc: press.startDoc, additive: press.shift };
+      // Empty canvas: a plain drag pans, with mouse or finger. Shift-drag draws a selection box.
+      if (press.shift && !press.touch) g = { kind: 'marquee', startDoc: press.startDoc, additive: true };
+      else g = { kind: 'pan', start: press.start, view: s.view };
     };
 
     const onMove = (e: PointerEvent): void => {
@@ -249,6 +375,11 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         // Hovering mouse.
         if (e.pointerType !== 'mouse') return;
         const d = toDoc(s.view, p);
+        if (s.frameEdit) {
+          const at = findBoardHandle(p, false);
+          svg.style.cursor = !at ? 'move' : at === 'n' || at === 's' ? 'ns-resize' : at === 'e' || at === 'w' ? 'ew-resize' : at === 'nw' || at === 'se' ? 'nwse-resize' : 'nesw-resize';
+          return;
+        }
         const custom = drawTools[s.tool];
         if (custom) {
           custom.hover?.(d);
@@ -264,10 +395,10 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         }
         const h = findHandle(p, false);
         if (h) {
-          svg.style.cursor = h.handle.kind === 'rot' ? 'grab' : h.handle.kind === 'box' ? 'nwse-resize' : 'pointer';
+          svg.style.cursor = h.handle.kind === 'rot' ? 'grab' : 'pointer';
           if (h.handle.kind === 'box') {
             const at = h.handle.at;
-            const rotated = Math.abs(h.frame.rot) > 0.01;
+            const rotated = Math.abs(h.frame.rot % (Math.PI / 2)) > 0.01;
             svg.style.cursor = rotated
               ? 'move'
               : at === 'n' || at === 's'
@@ -280,7 +411,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           }
           return;
         }
-        const hits = hitItems(getDoc(), d, 7 / s.view.k, s.showGuides);
+        const hits = hitItems(getDoc(), d, 7 / s.view.k, shown());
         svg.style.cursor = spaceDown ? 'grab' : hits.length ? 'move' : 'default';
         return;
       }
@@ -300,7 +431,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       if (g.kind === 'press') {
         const slop = g.touch ? TOUCH_SLOP : MOUSE_SLOP;
         if (Math.hypot(p.x - g.start.x, p.y - g.start.y) < slop) return;
-        beginDrag(g, p);
+        beginDrag(g);
       }
 
       const d = toDoc(s.view, p);
@@ -311,8 +442,22 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           g.tool.move(d, e);
           break;
         case 'pan':
+          svg.style.cursor = 'grabbing';
           useUi.setState({ view: { k: g.view.k, x: g.view.x + (p.x - g.start.x), y: g.view.y + (p.y - g.start.y) } });
           break;
+        case 'board': {
+          let now: Rect;
+          if (g.at === 'move') {
+            now = { ...g.from, x: g.from.x + (d.x - g.startDoc.x), y: g.from.y + (d.y - g.startDoc.y) };
+          } else {
+            now = resizeBoard(g.from, g.at, d, e.shiftKey);
+          }
+          // whole units keep exported sizes clean
+          now = { x: Math.round(now.x), y: Math.round(now.y), w: Math.max(16, Math.round(now.w)), h: Math.max(16, Math.round(now.h)) };
+          g.now = now;
+          drag().set({ board: now });
+          break;
+        }
         case 'move': {
           let dx = d.x - g.startDoc.x;
           let dy = d.y - g.startDoc.y;
@@ -331,19 +476,19 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
             lines = sn.lines;
           }
           g.mat = translate(dx, dy);
-          drag().set({ ids: g.ids, mat: g.mat, snapLines: lines });
+          drag().set({ ids: g.ids, mat: g.mat, snapLines: lines, shapeRings: previewLinked(doc, transformItems(doc, g.ids, g.mat), g.ids) });
           break;
         }
         case 'box': {
           const h = g.handle;
           g.mat = h.kind === 'rot' ? rotateMatrix(g.frame, g.startDoc, d, e.altKey) : h.kind === 'box' ? boxHandleMatrix(g.frame, h.at, d) : g.mat;
-          drag().set({ ids: g.ids, mat: g.mat });
+          drag().set({ ids: g.ids, mat: g.mat, shapeRings: previewLinked(doc, transformItems(doc, g.ids, g.mat), g.ids) });
           break;
         }
         case 'pt': {
           if (g.part !== 'pt') {
             if (g.guide.type === 'path') g.current = movePathControl(g.guide, g.index, g.part, d, e.altKey);
-            drag().set({ guide: g.current });
+            drag().set({ guide: g.current, shapeRings: previewLinked(doc, updateGuide(doc, g.guide.id, g.current), NONE) });
             break;
           }
           let anchor: Pt | undefined;
@@ -352,13 +497,19 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           }
           const sn = e.altKey || !s.snap ? { p: d, lines: [] } : snapPoint(doc, g.guide.id, d, 7 / s.view.k, anchor, s.grid);
           g.current = moveGuideHandle(g.guide, g.index, sn.p);
-          drag().set({ guide: g.current, snapLines: sn.lines });
+          drag().set({ guide: g.current, snapLines: sn.lines, shapeRings: previewLinked(doc, updateGuide(doc, g.guide.id, g.current), NONE) });
           break;
         }
         case 'marquee': {
           const x = Math.min(g.startDoc.x, d.x);
           const y = Math.min(g.startDoc.y, d.y);
           drag().set({ marquee: { x, y, w: Math.abs(d.x - g.startDoc.x), h: Math.abs(d.y - g.startDoc.y) } });
+          break;
+        }
+        case 'lasso': {
+          const last = g.pts[g.pts.length - 1]!;
+          if (Math.hypot(d.x - last.x, d.y - last.y) > 3 / s.view.k) g.pts.push(d);
+          drag().set({ draft: polygonToPath(g.pts), draftWidth: 0, draftDashed: true });
           break;
         }
         case 'paint': {
@@ -386,10 +537,10 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
     const tap = (press: Extract<Gesture, { kind: 'press' }>): void => {
       const s = ui();
       const doc = getDoc();
+      const now = performance.now();
       if (press.handle) {
         const h = press.handle;
         if (h.kind !== 'pt') return;
-        const now = performance.now();
         const guide = singleGuide(doc, s.selection);
         const again = guide && lastPoint.id === guide.id && lastPoint.index === h.index && now - lastPoint.t < 380;
         lastPoint = { id: guide?.id ?? '', index: h.index, t: now };
@@ -401,35 +552,52 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         return;
       }
       const hits = press.hits;
+      if (press.fromColor) useUi.setState({ tool: 'arrange', erasing: false }); // tapping away from the areas puts the color down
       if (!hits.length) {
         if (!press.shift) useUi.setState({ selection: [] });
-        lastTap = { p: press.start, id: null, t: performance.now() };
+        lastTap = { p: press.start, id: null, t: now };
         return;
       }
       // Tapping the same spot again steps to the next thing underneath.
-      const again = Math.hypot(press.start.x - lastTap.p.x, press.start.y - lastTap.p.y) < 10 && performance.now() - lastTap.t < 4000;
+      const near = Math.hypot(press.start.x - lastTap.p.x, press.start.y - lastTap.p.y) < 10;
+      const again = near && now - lastTap.t < 4000;
       let pick = hits[0]!;
       if (again && lastTap.id) {
         const top = hits[0]!;
         const group = expandToGroup(doc, top);
-        const wholeWord = group.length > 1 && group.every((id) => s.selection.includes(id)) && s.selection.length === group.length;
-        if (wholeWord && lastTap.id === top) {
-          // Second tap on a word: just that letter.
-          useUi.setState({ selection: [top] });
-          lastTap = { p: press.start, id: `${top}#letter`, t: performance.now() };
+        // A quick second tap on a word opens it for retyping.
+        const word = doc.shapes.find((x) => x.id === top)?.group;
+        if (now - lastTap.t < DOUBLE_MS && word && doc.groups[word]?.text?.pristine) {
+          useUi.setState({ selection: group, sheet: 'text', textTarget: word });
+          lastTap = { p: press.start, id: null, t: 0 };
           return;
         }
-        const i = hits.indexOf(lastTap.id.replace('#letter', ''));
+        const whole = group.length > 1 && group.every((id) => s.selection.includes(id)) && s.selection.length === group.length;
+        if (whole && lastTap.id === top) {
+          // Second tap on a group: just that member.
+          useUi.setState({ selection: [top] });
+          lastTap = { p: press.start, id: `${top}#one`, t: now };
+          return;
+        }
+        const i = hits.indexOf(lastTap.id.replace('#one', ''));
         if (i >= 0 && hits.length > 1) pick = hits[(i + 1) % hits.length]!;
       }
-      const ids = expandToGroup(doc, pick);
+      const ids = s.selectMode === 'single' ? [pick] : expandToGroup(doc, pick);
       if (press.shift) {
         const has = ids.every((id) => s.selection.includes(id));
         useUi.setState({ selection: has ? s.selection.filter((id) => !ids.includes(id)) : [...new Set([...s.selection, ...ids])] });
       } else {
         useUi.setState({ selection: ids });
       }
-      lastTap = { p: press.start, id: pick, t: performance.now() };
+      lastTap = { p: press.start, id: pick, t: now };
+    };
+
+    const transformSelectionOf = (ids: Set<string>, m: Mat): void => {
+      if (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0) return;
+      // The dragged set is the selection, seen through followSet: commit it as the selection so Repeat keeps tracking.
+      const want = followSet(getDoc(), ui().selection.filter((id) => !getDoc().refs.find((r) => r.id === id)?.locked));
+      if (want.size === ids.size && [...want].every((id) => ids.has(id))) transformSelection(m);
+      else commit(transformItems(getDoc(), ids, m));
     };
 
     const onUp = (e: PointerEvent): void => {
@@ -453,22 +621,59 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         if (!pointers.size) g = { kind: 'none' };
         return;
       }
+      stopHold();
       const cur = g;
       g = { kind: 'none' };
       const doc = getDoc();
 
       switch (cur.kind) {
         case 'press':
-          tap(cur);
+          if (s.frameEdit) break;
+          if (cur.held) {
+            drag().set({ hold: null });
+            if (cur.fromColor) useUi.setState({ tool: 'arrange', erasing: false });
+            openMenu(cur.client, cur.start, true);
+          } else tap(cur);
           break;
+        case 'lasso': {
+          drag().reset();
+          if (cur.pts.length > 2) {
+            const ids: string[] = cur.additive ? [...s.selection] : [];
+            for (const it of [...shown(), ...doc.shapes]) {
+              if (it.hidden || it.locked || ids.includes(it.id)) continue;
+              const b = itemBBox(doc, it.id);
+              if (b && windingOfPolygon({ x: b.x + b.w / 2, y: b.y + b.h / 2 }, cur.pts) !== 0) ids.push(it.id);
+            }
+            useUi.setState({ selection: ids });
+          }
+          break;
+        }
         case 'draw':
           cur.tool.up(d, e);
           break;
+        case 'pan':
+          svg.style.cursor = 'default';
+          break;
+        case 'board': {
+          drag().reset();
+          const b = cur.now;
+          if (b !== cur.from) commit({ ...doc, artboard: { x: b.x, y: b.y, w: b.w, h: b.h }, updatedAt: Date.now() });
+          break;
+        }
         case 'move':
-        case 'box':
           drag().reset();
           transformSelectionOf(cur.ids, cur.mat);
           break;
+        case 'box': {
+          drag().reset();
+          transformSelectionOf(cur.ids, cur.mat);
+          if (cur.handle.kind === 'rot') {
+            // The box stays at the angle it was turned to.
+            const turn = Math.atan2(cur.mat[1], cur.mat[0]);
+            useUi.setState({ selRot: { key: selectionKey(ui().selection), rot: cur.frame.rot + turn } });
+          }
+          break;
+        }
         case 'pt':
           drag().reset();
           if (cur.current !== cur.guide || cur.guide !== doc.guides.find((x) => x.id === cur.guide.id)) {
@@ -480,7 +685,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           drag().reset();
           if (m && (m.w > 0 || m.h > 0)) {
             const ids: string[] = cur.additive ? [...s.selection] : [];
-            const all = [...(s.showGuides ? doc.guides : []), ...doc.shapes];
+            const all = [...shown(), ...doc.shapes];
             for (const it of all) {
               if (it.hidden || it.locked) continue;
               const b = itemBBox(doc, it.id);
@@ -496,7 +701,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           drag().reset();
           const arr = arrangementRef.current;
           if (arr && faces.size) {
-            const next = paintFaces(doc, arr, faces, s.erasing ? null : s.ink);
+            const next = paintFaces(doc, arr, faces, s.erasing ? null : s.ink, shown());
             // A short tick where the device has one, on the same frame as the color landing.
             if (next !== doc && e.pointerType === 'touch') navigator.vibrate?.(8);
             commit(next);
@@ -506,13 +711,6 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         default:
           drag().reset();
       }
-    };
-
-    const transformSelectionOf = (ids: Set<string>, m: Mat): void => {
-      if (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0) return;
-      const sel = ui().selection;
-      if (sel.length === ids.size && sel.every((id) => ids.has(id))) transformSelection(m);
-      else commit(transformItems(getDoc(), ids, m));
     };
 
     const onCancel = (e: PointerEvent): void => {
@@ -540,6 +738,14 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       }
     };
 
+    const onContext = (e: MouseEvent): void => {
+      e.preventDefault();
+      const s = ui();
+      if (drawTools[s.tool]) return;
+      if (s.tool === 'color') useUi.setState({ tool: 'arrange', erasing: false });
+      openMenu({ x: e.clientX, y: e.clientY }, local(e), false);
+    };
+
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.code === 'Space' && !isTyping(e.target)) {
         spaceDown = true;
@@ -563,7 +769,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
     svg.addEventListener('pointerleave', onLeave);
     svg.addEventListener('wheel', onWheel, { passive: false });
     svg.addEventListener('gesturestart', stopGesture);
-    svg.addEventListener('contextmenu', stopGesture);
+    svg.addEventListener('contextmenu', onContext);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     return () => {
@@ -574,12 +780,14 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       svg.removeEventListener('pointerleave', onLeave);
       svg.removeEventListener('wheel', onWheel);
       svg.removeEventListener('gesturestart', stopGesture);
-      svg.removeEventListener('contextmenu', stopGesture);
+      svg.removeEventListener('contextmenu', onContext);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
   }, [ref]);
 }
+
+const NONE: ReadonlySet<string> = new Set();
 
 export function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;

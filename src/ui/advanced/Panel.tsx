@@ -32,11 +32,11 @@ import {
 } from 'lucide-react';
 import { useDoc, getDoc, commit } from '@/store/doc';
 import { useUi } from '@/store/ui';
-import { resolveFill } from '@/model/doc';
+import { board, resolveFill } from '@/model/doc';
 import { selectionBBox, updateGuide } from '@/model/ops';
 import { isClosedGuide } from '@/model/guides';
 import type { Doc, Fill, Guide } from '@/model/types';
-import { fillSelectedOutlines, fitToScreen } from '@/actions';
+import { editFrame, fillSelectedOutlines, fitToScreen, setBoard } from '@/actions';
 import {
   alignSelection,
   booleanSelection,
@@ -148,24 +148,26 @@ function ColorRow({ doc, value, onPick, allowNone }: { doc: Doc; value: Fill | n
 }
 
 function CanvasSettings() {
-  const artboard = useDoc((s) => s.doc.artboard);
+  const art = useDoc((s) => s.doc.artboard);
+  const artboard = board({ artboard: art });
   const snap = useUi((s) => s.snap);
   const grid = useUi((s) => s.grid);
-  const resize = (patch: Partial<{ w: number; h: number }>): void => {
-    const doc = getDoc();
-    const next = { ...doc.artboard, ...patch };
-    next.w = Math.max(16, Math.min(8192, Math.round(next.w)));
-    next.h = Math.max(16, Math.min(8192, Math.round(next.h)));
-    commit({ ...doc, artboard: next, updatedAt: Date.now() });
+  const resize = (patch: Partial<{ x: number; y: number; w: number; h: number }>): void => {
+    setBoard({ ...artboard, ...patch });
     requestAnimationFrame(() => fitToScreen());
   };
   return (
     <>
-      <Section title="Artboard">
+      <Section title="Export frame">
         <div className="grid grid-cols-2 gap-1.5">
+          <NumField label="X" value={artboard.x} onCommit={(v) => resize({ x: v })} />
+          <NumField label="Y" value={artboard.y} onCommit={(v) => resize({ y: v })} />
           <NumField label="W" value={artboard.w} onCommit={(v) => resize({ w: v })} />
           <NumField label="H" value={artboard.h} onCommit={(v) => resize({ h: v })} />
         </div>
+        <button type="button" className="chip mt-1.5 w-full justify-center" style={{ background: 'var(--sunken)' }} onClick={() => editFrame(true)}>
+          Adjust on the canvas
+        </button>
       </Section>
       <Section title="Snapping">
         <div className="flex gap-1.5">
@@ -337,7 +339,7 @@ function LayerRow({ id, label, icon, hidden, locked, selected }: { id: string; l
   );
 }
 
-const GUIDE_NAMES: Record<Guide['type'], string> = { ellipse: 'Circle', rect: 'Rectangle', line: 'Line', poly: 'Polygon', curve: 'Curve', path: 'Path' };
+const GUIDE_NAMES: Record<Guide['type'], string> = { ellipse: 'Circle', rect: 'Rectangle', line: 'Line', poly: 'Polygon', curve: 'Curve', path: 'Path', edges: 'Outline piece' };
 
 function Layers() {
   const doc = useDoc((s) => s.doc);

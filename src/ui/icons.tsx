@@ -38,6 +38,6 @@ export const LogoMark = (p: SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" {...p}>
     <circle cx="9" cy="12" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.5" opacity=".4" />
     <circle cx="15" cy="12" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.5" opacity=".4" />
-    <path d="M12 6.58a6.2 6.2 0 0 1 0 10.84a6.2 6.2 0 0 1 0-10.84Z" fill="var(--accent)" />
+    <path d="M12 6.58a6.2 6.2 0 0 1 0 10.84a6.2 6.2 0 0 1 0-10.84Z" fill="currentColor" />
   </svg>
 );

@@ -3,8 +3,25 @@ import type { Mat } from '@/geom';
 
 export type Mode = 'classic' | 'advanced';
 /** arrange = move things around; color = tap areas; pen/brush are Advanced drawing tools. */
-export type Tool = 'arrange' | 'color' | 'pen' | 'brush';
-export type SheetName = null | 'export' | 'colors' | 'text' | 'gallery' | 'menu' | 'help' | 'code';
+export type Tool = 'arrange' | 'color' | 'pen' | 'brush' | 'draw' | 'cut';
+/**
+ * What a drag does while no drawing tool is on. `move` is the everyday one:
+ * drag a thing to move it, drag empty canvas to pan.
+ */
+export type SelectMode = 'move' | 'pan' | 'box' | 'lasso' | 'single';
+export type SheetName = null | 'export' | 'text' | 'gallery' | 'menu' | 'help' | 'code';
+
+export interface MenuItem {
+  label: string;
+  onSelect: () => void;
+  keys?: string;
+  danger?: boolean;
+  disabled?: boolean;
+  /** Draw a divider above this item. */
+  divide?: boolean;
+  /** A color dot shown before the label. */
+  swatch?: string;
+}
 
 export interface View {
   /** screen = doc × k + (x, y) */
@@ -20,6 +37,7 @@ interface UiState {
   ink: number | string;
   erasing: boolean;
   selection: string[];
+  selectMode: SelectMode;
   /** Touch: keep adding to the selection on tap. */
   multi: boolean;
   view: View;
@@ -27,8 +45,6 @@ interface UiState {
   showGuides: boolean;
   trayOpen: boolean;
   sheet: SheetName;
-  /** Which swatch the color editor is editing: a palette index or 'paper'. */
-  editing: number | 'paper' | null;
   /** The transform of the last Duplicate, for Repeat. */
   lastDup: Mat | null;
   /** Text group being edited in the text sheet, if any. */
@@ -40,6 +56,18 @@ interface UiState {
   panelOpen: boolean;
   /** Snap to nearby outlines, edges and centres while dragging. */
   snap: boolean;
+  /** Cut lines visible (and dividing areas). */
+  showCuts: boolean;
+  /** The selection box's angle after turning several things together; `key` names that selection. */
+  selRot: { key: string; rot: number } | null;
+  /** Dragging the export frame's handles instead of the artwork. */
+  frameEdit: boolean;
+  /** The corner being rounded: which outline and which of its points (−1 = all). */
+  corner: { id: string; index: number } | null;
+  /** Right-click / long-press menu, at a screen position. */
+  menu: { x: number; y: number; items: MenuItem[]; touch?: boolean } | null;
+  /** Which swatch has its small color panel open ('paper' for the background). */
+  colorPanel: number | 'paper' | null;
   /** Grid spacing in document units; 0 hides the grid (Advanced). */
   grid: number;
   hintDismissed: boolean;
@@ -71,19 +99,25 @@ export const useUi = create<UiState>((set) => ({
   ink: 0,
   erasing: false,
   selection: [],
+  selectMode: 'move',
   multi: false,
   view: { x: 0, y: 0, k: 1 },
   stage: { w: 0, h: 0 },
   showGuides: true,
   trayOpen: false,
   sheet: null,
-  editing: null,
   lastDup: null,
   textTarget: null,
   galleryTab: 'mine',
-  brushWidth: 28,
+  brushWidth: 24,
   panelOpen: false,
   snap: true,
+  showCuts: true,
+  selRot: null,
+  frameEdit: false,
+  corner: null,
+  menu: null,
+  colorPanel: null,
   grid: 0,
   hintDismissed: stored('lc.hint', '') === '1',
 
@@ -95,6 +129,11 @@ export const useUi = create<UiState>((set) => ({
 export const ui = (): UiState => useUi.getState();
 
 // "Select more" is a momentary mode: it ends with the selection it was building.
+// The corner being rounded likewise belongs to the selection it was picked from.
 useUi.subscribe((s) => {
   if (s.multi && (s.selection.length === 0 || s.tool !== 'arrange')) useUi.setState({ multi: false });
+  if (s.corner && (s.tool !== 'arrange' || s.selection.length !== 1 || s.selection[0] !== s.corner.id)) useUi.setState({ corner: null });
+  if (s.frameEdit && s.tool !== 'arrange') useUi.setState({ frameEdit: false });
 });
+
+export const selectionKey = (ids: string[]): string => [...ids].sort().join(',');

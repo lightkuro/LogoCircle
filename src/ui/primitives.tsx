@@ -111,6 +111,40 @@ export function Segmented<T extends string>({ value, onChange, options, label }:
 
 // --- Slider -----------------------------------------------------------------
 
+/** The number beside a slider: click it to type an exact value. */
+function SliderNumber({ value, min, max, format, label, onSet }: { value: number; min: number; max: number; format?: (v: number) => string; label: string; onSet: (v: number) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const shown = format ? format(value) : String(value);
+  const apply = (): void => {
+    if (text === null) return;
+    const v = parseFloat(text.replace(',', '.'));
+    setText(null);
+    if (Number.isFinite(v)) onSet(Math.max(min, Math.min(max, v)));
+  };
+  return (
+    <input
+      className="slider-num"
+      inputMode="decimal"
+      aria-label={`${label} value`}
+      value={text ?? shown}
+      onFocus={(e) => {
+        setText(String(value));
+        requestAnimationFrame(() => e.target.select());
+      }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={apply}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+          setText(null);
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 export function Slider({
   value,
   onChange,
@@ -120,6 +154,8 @@ export function Slider({
   step = 1,
   label,
   format,
+  typeMax,
+  hideValue,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -129,11 +165,14 @@ export function Slider({
   step?: number;
   label: string;
   format?: (v: number) => string;
+  /** Typing into the number may go beyond the slider's own range, up to this. */
+  typeMax?: number;
+  hideValue?: boolean;
 }) {
   return (
     <div className="slider" data-vaul-no-drag>
       <BaseSlider.Root
-        value={value}
+        value={Math.max(min, Math.min(max, value))}
         min={min}
         max={max}
         step={step}
@@ -148,12 +187,26 @@ export function Slider({
           </BaseSlider.Track>
         </BaseSlider.Control>
       </BaseSlider.Root>
-      {format && <span className="slider-value">{format(value)}</span>}
+      {!hideValue && (
+        <SliderNumber
+          value={value}
+          min={min}
+          max={typeMax ?? max}
+          format={format}
+          label={label}
+          onSet={(v) => {
+            onChange(v);
+            onCommit?.(v);
+          }}
+        />
+      )}
     </div>
   );
 }
 
 // --- Sheet: bottom drawer on phones, centred dialog on larger screens ---------
+
+export type SheetPlace = 'center' | 'top-left' | 'top-right' | 'left';
 
 export function Sheet({
   open,
@@ -162,6 +215,7 @@ export function Sheet({
   children,
   wide,
   actions,
+  place = 'center',
 }: {
   open: boolean;
   onClose: () => void;
@@ -169,6 +223,12 @@ export function Sheet({
   children: ReactNode;
   wide?: boolean;
   actions?: ReactNode;
+  /**
+   * Where the panel sits on larger screens. Anything but 'center' drops it
+   * next to the control that opened it and leaves the canvas visible.
+   * Phones always get a bottom sheet.
+   */
+  place?: SheetPlace;
 }) {
   const phone = useIsPhone();
   const head = (Title: typeof Dialog.Title | typeof Drawer.Title, Close: typeof Dialog.Close | typeof Drawer.Close) => (
@@ -201,8 +261,8 @@ export function Sheet({
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="backdrop" />
-        <Dialog.Popup className="dialog" data-wide={wide || undefined}>
+        <Dialog.Backdrop className="backdrop" data-clear={place !== 'center' || undefined} />
+        <Dialog.Popup className="dialog" data-wide={wide || undefined} data-place={place}>
           {head(Dialog.Title, Dialog.Close)}
           <div className="sheet-body">{children}</div>
         </Dialog.Popup>

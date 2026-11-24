@@ -18,11 +18,15 @@
   --muted: #6c6c75;
   --hover: rgba(0, 0, 0, 0.055);
   --pressed: rgba(0, 0, 0, 0.1);
-  --accent: #2f6bff;
+  /* Neutral on purpose: the only color on screen should be the logo's. */
+  --accent: #18181b;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(47, 107, 255, 0.13);
-  --guide: #1f55d8;
-  --guide-halo: rgba(255, 255, 255, 0.8);
+  --accent-soft: rgba(0, 0, 0, 0.09);
+  /* Outlines and selection are drawn dark over a light halo, so they read on any color, black included. */
+  --guide: #111113;
+  --guide-halo: rgba(255, 255, 255, 0.85);
+  --select: #111113;
+  --select-halo: rgba(255, 255, 255, 0.9);
   --snap: #ff2d87;
   --danger: #e5484d;
   --ink-button: #18181b;
@@ -52,9 +56,9 @@
     --muted: #a0a0aa;
     --hover: rgba(255, 255, 255, 0.08);
     --pressed: rgba(255, 255, 255, 0.14);
-    --accent: #6b93ff;
-    --accent-ink: #0b1020;
-    --accent-soft: rgba(107, 147, 255, 0.2);
+    --accent: #f4f4f5;
+    --accent-ink: #18181b;
+    --accent-soft: rgba(255, 255, 255, 0.14);
     --ink-button: #f4f4f5;
     --ink-button-text: #18181b;
     --swatch-ring: rgba(255, 255, 255, 0.28);
@@ -199,29 +203,49 @@ select {
 }
 .guide-halo {
   stroke: var(--guide-halo);
-  stroke-width: 3.5px;
+  stroke-width: 3.2px;
 }
 .guide-line {
   stroke: var(--guide);
-  stroke-width: 1.3px;
+  stroke-width: 1.1px;
 }
 .guide-spine {
   stroke: var(--guide);
   stroke-width: 1px;
-  stroke-dasharray: 3 4;
-  opacity: 0.45;
+  stroke-dasharray: 2 4;
+  opacity: 0.4;
+}
+.guide.is-selected .guide-halo {
+  stroke-width: 4.5px;
 }
 .guide.is-selected .guide-line {
-  stroke: var(--accent);
-  stroke-width: 2.2px;
+  stroke-width: 2px;
 }
 .guide.is-quiet .guide-halo {
-  stroke-width: 2.5px;
-  opacity: 0.6;
+  stroke-width: 2.4px;
+  opacity: 0.55;
 }
 .guide.is-quiet .guide-line {
+  stroke-width: 0.9px;
+  opacity: 0.7;
+}
+/* Cut lines: clearly construction, never mistaken for artwork. */
+.guide.is-cut .guide-halo {
+  stroke-width: 2.6px;
+  opacity: 0.7;
+}
+.guide.is-cut .guide-line {
+  stroke-dasharray: 5 4;
   stroke-width: 1px;
-  opacity: 0.8;
+  opacity: 0.75;
+}
+.ghost {
+  fill: none;
+  stroke: var(--guide);
+  stroke-width: 1px;
+  stroke-dasharray: 1 3;
+  opacity: 0.35;
+  vector-effect: non-scaling-stroke;
 }
 
 .snap-line {
@@ -231,47 +255,103 @@ select {
 }
 .marquee {
   fill: var(--accent-soft);
-  stroke: var(--accent);
+  stroke: var(--select);
   stroke-width: 1px;
+  stroke-dasharray: 4 3;
   vector-effect: non-scaling-stroke;
 }
 .draft {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--select);
   stroke-width: 1.5px;
   vector-effect: non-scaling-stroke;
 }
+.draft-halo {
+  fill: none;
+  stroke: var(--select-halo);
+  stroke-width: 3.5px;
+  vector-effect: non-scaling-stroke;
+}
+.draft.is-dashed {
+  stroke-dasharray: 6 4;
+}
 
+/* The box around a selection: dotted and light, so it never reads as part of the design. */
+.sel-halo {
+  fill: none;
+  stroke: var(--select-halo);
+  stroke-width: 2.6px;
+  opacity: 0.8;
+}
 .sel-frame {
   fill: none;
-  stroke: var(--accent);
-  stroke-width: 1.25px;
+  stroke: var(--select);
+  stroke-width: 1px;
+  stroke-dasharray: 3 3;
+  opacity: 0.75;
 }
 .sel-stem {
-  stroke: var(--accent);
-  stroke-width: 1.25px;
+  stroke: var(--select);
+  stroke-width: 1px;
+  stroke-dasharray: 2 2;
+  opacity: 0.6;
 }
 .handle-box,
-.handle-rot,
-.handle-mid {
+.handle-rot {
   fill: #fff;
-  stroke: var(--accent);
-  stroke-width: 1.5px;
-  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.25));
-}
-.handle-pt {
-  fill: var(--accent);
-  stroke: #fff;
-  stroke-width: 2px;
+  stroke: var(--select);
+  stroke-width: 1.4px;
   filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.3));
 }
-.handle-rot-glyph,
-.handle-mid-glyph {
+.handle-pt {
+  fill: var(--select);
+  stroke: #fff;
+  stroke-width: 2px;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
+}
+.handle-pt.is-picked {
+  fill: #fff;
+  stroke: var(--select);
+}
+/* "Add a point here": small and quiet until it is needed. */
+.handle-mid {
+  fill: #fff;
+  stroke: var(--select);
+  stroke-width: 1px;
+  opacity: 0.75;
+}
+.handle-rot-glyph {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--select);
   stroke-width: 1.4px;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+.hold-ring {
+  fill: var(--accent-soft);
+  stroke: var(--select);
+  stroke-width: 1.5px;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hold-in 180ms var(--ease-out);
+}
+@keyframes hold-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+.frame-dim {
+  fill: rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+}
+.frame-edge {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5px;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
 }
 
 .loupe {
@@ -387,8 +467,8 @@ select {
   cursor: default;
 }
 .ib[data-active='true'] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .ib svg {
   width: 20px;
@@ -421,8 +501,8 @@ select {
   background: var(--pressed);
 }
 .tool[data-active='true'] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .tool:disabled {
   opacity: 0.35;
@@ -458,8 +538,8 @@ select {
   cursor: default;
 }
 .chip[data-active='true'] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 .chip[data-tone='danger'] {
   color: var(--danger);
@@ -515,7 +595,8 @@ select {
 @media (hover: hover) and (pointer: fine) {
   .ib:hover:not(:disabled):not([data-active='true']),
   .tool:hover:not(:disabled):not([data-active='true']),
-  .chip:hover:not(:disabled):not([data-active='true']) {
+  .chip:hover:not(:disabled):not([data-active='true']),
+  .menu-item:hover:not(:disabled) {
     background: var(--hover);
   }
   .btn:hover:not(:disabled) {
@@ -644,13 +725,31 @@ select {
 .slider-thumb[data-dragging] {
   transform: scale(1.12);
 }
-.slider-value {
-  min-width: 4.4ch;
+.slider-num {
+  width: 5.2ch;
+  height: 30px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   text-align: right;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  outline: none;
+  cursor: text;
+  flex-shrink: 0;
+}
+.slider-num:focus {
+  background: var(--sunken);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+}
+@media (hover: hover) and (pointer: fine) {
+  .slider-num:hover {
+    background: var(--sunken);
+  }
 }
 
 /* Popups ------------------------------------------------------------------- */
@@ -732,6 +831,42 @@ select {
 }
 .dialog[data-wide='true'] {
   width: min(720px, calc(100vw - 32px));
+}
+/* Panels that drop next to the control that opened them (larger screens). */
+.backdrop[data-clear='true'] {
+  background: transparent;
+}
+.dialog[data-place='top-left'],
+.dialog[data-place='top-right'],
+.dialog[data-place='left'] {
+  top: 70px;
+  transform: none;
+  width: min(380px, calc(100vw - 20px));
+  max-height: calc(100dvh - 170px);
+  border-radius: 20px;
+}
+.dialog[data-place='top-left'],
+.dialog[data-place='left'] {
+  left: 10px;
+  transform-origin: top left;
+}
+.dialog[data-place='top-right'] {
+  left: auto;
+  right: 10px;
+  transform-origin: top right;
+}
+.dialog[data-place='left'] {
+  bottom: 96px;
+  max-height: none;
+}
+.dialog[data-place='top-left'][data-starting-style],
+.dialog[data-place='top-left'][data-ending-style],
+.dialog[data-place='top-right'][data-starting-style],
+.dialog[data-place='top-right'][data-ending-style],
+.dialog[data-place='left'][data-starting-style],
+.dialog[data-place='left'][data-ending-style] {
+  opacity: 0;
+  transform: scale(0.97);
 }
 .dialog[data-starting-style],
 .dialog[data-ending-style] {
@@ -818,7 +953,7 @@ select {
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .field:focus {
-  border-color: var(--accent);
+  border-color: var(--text);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
@@ -911,4 +1046,249 @@ select {
 .picker .react-colorful__pointer {
   width: 26px;
   height: 26px;
+}
+
+/* ------------------------------------------------------------------------
+   Dock: grouped tools, numbered colors, flyouts
+   ------------------------------------------------------------------------ */
+.dock {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+}
+.dock-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+.tool-group {
+  position: relative;
+  display: inline-flex;
+}
+/* a small corner mark: there is more behind this button */
+.tool-more::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-bottom: 4px solid currentColor;
+  opacity: 0.45;
+}
+.flyout {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  z-index: 20;
+  min-width: 168px;
+  padding: 5px;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
+  animation: flyout-in 160ms var(--ease-out);
+}
+.flyout[data-align='start'] {
+  left: 0;
+  transform: none;
+  transform-origin: bottom left;
+  animation-name: flyout-in-start;
+}
+.flyout[data-align='end'] {
+  left: auto;
+  right: 0;
+  transform: none;
+  transform-origin: bottom right;
+  animation-name: flyout-in-start;
+}
+@keyframes flyout-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px) scale(0.97);
+  }
+}
+@keyframes flyout-in-start {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+}
+/* keeps the pointer "inside" while it crosses the gap between button and flyout */
+.flyout::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 12px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  transition: background-color 100ms ease;
+}
+.menu-item:active:not(:disabled) {
+  background: var(--pressed);
+}
+.menu-item:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.menu-item[data-active='true'] {
+  background: var(--accent-soft);
+  font-weight: 650;
+}
+.menu-item[data-tone='danger'] {
+  color: var(--danger);
+}
+.menu-item svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+.menu-item kbd {
+  margin-left: auto;
+  padding-left: 18px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+}
+.menu-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+@media (pointer: coarse) {
+  .menu-item {
+    min-height: 44px;
+    font-size: 15px;
+  }
+}
+
+.ctx-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 200px;
+  max-width: min(300px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 5px;
+  animation: ctx-in 140ms var(--ease-out);
+}
+@keyframes ctx-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* Swatches carry their number, the same number as their shortcut key. */
+.swatch-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.swatch {
+  flex-direction: column;
+  gap: 1px;
+}
+.swatch-num {
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.swatch[data-active='true'] .swatch-num {
+  color: var(--text);
+}
+.swatch .swatch-dot {
+  width: 28px;
+  height: 28px;
+}
+
+.color-panel {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  z-index: 25;
+  width: 236px;
+  padding: 10px;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
+  animation: flyout-in 160ms var(--ease-out);
+}
+.color-panel[data-align='end'] {
+  left: auto;
+  right: -8px;
+  transform: none;
+  animation-name: flyout-in-start;
+}
+.color-panel .react-colorful {
+  width: 100%;
+  height: 150px;
+}
+.color-panel .react-colorful__saturation {
+  border-radius: 10px 10px 0 0;
+}
+.color-panel .react-colorful__last-control {
+  border-radius: 0 0 10px 10px;
+}
+.color-panel .react-colorful__hue {
+  height: 22px;
+}
+.color-panel .react-colorful__pointer {
+  width: 22px;
+  height: 22px;
+}
+.basic-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  padding: 10px 0 8px;
+}
+.basic-dot {
+  aspect-ratio: 1;
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--swatch-ring);
+  transition: transform 160ms var(--ease-out);
+}
+.basic-dot:active {
+  transform: scale(0.9);
+}
+.basic-dot[data-active='true'] {
+  box-shadow: inset 0 0 0 1px var(--swatch-ring), 0 0 0 2px var(--surface-solid), 0 0 0 3.5px var(--text);
+}
+.field-sm {
+  height: 34px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+@media (max-width: 639px) {
+  .tool {
+    min-width: 44px;
+    padding: 0 3px;
+    font-size: 10px;
+  }
+  .dock {
+    gap: 0;
+  }
 }

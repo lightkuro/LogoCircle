@@ -59,8 +59,10 @@ const state = (page) =>
     return { shapes: d.shapes.length, guides: d.guides.length, refs: d.refs.length, groups: Object.keys(d.groups).length, selection: window.__lc.ui().selection.length };
   });
 
-async function fresh(browser, phone) {
+async function fresh(browser, phone, { starter = false } = {}) {
   const ctx = await browser.newContext(phone ? { ...devices['iPhone 13'] } : { viewport: { width: 1440, height: 900 } });
+  // A first visit loads a starter example; most checks want an empty canvas instead.
+  if (!starter) await ctx.addInitScript(() => localStorage.setItem('lc.seen', '1'));
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
@@ -70,11 +72,23 @@ async function fresh(browser, phone) {
   return { ctx, page, errors };
 }
 
-/** Add an outline through the UI. On phones the add tray has to be opened first. */
-async function add(page, phone, name) {
-  const b = page.getByRole('button', { name, exact: true });
-  if (phone && !(await b.isVisible().catch(() => false))) await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await b.click();
+const GROUPS = { Line: 'Lines', Curve: 'Lines', Draw: 'Lines', Square: 'Shapes', Triangle: 'Shapes', Polygon: 'Shapes', Star: 'Shapes' };
+
+/** Add an outline (or pick a tool) through the dock. Some live behind a group button. */
+async function add(page, _phone, name) {
+  const group = GROUPS[name];
+  if (!group) return page.getByRole('button', { name, exact: true }).click();
+  await page.getByRole('button', { name: group, exact: true }).hover();
+  await page.waitForTimeout(320);
+  await page.getByRole('menuitem', { name: new RegExp(`^${name}`) }).click();
+}
+
+/** Put the color in hand for coloring areas (with nothing selected, or it would color the selection instead). */
+async function pickColor(page, n) {
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: `Color ${n}`, exact: true }).click();
+  await page.waitForTimeout(150);
 }
 
 /** Drag from one document point to another with the mouse (works under touch emulation too). */
@@ -131,7 +145,6 @@ async function photoToLogo(browser, phone) {
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
-  if (phone) await page.getByRole('button', { name: 'Add', exact: true }).click();
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Photo', exact: true }).click()]);
   await chooser.setFiles({ name: 'cat.png', mimeType: 'image/png', buffer: Buffer.from(png) });
   await page.waitForFunction(() => window.__lc.doc().refs.length === 1);
@@ -147,13 +160,25 @@ async function photoToLogo(browser, phone) {
   check((await state(page)).guides === 3, 'three outlines over the photo');
 
   // Color: body, overlap and head; drag across to merge.
-  await page.getByRole('button', { name: 'Color 1', exact: true }).click();
-  await page.waitForTimeout(150);
+  await pickColor(page, 1);
   await clickDoc(page, 380, 500);
   await clickDoc(page, 560, 480);
   await clickDoc(page, 720, 390);
   let s = await state(page);
   check(s.shapes === 1, `areas above the line merged into one shape (got ${s.shapes})`);
+  // The fill follows when an outline is moved: nudge the head and the shape must change with it.
+  const before = await page.evaluate(() => window.__lc.svg());
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.evaluate(() => {
+    const d = window.__lc.doc();
+    window.__lc.ui().select([d.guides[1].id]);
+  });
+  await page.keyboard.press('Shift+ArrowUp');
+  await page.keyboard.press('Shift+ArrowUp');
+  const after = await page.evaluate(() => window.__lc.svg());
+  s = await state(page);
+  check(s.shapes === 1 && after !== before, 'moving an outline reshapes the fill that follows it');
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /outlines/ }).click();
   await page.screenshot({ path: join(shots, `photo-${phone ? 'phone' : 'desktop'}.png`) });
   const svg = await page.evaluate(() => window.__lc.svg());
@@ -181,16 +206,22 @@ async function geometric(browser, phone) {
   const gaps = ys.slice(1).map((y, i) => y - ys[i]);
   check(ys.length === 5 && gaps.every((g) => Math.abs(g - gaps[0]) <= 1), `Repeat made evenly spaced lines (${ys.join(', ')})`);
 
-  await page.getByRole('button', { name: 'Color 2', exact: true }).click();
-  await page.waitForTimeout(150);
+  await pickColor(page, 2);
   // every other band inside the circle
   const mid = (i) => ys[i] + gaps[0] / 2;
   await clickDoc(page, 512, mid(0));
   await clickDoc(page, 512, mid(2));
   await page.getByRole('button', { name: 'Color 1', exact: true }).click();
   await clickDoc(page, 512, ys[0] - 30);
-  const s = await state(page);
+  let s = await state(page);
   check(s.shapes === 3, `three separate colored bands (got ${s.shapes})`);
+  // Cut straight down through everything: each band falls into two pieces.
+  await page.getByRole('button', { name: 'Cut', exact: true }).click();
+  await drag(page, [512, 300], [512, 720]);
+  s = await state(page);
+  const cuts = await page.evaluate(() => window.__lc.doc().guides.filter((g) => g.type === 'line' && g.cut).length);
+  check(s.shapes === 6 && cuts === 1, `a cut splits the three bands into six pieces and leaves a cut line (got ${s.shapes}, ${cuts})`);
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.screenshot({ path: join(shots, `geometric-${phone ? 'phone' : 'desktop'}.png`) });
   const withLines = await page.evaluate(() => window.__lc.svg({ guides: true }));
   check(withLines.includes('<g fill="none"'), 'export can include the construction lines');
@@ -222,9 +253,19 @@ async function wordmark(browser, phone) {
   await clickDoc(page, stem[0], stem[1]);
   s = await state(page);
   check(s.selection === 4, 'first tap selects the whole word');
+  await page.waitForTimeout(450); // a quick double-click would open the word for retyping instead
   await clickDoc(page, stem[0], stem[1]);
   s = await state(page);
   check(s.selection === 1, 'second tap selects the letter');
+  // …and a quick double-click does open it for retyping
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+  const sp = await toScreen(page, stem[0], stem[1]);
+  await page.mouse.dblclick(sp.x, sp.y);
+  await page.waitForTimeout(300);
+  check(await page.evaluate(() => window.__lc.ui().sheet === 'text' && !!window.__lc.ui().textTarget), 'double-click opens the word for retyping');
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.waitForTimeout(400);
 
   // A small circle over the top-left of the d's bowl, then erase what it covers: the bird's head.
   await page.keyboard.press('Escape');
@@ -241,6 +282,7 @@ async function wordmark(browser, phone) {
   check(Math.abs(r1 - 34) < 2, `corner handle resized the circle evenly (radius ${r1.toFixed(1)})`);
   await moveSelectionTo(page, d.x0 + w * 0.3, d.y1 - h * 0.62);
   const before = await page.evaluate(() => JSON.stringify(window.__lc.doc().shapes[3].rings).length);
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Erase', exact: true }).click();
   await page.waitForTimeout(150);
   // a spot on the bowl's ring that the circle covers
@@ -262,10 +304,8 @@ async function wordmark(browser, phone) {
 async function touch(browser) {
   console.log('\nTouch gestures (phone)');
   const { ctx, page, errors } = await fresh(browser, true);
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.getByRole('button', { name: 'Circle', exact: true }).click();
-  await page.getByRole('button', { name: 'Color 1', exact: true }).click();
-  await page.waitForTimeout(150);
+  await pickColor(page, 1);
   const c = await page.evaluate(() => {
     const g = window.__lc.doc().guides[0];
     const v = window.__lc.ui().view;
@@ -300,6 +340,61 @@ async function touch(browser) {
   await ctx.close();
 }
 
+async function firstVisit(browser, phone) {
+  console.log(`\nFirst visit, colors and export frame (${phone ? 'phone' : 'desktop'})`);
+  const { ctx, page, errors } = await fresh(browser, phone, { starter: true });
+  await page.waitForFunction(() => window.__lc.doc().shapes.length >= 3, null, { timeout: 15000 }).catch(() => {});
+  let d = await page.evaluate(() => {
+    const doc = window.__lc.doc();
+    return { shapes: doc.shapes.length, word: Object.values(doc.groups)[0]?.text?.value, colors: doc.palette.length };
+  });
+  check(d.shapes >= 3 && d.word === 'default' && d.colors === 2, `starts with a small example and two colors (${d.shapes} shapes, "${d.word}", ${d.colors} colors)`);
+
+  // Colors: add up to four, never more in Classic; remove one again.
+  const addBtn = page.getByRole('button', { name: 'Add a color', exact: true });
+  await addBtn.click();
+  await page.keyboard.press('Escape');
+  await addBtn.click();
+  await page.keyboard.press('Escape');
+  const n = await page.evaluate(() => window.__lc.doc().palette);
+  check(n.length === 4 && n[2] === '#000000' && !(await addBtn.isVisible().catch(() => false)), `Classic stops at four colors, the third starts black (${n.join(' ')})`);
+  await page.getByRole('button', { name: 'Color 4', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Remove color' }).click();
+  check((await page.evaluate(() => window.__lc.doc().palette.length)) === 3, 'right-click on a color removes it');
+
+  // Select an outline and click a color: it is colored directly, as a ring once it has thickness.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
+  await page.getByRole('button', { name: 'Circle', exact: true }).click();
+  await page.getByRole('button', { name: 'Thickness' }).click();
+  await page.getByLabel('Thickness value').fill('40');
+  await page.getByLabel('Thickness value').press('Enter');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Color 1', exact: true }).click();
+  d = await page.evaluate(() => {
+    const doc = window.__lc.doc();
+    const s = doc.shapes[0];
+    return { n: doc.shapes.length, rings: s?.rings.length, tool: window.__lc.ui().tool, radii: s?.rings.map((r) => Math.round(r[0].c.rx)).sort((a, b) => a - b), r: Math.round(doc.guides[0].rx) };
+  });
+  check(d.n === 1 && d.rings === 2 && d.tool === 'arrange' && d.radii[0] === d.r - 40 && d.radii[1] === d.r, `a thick circle colors as a ring that thickens inward (${d.radii} of ${d.r})`);
+
+  // The export frame can be moved and resized.
+  const sp = await toScreen(page, 100, 100);
+  await page.mouse.click(sp.x, sp.y, { button: 'right' });
+  await page.getByRole('menuitem', { name: /Adjust the export frame/ }).click();
+  await drag(page, [1024, 1024], [900, 700]);
+  await page.getByRole('button', { name: '16:9', exact: true }).click();
+  const b = await page.evaluate(() => window.__lc.doc().artboard);
+  check(Math.abs(b.w / b.h - 16 / 9) < 0.02 && b.w !== 1024, `the export frame resizes and takes a 16:9 shape (${b.w} × ${b.h})`);
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  const svg = await page.evaluate(() => window.__lc.svg());
+  check(svg.includes(`viewBox="${b.x} ${b.y} ${b.w} ${b.h}"`), 'the export uses that frame');
+  await page.screenshot({ path: join(shots, `first-${phone ? 'phone' : 'desktop'}.png`) });
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 // ---------------------------------------------------------------------------
 
 const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', cwd: join(here, '..') });
@@ -311,6 +406,7 @@ try {
     await photoToLogo(browser, phone);
     await geometric(browser, phone);
     await wordmark(browser, phone);
+    await firstVisit(browser, phone);
   }
   await touch(browser);
 } catch (err) {

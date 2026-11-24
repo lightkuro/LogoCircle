@@ -1,7 +1,8 @@
 import { evalC, mul, rotate, scale, translate, type Mat, type Pt } from '@/geom';
 import type { Doc, Guide } from '@/model/types';
-import { guideCenterline, guideHandles } from '@/model/guides';
-import { selectionBBox } from '@/model/ops';
+import { guideCenterline, guideHandles, guidePoints, guideRot } from '@/model/guides';
+import { refCorners, shapePolygons } from '@/model/ops';
+import { board } from '@/model/doc';
 
 /** An oriented box around the selection, in document space. */
 export interface Frame {
@@ -61,19 +62,109 @@ export function singleGuide(doc: Doc, ids: string[]): Guide | null {
   return doc.guides.find((g) => g.id === ids[0]) ?? null;
 }
 
-/** The frame to draw around the current selection (null when nothing is selected). */
-export function selectionFrame(doc: Doc, ids: string[]): Frame | null {
+/** The tightest box around some points that is turned by `rot`. */
+export function orientedBox(pts: Pt[], rot: number): Frame | null {
+  if (!pts.length) return null;
+  const c = Math.cos(-rot);
+  const s = Math.sin(-rot);
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const p of pts) {
+    const x = p.x * c - p.y * s;
+    const y = p.x * s + p.y * c;
+    if (x < x0) x0 = x;
+    if (y < y0) y0 = y;
+    if (x > x1) x1 = x;
+    if (y > y1) y1 = y;
+  }
+  const mx = (x0 + x1) / 2;
+  const my = (y0 + y1) / 2;
+  const cb = Math.cos(rot);
+  const sb = Math.sin(rot);
+  return { cx: mx * cb - my * sb, cy: mx * sb + my * cb, w: x1 - x0, h: y1 - y0, rot };
+}
+
+/**
+ * The frame to draw around the current selection (null when nothing is
+ * selected). The box keeps the angle its contents were turned to: `hint` is
+ * the angle of a group that was just rotated together, otherwise each thing
+ * remembers its own.
+ */
+export function selectionFrame(doc: Doc, ids: string[], hint?: { key: string; rot: number } | null): Frame | null {
   if (ids.length === 0) return null;
   if (ids.length === 1) {
     const g = doc.guides.find((x) => x.id === ids[0]);
-    if (g?.type === 'ellipse') return { cx: g.cx, cy: g.cy, w: g.rx * 2, h: g.ry * 2, rot: g.rot };
-    if (g?.type === 'rect') return { cx: g.cx, cy: g.cy, w: g.w, h: g.h, rot: g.rot };
+    if (g?.type === 'ellipse' && !(g.width && g.band === 'out')) return { cx: g.cx, cy: g.cy, w: g.rx * 2, h: g.ry * 2, rot: g.rot };
+    if (g?.type === 'rect' && !(g.width && g.band === 'out')) return { cx: g.cx, cy: g.cy, w: g.w, h: g.h, rot: g.rot };
     const r = doc.refs.find((x) => x.id === ids[0]);
     if (r) return { cx: r.cx, cy: r.cy, w: r.w, h: r.h, rot: r.rot };
   }
-  const b = selectionBBox(doc, ids);
-  if (!b) return null;
+  const set = new Set(ids);
+  const pts: Pt[] = [];
+  let rot: number | null = null;
+  let mixed = false;
+  const note = (a: number): void => {
+    if (rot === null) rot = a;
+    else if (Math.abs(rot - a) > 1e-6) mixed = true;
+  };
+  for (const g of doc.guides) {
+    if (!set.has(g.id)) continue;
+    for (const poly of guidePoints(g)) pts.push(...poly);
+    note(guideRot(g));
+  }
+  for (const s of doc.shapes) {
+    if (!set.has(s.id)) continue;
+    for (const poly of shapePolygons(s)) pts.push(...poly);
+    note(s.rot ?? 0);
+  }
+  for (const r of doc.refs) {
+    if (!set.has(r.id)) continue;
+    pts.push(...refCorners(r));
+    note(r.rot);
+  }
+  const key = [...ids].sort().join(',');
+  const angle = hint && hint.key === key ? hint.rot : mixed ? 0 : (rot ?? 0);
+  return orientedBox(pts, angle);
+}
+
+/** The export frame as a selection-style box. */
+export function boardFrame(doc: Doc): Frame {
+  const b = board(doc);
   return { cx: b.x + b.w / 2, cy: b.y + b.h / 2, w: b.w, h: b.h, rot: 0 };
+}
+
+/** The eight handles of an upright box (used for the export frame). */
+export function boxHandles(f: Frame): PlacedHandle[] {
+  return (Object.keys(LOCAL) as BoxHandle[]).map((at) => {
+    const [lx, ly] = LOCAL[at];
+    return { handle: { kind: 'box', at }, p: frameLocalToDoc(f, (lx * f.w) / 2, (ly * f.h) / 2) };
+  });
+}
+
+/** The export frame after dragging one of its handles to `cur`. Corners and sides both resize freely. */
+export function resizeBoard(b: { x: number; y: number; w: number; h: number }, at: BoxHandle, cur: Pt, keepRatio: boolean): { x: number; y: number; w: number; h: number } {
+  const [lx, ly] = LOCAL[at];
+  const MIN = 16;
+  let x0 = b.x;
+  let y0 = b.y;
+  let x1 = b.x + b.w;
+  let y1 = b.y + b.h;
+  if (lx < 0) x0 = Math.min(cur.x, x1 - MIN);
+  if (lx > 0) x1 = Math.max(cur.x, x0 + MIN);
+  if (ly < 0) y0 = Math.min(cur.y, y1 - MIN);
+  if (ly > 0) y1 = Math.max(cur.y, y0 + MIN);
+  if (keepRatio && lx !== 0 && ly !== 0) {
+    const k = Math.max((x1 - x0) / b.w, (y1 - y0) / b.h);
+    const w = b.w * k;
+    const h = b.h * k;
+    if (lx < 0) x0 = x1 - w;
+    else x1 = x0 + w;
+    if (ly < 0) y0 = y1 - h;
+    else y1 = y0 + h;
+  }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
 /** Distance (document units) from the frame's top edge to the rotation knob. */

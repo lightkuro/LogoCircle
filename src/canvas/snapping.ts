@@ -2,6 +2,7 @@ import type { BBox, Pt } from '@/geom';
 import type { Doc } from '@/model/types';
 import { guidePoints, guideSnapPoints, isClosedGuide } from '@/model/guides';
 import { itemBBox } from '@/model/ops';
+import { board } from '@/model/doc';
 
 export interface SnapLine {
   a: Pt;
@@ -15,20 +16,20 @@ interface Axis {
 }
 
 function targets(doc: Doc, exclude: Set<string>, grid = 0): { xs: Axis[]; ys: Axis[] } {
-  const { w, h } = doc.artboard;
+  const { x, y, w, h } = board(doc);
   const xs: Axis[] = [
-    { v: 0, lo: 0, hi: h },
-    { v: w / 2, lo: 0, hi: h },
-    { v: w, lo: 0, hi: h },
+    { v: x, lo: y, hi: y + h },
+    { v: x + w / 2, lo: y, hi: y + h },
+    { v: x + w, lo: y, hi: y + h },
   ];
   const ys: Axis[] = [
-    { v: 0, lo: 0, hi: w },
-    { v: h / 2, lo: 0, hi: w },
-    { v: h, lo: 0, hi: w },
+    { v: y, lo: x, hi: x + w },
+    { v: y + h / 2, lo: x, hi: x + w },
+    { v: y + h, lo: x, hi: x + w },
   ];
   if (grid > 0) {
-    for (let v = grid; v < w; v += grid) xs.push({ v, lo: 0, hi: h });
-    for (let v = grid; v < h; v += grid) ys.push({ v, lo: 0, hi: w });
+    for (let v = grid; v < w; v += grid) xs.push({ v: x + v, lo: y, hi: y + h });
+    for (let v = grid; v < h; v += grid) ys.push({ v: y + v, lo: x, hi: x + w });
   }
   const ids = [...doc.guides.map((g) => g.id), ...doc.shapes.map((s) => s.id)];
   if (ids.length > 150) return { xs, ys };
@@ -97,11 +98,11 @@ export function snapPoint(
   anchor?: Pt,
   grid = 0,
 ): { p: Pt; lines: SnapLine[] } {
-  const { w, h } = doc.artboard;
+  const { x: ox, y: oy, w, h } = board(doc);
   const pts: Pt[] = [
-    { x: 0, y: 0 }, { x: w / 2, y: 0 }, { x: w, y: 0 },
-    { x: 0, y: h / 2 }, { x: w / 2, y: h / 2 }, { x: w, y: h / 2 },
-    { x: 0, y: h }, { x: w / 2, y: h }, { x: w, y: h },
+    { x: ox, y: oy }, { x: ox + w / 2, y: oy }, { x: ox + w, y: oy },
+    { x: ox, y: oy + h / 2 }, { x: ox + w / 2, y: oy + h / 2 }, { x: ox + w, y: oy + h / 2 },
+    { x: ox, y: oy + h }, { x: ox + w / 2, y: oy + h }, { x: ox + w, y: oy + h },
   ];
   if (doc.guides.length <= 150) {
     for (const g of doc.guides) if (g.id !== excludeId && !g.hidden) pts.push(...guideSnapPoints(g));
@@ -118,8 +119,8 @@ export function snapPoint(
   if (best) return { p: { x: best.x, y: best.y }, lines: [] };
 
   if (grid > 0) {
-    const gx = Math.round(p.x / grid) * grid;
-    const gy = Math.round(p.y / grid) * grid;
+    const gx = ox + Math.round((p.x - ox) / grid) * grid;
+    const gy = oy + Math.round((p.y - oy) / grid) * grid;
     if (Math.hypot(gx - p.x, gy - p.y) <= tol) return { p: { x: gx, y: gy }, lines: [] };
   }
 

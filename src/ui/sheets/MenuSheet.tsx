@@ -25,7 +25,7 @@ export function MenuSheet() {
   const go = (sheet: 'gallery' | 'help'): void => useUi.setState({ sheet, galleryTab: 'mine' });
   const close = (): void => useUi.setState({ sheet: null });
   return (
-    <Sheet open={open} onClose={close} title="LogoCircle">
+    <Sheet open={open} onClose={close} title="LogoCircle" place="top-left">
       <input
         className="field mb-3"
         value={name}

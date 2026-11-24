@@ -1,5 +1,5 @@
 import { distToPolyline, polygonArea, windingOfPolygon, type Pt } from '@/geom';
-import type { Doc } from '@/model/types';
+import type { Doc, Guide } from '@/model/types';
 import { guidePoints, isClosedGuide } from '@/model/guides';
 import { refCorners, shapePolygons } from '@/model/ops';
 
@@ -11,17 +11,18 @@ function inPolys(p: Pt, polys: Pt[][]): boolean {
 
 /**
  * Everything under a point, best candidate first:
- *   1. guides whose outline passes within `tol` (closest first),
+ *   1. outlines (of the given, visible ones) passing within `tol` (closest first),
  *   2. shapes containing the point (topmost first),
  *   3. the smallest closed guide containing the point,
  *   4. unlocked photos containing the point.
  */
-export function hitItems(doc: Doc, p: Pt, tol: number, showGuides: boolean): string[] {
+export function hitItems(doc: Doc, p: Pt, tol: number, guides: Guide[]): string[] {
   const out: string[] = [];
+  const showGuides = guides.length > 0;
 
   if (showGuides) {
     const near: { id: string; d: number }[] = [];
-    for (const g of doc.guides) {
+    for (const g of guides) {
       if (g.hidden || g.locked) continue;
       let best = Infinity;
       const polys = guidePoints(g);
@@ -49,7 +50,7 @@ export function hitItems(doc: Doc, p: Pt, tol: number, showGuides: boolean): str
 
   if (showGuides) {
     const inside: { id: string; area: number }[] = [];
-    for (const g of doc.guides) {
+    for (const g of guides) {
       if (g.hidden || g.locked || out.includes(g.id) || !isClosedGuide(g)) continue;
       const polys = guidePoints(g);
       if (inPolys(p, polys)) inside.push({ id: g.id, area: Math.abs(polys.reduce((a, q) => a + polygonArea(q), 0)) });

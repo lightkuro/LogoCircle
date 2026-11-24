@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Check, Copy, Download, Share2 } from 'lucide-react';
+import { Check, Copy, Crop, Download, Share2 } from 'lucide-react';
+import { board } from '@/model/doc';
+import { editFrame } from '@/actions';
 import { toast } from 'sonner';
 import { useDoc } from '@/store/doc';
 import { useUi } from '@/store/ui';
@@ -47,6 +49,7 @@ export function ExportSheet() {
   const open = useUi((s) => s.sheet === 'export');
   const mode = useUi((s) => s.mode);
   const doc = useDoc((s) => s.doc);
+  const frame = board(doc);
   const [background, setBackground] = useState(false);
   const [guides, setGuides] = useState(false);
   const [content, setContent] = useState(false);
@@ -75,7 +78,7 @@ export function ExportSheet() {
   };
 
   return (
-    <Sheet open={open} onClose={() => useUi.setState({ sheet: null })} title="Export">
+    <Sheet open={open} onClose={() => useUi.setState({ sheet: null })} title="Export" place="top-right">
       <div
         className="swatch-clear flex items-center justify-center overflow-hidden rounded-2xl"
         style={{ aspectRatio: '16 / 10', boxShadow: 'inset 0 0 0 1px var(--border)' }}
@@ -91,6 +94,15 @@ export function ExportSheet() {
         <Toggle label="Background" hint="Off keeps the logo transparent" checked={background} onChange={setBackground} />
         <Toggle label="Construction lines" hint="Show the outlines the logo was built from" checked={guides} onChange={setGuides} />
         {mode === 'advanced' && <Toggle label="Crop to artwork" hint="Trim the empty space around the logo" checked={content} onChange={setContent} />}
+        <button type="button" className="row-btn" style={{ paddingLeft: 4, paddingRight: 4 }} onClick={() => editFrame(true)}>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-medium">Export frame</span>
+            <span className="block text-[12.5px] text-muted">
+              {Math.round(frame.w)} × {Math.round(frame.h)} · move or resize what gets exported
+            </span>
+          </span>
+          <Crop />
+        </button>
       </div>
 
       <div className="mt-3 grid gap-2">

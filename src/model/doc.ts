@@ -3,24 +3,43 @@ import { uid } from './ids';
 
 export interface PaletteDef {
   name: string;
-  colors: [string, string, string];
+  /** Two to four colors. */
+  colors: string[];
 }
 
-/** Curated three-color sets. Each works on white and reads well at small sizes. */
+/**
+ * Color sets borrowed from well-known brands. A brand with one signature
+ * color is paired with black or white so every set has at least two.
+ */
 export const PALETTES: PaletteDef[] = [
-  { name: 'Classic', colors: ['#111111', '#e5383b', '#f4b942'] },
-  { name: 'Ocean', colors: ['#0f4c5c', '#2ec4b6', '#ff9f1c'] },
-  { name: 'Forest', colors: ['#1b4332', '#52b788', '#f4a261'] },
-  { name: 'Sunset', colors: ['#2d1e2f', '#f15152', '#f9c784'] },
-  { name: 'Grape', colors: ['#2e1065', '#7c3aed', '#f0abfc'] },
-  { name: 'Sky', colors: ['#1d3557', '#457b9d', '#a8dadc'] },
-  { name: 'Candy', colors: ['#ff006e', '#8338ec', '#ffbe0b'] },
-  { name: 'Mint', colors: ['#073b4c', '#06d6a0', '#ffd166'] },
-  { name: 'Earth', colors: ['#3e2723', '#a1887f', '#ffcc80'] },
-  { name: 'Mono', colors: ['#18181b', '#71717a', '#d4d4d8'] },
+  { name: "McDonald's", colors: ['#da291c', '#ffc72c'] },
+  { name: 'John Deere', colors: ['#367c2b', '#ffde00'] },
+  { name: 'Taco Bell', colors: ['#702082', '#ef1897', '#fee100'] },
+  { name: 'Google', colors: ['#4285f4', '#ea4335', '#fbbc05', '#34a853'] },
+  { name: 'Starbucks', colors: ['#00704a', '#000000'] },
+  { name: 'Apple', colors: ['#000000', '#a2aaad'] },
+  { name: 'Ford', colors: ['#003478', '#ffffff'] },
+  { name: 'Coca-Cola', colors: ['#f40009', '#ffffff'] },
 ];
 
+/** A few plain colors for quick picking. */
+export const BASIC_COLORS = ['#000000', '#ffffff', '#8e8e93', '#e5383b', '#ff8a00', '#f4b942', '#2a9d55', '#16a3b8', '#2f6bff', '#7c3aed', '#ec4899', '#8b5e3c'];
+
+export const DEFAULT_PALETTE = ['#16877f', '#f29e4c'];
+
+/** The color a newly added swatch starts with: black first, then whatever is not there yet. */
+export function nextColor(palette: string[]): string {
+  const have = new Set(palette.map((c) => c.toLowerCase()));
+  return BASIC_COLORS.find((c) => !have.has(c)) ?? '#000000';
+}
+
 export const PAPERS: (string | null)[] = ['#ffffff', '#f5f1e8', '#111111', null];
+
+/** The export frame as a plain rectangle. */
+export function board(doc: Pick<Doc, 'artboard'>): { x: number; y: number; w: number; h: number } {
+  const a = doc.artboard;
+  return { x: a.x ?? 0, y: a.y ?? 0, w: a.w, h: a.h };
+}
 
 export function newDoc(name = 'Untitled logo'): Doc {
   const now = Date.now();
@@ -30,7 +49,7 @@ export function newDoc(name = 'Untitled logo'): Doc {
     name,
     artboard: { w: ARTBOARD, h: ARTBOARD },
     paper: '#ffffff',
-    palette: [...PALETTES[0]!.colors],
+    palette: [...DEFAULT_PALETTE],
     guides: [],
     shapes: [],
     groups: {},
@@ -65,9 +84,9 @@ export function kindOf(doc: Doc, id: string): ItemKind | null {
   return null;
 }
 
-/** Ids of every shape in a group. */
+/** Ids of everything in a group (shapes and outlines). */
 export function groupMembers(doc: Doc, groupId: string): string[] {
-  return doc.shapes.filter((s) => s.group === groupId).map((s) => s.id);
+  return [...doc.guides.filter((g) => g.group === groupId).map((g) => g.id), ...doc.shapes.filter((s) => s.group === groupId).map((s) => s.id)];
 }
 
 export function isEmptyDoc(doc: Doc): boolean {

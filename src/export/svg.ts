@@ -1,6 +1,6 @@
 import { chainsToPath, fmt, ringsToPath } from '@/geom';
 import type { Doc } from '@/model/types';
-import { resolveFill } from '@/model/doc';
+import { board, resolveFill } from '@/model/doc';
 import { guideChains } from '@/model/guides';
 import { contentBBox } from '@/model/ops';
 
@@ -25,7 +25,7 @@ const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;'
 /** Serialize the document to a standalone SVG file. */
 export function docToSvg(doc: Doc, options: Partial<SvgOptions> = {}): string {
   const o = { ...DEFAULT_SVG, ...options };
-  let box = { x: 0, y: 0, w: doc.artboard.w, h: doc.artboard.h };
+  let box = board(doc);
   if (o.crop === 'content') {
     const b = contentBBox(doc);
     if (b && b.w > 0 && b.h > 0) {
@@ -56,7 +56,7 @@ export function docToSvg(doc: Doc, options: Partial<SvgOptions> = {}): string {
   }
   if (o.guides) {
     const paths = doc.guides
-      .filter((g) => !g.hidden)
+      .filter((g) => !g.hidden && !(g.type === 'line' && g.cut))
       .map((g) => `<path d="${chainsToPath(guideChains(g), d)}"/>`)
       .join('');
     if (paths) {

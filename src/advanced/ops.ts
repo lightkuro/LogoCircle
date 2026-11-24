@@ -102,54 +102,7 @@ export function distributeSelection(axis: 'h' | 'v'): void {
   commit(doc);
 }
 
-export type Order = 'front' | 'forward' | 'backward' | 'back';
-
-export function orderSelection(order: Order): void {
-  const doc = getDoc();
-  const sel = new Set(ui().selection);
-  const shapes = [...doc.shapes];
-  const picked = shapes.filter((s) => sel.has(s.id));
-  if (!picked.length) return;
-  let next: Shape[];
-  if (order === 'front') next = [...shapes.filter((s) => !sel.has(s.id)), ...picked];
-  else if (order === 'back') next = [...picked, ...shapes.filter((s) => !sel.has(s.id))];
-  else {
-    next = shapes;
-    const step = order === 'forward' ? 1 : -1;
-    const idx = shapes.map((s, i) => (sel.has(s.id) ? i : -1)).filter((i) => i >= 0);
-    if (step === 1) idx.reverse();
-    for (const i of idx) {
-      const j = i + step;
-      if (j < 0 || j >= next.length || sel.has(next[j]!.id)) continue;
-      [next[i], next[j]] = [next[j]!, next[i]!];
-    }
-  }
-  commit({ ...doc, shapes: next, updatedAt: Date.now() });
-}
-
-export function groupSelection(): void {
-  const doc = getDoc();
-  const shapes = selectedShapes(doc);
-  if (shapes.length < 2) return;
-  const id = uid('w');
-  const ids = new Set(shapes.map((s) => s.id));
-  commit({
-    ...doc,
-    shapes: doc.shapes.map((s) => (ids.has(s.id) ? { ...s, group: id } : s)),
-    groups: { ...doc.groups, [id]: { id, kind: 'group', name: 'Group' } },
-    updatedAt: Date.now(),
-  });
-}
-
-export function ungroupSelection(): void {
-  const doc = getDoc();
-  const shapes = selectedShapes(doc);
-  const gids = new Set(shapes.map((s) => s.group).filter((g): g is string => !!g));
-  if (!gids.size) return;
-  const groups = { ...doc.groups };
-  gids.forEach((g) => delete groups[g]);
-  commit({ ...doc, shapes: doc.shapes.map((s) => (s.group && gids.has(s.group) ? { ...s, group: undefined } : s)), groups, updatedAt: Date.now() });
-}
+export { groupSelection, orderSelection, ungroupSelection, type Order } from '@/actions';
 
 // --- style ------------------------------------------------------------------
 

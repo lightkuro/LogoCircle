@@ -973,6 +973,85 @@ async function firstVisit(browser, phone) {
   await ctx.close();
 }
 
+async function desktopBar(browser) {
+  console.log('\nDesktop bar: opening out, pins, instant hovers');
+  const { ctx, page, errors } = await fresh(browser, false);
+  const btn = (name) => page.getByRole('button', { name, exact: true });
+  const has = async (name) => (await btn(name).count()) === 1;
+  // Hovering shows a list at once, with no animation.
+  await btn('More').hover();
+  await page.waitForTimeout(30);
+  const more = page.getByRole('menu', { name: 'More' });
+  check((await more.count()) === 1 && (await more.evaluate((el) => getComputedStyle(el).animationName)) === 'none', 'hovering a tool button shows its list at once, unanimated');
+  const bg = await btn('Text').evaluate((el) => getComputedStyle(el).transitionProperty);
+  check(!bg.includes('background'), `tool buttons change on hover without a fade (${bg})`);
+  await page.mouse.move(700, 300);
+
+  // The tab at the end opens the bar out: Cut first, then the shapes, then the lines.
+  check((await has('Shapes')) && !(await has('Circle')), 'the bar starts compact');
+  await btn('Expand bar').click();
+  await page.mouse.move(700, 300);
+  check((await has('Circle')) && (await has('Square')) && (await has('Triangle')) && (await has('Line')) && (await has('Draw')) && (await has('Erase')), 'expanded: shapes, lines and Erase get buttons of their own');
+  await btn('Shapes').hover();
+  check((await page.getByRole('menuitem', { name: /^Polygon/ }).count()) === 1 && (await page.getByRole('menuitem', { name: /^Circle/ }).count()) === 0, 'Polygon and Star stay in the Shapes list');
+  await btn('Cut').hover();
+  check((await page.getByRole('menuitemcheckbox', { name: /^Cut lines/ }).count()) === 1, 'Cut lines stays in a list on Cut');
+  await btn('Cut').click();
+  check((await page.evaluate(() => window.__lc.ui().tool)) === 'cut', 'a click on Cut picks Cut straight away');
+  await page.keyboard.press('Escape');
+  await page.mouse.move(700, 300);
+
+  // Right-click a tool to pin it or take it off.
+  await btn('Circle').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Unpin from bar' }).click();
+  check(!(await has('Circle')), 'right-click, Unpin from bar: Circle goes back in the list');
+  await btn('Shapes').hover();
+  await page.getByRole('menuitem', { name: /^Star/ }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Pin to bar' }).click();
+  await page.mouse.move(700, 300);
+  check(await has('Star'), 'right-click in a list, Pin to bar: Star gets a button');
+
+  // The same choice in Settings.
+  await btn('Menu').click();
+  await page.getByRole('button', { name: /^Settings/ }).click();
+  const polygon = page.getByRole('group', { name: 'Shapes' }).getByRole('button', { name: 'Polygon' });
+  check((await polygon.getAttribute('aria-pressed')) === 'false', 'Settings lists the tools for the expanded bar');
+  await polygon.click();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__lc.ui().sheet === null);
+  await page.waitForTimeout(300); // the panel fades out
+  check(await has('Polygon'), 'and pinning one there gives it a button');
+
+  // Dragging the tab: back to compact, then just the first group.
+  const drag = async (dx) => {
+    const t = await page.getByRole('button', { name: /^(Fold|Expand) bar$/ }).boundingBox();
+    await page.mouse.move(t.x + t.width / 2, t.y + t.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(t.x + t.width / 2 + dx / 2, t.y + t.height / 2, { steps: 4 });
+    await page.mouse.move(t.x + t.width / 2 + dx, t.y + t.height / 2, { steps: 4 });
+    await page.mouse.up();
+  };
+  await drag(-600);
+  check((await has('Expand bar')) && !(await has('Erase')), 'dragging the tab left folds the bar');
+  await drag(40);
+  check((await has('Erase')) && !(await has('Triangle')), 'dragging it a little way opens out just Cut');
+
+  // Kept for next time; and a narrow screen opens out only what fits.
+  await page.reload({ waitUntil: 'networkidle' });
+  check((await has('Erase')) && !(await has('Triangle')), 'the bar is the same after a reload');
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await btn('Fold bar').click();
+  await btn('Expand bar').click();
+  await page.mouse.move(500, 300);
+  const dock = await page.getByRole('toolbar', { name: 'Tools' }).boundingBox();
+  const zoom = await page.locator('.zoom-control').boundingBox();
+  check((await has('Erase')) && !(await has('Triangle')) && dock.x + dock.width < zoom.x, 'on a narrower screen only what fits opens out, clear of the zoom');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: join(shots, 'desktop-bar.png') });
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 async function mirrorAndPicking(browser) {
   console.log('\nMirror copy, one at a time, hold and drag');
   // Mirror copy, with a mouse.
@@ -1119,7 +1198,7 @@ try {
   browser = await chromium.launch();
   if (process.env.E2E_ONLY) {
     // E2E_ONLY=touch,controls runs just those flows
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1135,6 +1214,7 @@ try {
   await sideways(browser);
   await touch(browser);
   await mirrorAndPicking(browser);
+  await desktopBar(browser);
 } catch (err) {
   if (err !== 'only') {
     console.error(err);

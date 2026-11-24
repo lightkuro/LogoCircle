@@ -1956,3 +1956,45 @@ html[data-labels='off'] .dock .tool .tool-caret {
   color: var(--text);
   text-decoration: underline;
 }
+
+/* Desktop: the tab at the end of the bar that opens it out. */
+.dock-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 52px;
+  margin-left: 1px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.dock-tab svg {
+  width: 15px;
+  height: 15px;
+}
+.dock-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+html[data-labels='off'] .dock .dock-tab {
+  height: 44px;
+}
+
+/* With a mouse, hovering shows things at once: no fades on hover, no growing lists. */
+html[data-input='mouse'] .tool,
+html[data-input='mouse'] .chip,
+html[data-input='mouse'] .ib,
+html[data-input='mouse'] .menu-item,
+html[data-input='mouse'] .swatch {
+  transition-property: transform;
+}
+html[data-input='mouse'] .flyout,
+html[data-input='mouse'] .tool .tool-caret {
+  animation: none;
+  transition: none;
+}

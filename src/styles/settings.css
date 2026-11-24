@@ -223,3 +223,45 @@
   align-items: center;
   gap: 4px;
 }
+
+/* Expanded bar: which tools get their own button ----------------------------- */
+.pin-groups {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 6px;
+}
+.pin-group {
+  display: grid;
+  gap: 5px;
+}
+.pin-group-name {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--muted);
+}
+.pin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.pin-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--sunken);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+.pin-chip svg {
+  width: 15px;
+  height: 15px;
+}
+.pin-chip[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}

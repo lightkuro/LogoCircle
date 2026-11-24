@@ -25,11 +25,19 @@ export interface Settings {
   toolLabels: boolean;
   /** Press a button with a list, slide onto a choice and let go to pick it. */
   slidePick: boolean;
+  /**
+   * Desktop: how many of the bar's groups are opened out into buttons of their
+   * own (in the order Cut, Shapes, Lines, Select, More; as many as fit). 0 is
+   * the compact bar.
+   */
+  dockLevel: number;
+  /** Desktop: the tools that get a button of their own when the bar is opened out (null = the usual ones). */
+  pins: string[] | null;
   /** Key bindings that differ from the defaults: command id → combo ('' = no key). */
   keys: Record<string, string>;
 }
 
-const DEFAULTS: Settings = { layout: 'auto', theme: 'auto', dragEmpty: 'pan', haptics: true, toolLabels: true, slidePick: false, keys: {} };
+const DEFAULTS: Settings = { layout: 'auto', theme: 'auto', dragEmpty: 'pan', haptics: true, toolLabels: true, slidePick: false, dockLevel: 0, pins: null, keys: {} };
 const KEY = 'lc.settings';
 
 function load(): Settings {
@@ -42,6 +50,8 @@ function load(): Settings {
       haptics: raw.haptics !== false,
       toolLabels: raw.toolLabels !== false,
       slidePick: raw.slidePick === true,
+      dockLevel: typeof raw.dockLevel === 'number' && raw.dockLevel >= 0 ? Math.round(raw.dockLevel) : 0,
+      pins: Array.isArray(raw.pins) ? raw.pins.filter((x): x is string => typeof x === 'string') : null,
       keys: raw.keys && typeof raw.keys === 'object' ? { ...raw.keys } : {},
     };
   } catch {
@@ -64,8 +74,8 @@ export const settings = (): SettingsState => useSettings.getState();
 
 useSettings.subscribe((s) => {
   try {
-    const { layout, theme, dragEmpty, haptics, toolLabels, slidePick, keys } = s;
-    localStorage.setItem(KEY, JSON.stringify({ layout, theme, dragEmpty, haptics, toolLabels, slidePick, keys }));
+    const { layout, theme, dragEmpty, haptics, toolLabels, slidePick, dockLevel, pins, keys } = s;
+    localStorage.setItem(KEY, JSON.stringify({ layout, theme, dragEmpty, haptics, toolLabels, slidePick, dockLevel, pins, keys }));
   } catch {
     /* private mode: preferences simply do not persist */
   }

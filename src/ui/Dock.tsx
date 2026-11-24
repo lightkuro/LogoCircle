@@ -3,6 +3,7 @@ import {
   Brush,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Circle,
   ClipboardPaste,
   Crop,
@@ -21,6 +22,8 @@ import {
   MousePointer2,
   MousePointerClick,
   PenTool,
+  Pin,
+  PinOff,
   PaintBucket,
   Pencil,
   Plus,
@@ -34,7 +37,7 @@ import {
 } from 'lucide-react';
 import { useDoc } from '@/store/doc';
 import { remember, useUi, type SelectMode } from '@/store/ui';
-import { buzz, useIsPhone, useIsSide, useIsTouch } from '@/store/settings';
+import { buzz, layoutKindNow, settings, useIsPhone, useIsSide, useIsTouch, useSettings } from '@/store/settings';
 import { useKeys } from '@/keys';
 import { resolveFill } from '@/model/doc';
 import { addOutline, addSwatch, editFrame, fitToScreen, openBackground, openPhoto, pastePhoto, pickEraser, pickInk, pickPhoto, setSticky, setTool, startMirror, zoomBy, type AddKind } from '@/actions';
@@ -69,10 +72,46 @@ const openText = (): void =>
     colorPanel: null,
   });
 
-function Single({ entry }: { entry: Entry }) {
+// --- Pinning tools to the bar (desktop) --------------------------------------------
+
+/** The tools that get a button of their own when the bar is opened out, unless changed in Settings. */
+export const DEFAULT_PINS = ['cut', 'erase', 'circle', 'rect', 'triangle', 'line', 'curve', 'draw', 'brush'];
+/** The order groups open out in when there is not room for all of them. */
+const PRIORITY = ['cut', 'shapes', 'lines', 'select', 'more'] as const;
+type GroupId = (typeof PRIORITY)[number];
+
+export const currentPins = (): string[] => settings().pins ?? DEFAULT_PINS;
+/** Switches and headings stay in their lists; any tool can have a button of its own. */
+const pinnable = (e: Entry): boolean => e.checked === undefined && !e.children;
+
+export function togglePin(id: string): void {
+  const s = settings();
+  const pins = currentPins();
+  const on = pins.includes(id);
+  // Pinning opens the bar out, so the new button shows.
+  s.set({ pins: on ? pins.filter((p) => p !== id) : [...pins, id], dockLevel: on ? s.dockLevel : Math.max(s.dockLevel, PRIORITY.length) });
+}
+
+/** Right-click on a tool, in the bar or in a list: pin it to the bar, or take it off. */
+function pinMenu(e: Entry, ev: MouseEvent): void {
+  ev.preventDefault();
+  if (layoutKindNow() !== 'desktop' || !pinnable(e)) return;
+  const on = currentPins().includes(e.id);
+  useUi.setState({ menu: { x: ev.clientX, y: ev.clientY, items: [{ label: on ? 'Unpin from bar' : 'Pin to bar', icon: on ? PinOff : Pin, onSelect: () => togglePin(e.id) }] } });
+}
+
+function Single({ entry, pin }: { entry: Entry; pin?: boolean }) {
   return (
     <Tip label={entry.label} keys={entry.keys}>
-      <button type="button" className="tool" aria-label={entry.label} aria-pressed={entry.active} data-active={entry.active || undefined} onClick={() => entry.run()}>
+      <button
+        type="button"
+        className="tool"
+        aria-label={entry.label}
+        aria-pressed={entry.active}
+        data-active={entry.active || undefined}
+        onClick={() => entry.run()}
+        onContextMenu={pin ? (ev) => pinMenu(entry, ev.nativeEvent) : undefined}
+      >
         {entry.icon}
         <span>{entry.label}</span>
       </button>
@@ -91,6 +130,8 @@ function Group({
   icon,
   caret,
   out = 'up',
+  primary,
+  pin,
 }: {
   label: string;
   entries: Entry[];
@@ -98,6 +139,10 @@ function Group({
   caret?: boolean;
   /** Which way the list opens: up from a bar along the bottom, or sideways from a rail down an edge. */
   out?: 'up' | 'right' | 'left';
+  /** A tool with a few extras: a click always picks the tool on the button; the list holds the extras. */
+  primary?: boolean;
+  /** Right-click a tool in the list to pin it to the bar (desktop). */
+  pin?: boolean;
 }) {
   const touch = useIsTouch();
   const [open, setOpen] = useState(false);
@@ -179,6 +224,7 @@ function Group({
         className={inner ? 'menu-item menu-inner' : 'menu-item'}
         data-active={e.active || undefined}
         onClick={() => pick(e)}
+        onContextMenu={pin ? (ev) => pinMenu(e, ev.nativeEvent) : undefined}
       >
         {e.checked === undefined && e.icon}
         {e.label}
@@ -197,8 +243,9 @@ function Group({
       className="tool-group"
       onPointerEnter={(e) => {
         if (e.pointerType !== 'mouse') return;
+        // With a mouse the list is there the moment the pointer is.
         clearTimeout(timer.current);
-        timer.current = setTimeout(() => setOpen(true), 140);
+        setOpen(true);
       }}
       onPointerLeave={(e) => {
         if (e.pointerType !== 'mouse') return;
@@ -213,11 +260,12 @@ function Group({
         aria-expanded={open}
         aria-label={label}
         data-active={activeIndex >= 0 || undefined}
+        onContextMenu={pin && primary ? (ev) => pinMenu(shown, ev.nativeEvent) : undefined}
         {...slide.props}
         onClick={() => {
           if (slide.handled()) return;
           // Mouse: the list is already open from hovering, so a click means "this one again".
-          if (!touch && open && !icon) pick(shown);
+          if ((primary || (!touch && open)) && !icon) pick(shown);
           else setOpen(!open);
         }}
       >
@@ -606,10 +654,118 @@ function useEntries() {
   return { key, selects, shapes, lines, cuts, photos, more };
 }
 
+/** The groups of the bar, in the order they sit on it, for the bar and for Settings. */
+export function useBarGroups(): { id: GroupId; label: string; entries: Entry[] }[] {
+  const { selects, shapes, lines, cuts, more } = useEntries();
+  return [
+    { id: 'shapes', label: 'Shapes', entries: shapes },
+    { id: 'lines', label: 'Lines', entries: lines },
+    { id: 'cut', label: 'Cut', entries: cuts },
+    { id: 'select', label: 'Select', entries: selects },
+    { id: 'more', label: 'More', entries: more },
+  ];
+}
+
+/**
+ * One group of the bar. Compact, it is a single button with a list. Opened
+ * out, its pinned tools get buttons of their own; what is left stays in the
+ * list (a list left with only switches, such as Cut lines, hangs off the
+ * first tool instead).
+ */
+function Section({ label, entries, open, pins, icon, caret }: { label: string; entries: Entry[]; open: boolean; pins: string[]; icon?: ReactNode; caret?: boolean }) {
+  if (!open) return <Group label={label} entries={entries} icon={icon} caret={caret} pin />;
+  const pinned = entries.filter((e) => pinnable(e) && pins.includes(e.id));
+  const rest = entries.filter((e) => !pinned.includes(e));
+  if (!pinned.length) return <Group label={label} entries={entries} icon={icon} caret={caret} pin />;
+  if (rest.some((e) => e.checked === undefined)) {
+    return (
+      <>
+        {pinned.map((e) => (
+          <Single key={e.id} entry={e} pin />
+        ))}
+        <Group label={label} entries={rest} icon={icon} caret={caret} pin />
+      </>
+    );
+  }
+  const [first, ...others] = pinned;
+  return (
+    <>
+      {rest.length ? <Group label={first!.label} entries={[...rest, first!]} caret primary pin /> : <Single entry={first!} pin />}
+      {others.map((e) => (
+        <Single key={e.id} entry={e} pin />
+      ))}
+    </>
+  );
+}
+
+/** How many more buttons a group takes up opened out than as one button. */
+function extraButtons(entries: Entry[], pins: string[]): number {
+  const pinned = entries.filter((e) => pinnable(e) && pins.includes(e.id)).length;
+  if (!pinned) return 0;
+  const restTools = entries.some((e) => !(pinnable(e) && pins.includes(e.id)) && e.checked === undefined);
+  return pinned + (restTools ? 1 : 0) - 1;
+}
+
+/**
+ * Desktop: the tab at the end of the bar. Click to open the bar out (as far
+ * as the screen allows) or fold it back; drag it to open out one group at a
+ * time.
+ */
+function ExpandTab({ level, max, growth, onLevel }: { level: number; max: number; growth: (n: number) => number; onLevel: (n: number) => void }) {
+  const from = useRef<{ x: number; level: number; moved: boolean } | null>(null);
+  const label = level > 0 ? 'Fold bar' : 'Expand bar';
+  return (
+    <Tip label={`${label}: click or drag`}>
+      <button
+        type="button"
+        className="dock-tab"
+        aria-label={label}
+        aria-expanded={level > 0}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          from.current = { x: e.clientX, level, moved: false };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const f = from.current;
+          if (!f) return;
+          const dx = e.clientX - f.x;
+          if (!f.moved && Math.abs(dx) < 4) return;
+          f.moved = true;
+          // The bar stays centred, so its end moves half as far as it grows.
+          const want = growth(f.level) / 2 + dx;
+          let best = 0;
+          for (let n = 0; n <= max; n++) if (Math.abs(growth(n) / 2 - want) < Math.abs(growth(best) / 2 - want)) best = n;
+          if (best !== level) onLevel(best);
+        }}
+        onPointerUp={() => {
+          const f = from.current;
+          from.current = null;
+          if (f && !f.moved) onLevel(level > 0 ? 0 : PRIORITY.length);
+        }}
+        onPointerCancel={() => (from.current = null)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          onLevel(level > 0 ? 0 : PRIORITY.length);
+        }}
+      >
+        {level > 0 ? <ChevronLeft /> : <ChevronRight />}
+      </button>
+    </Tip>
+  );
+}
+
 export function Dock() {
   const phone = useIsPhone();
   const side = useIsSide();
   const { key, selects, shapes, lines, cuts, more } = useEntries();
+  const stored = useSettings((s) => s.dockLevel);
+  const pins = useSettings((s) => s.pins) ?? DEFAULT_PINS;
+  // re-measure when the words under the icons come or go
+  useSettings((s) => s.toolLabels);
+  const bar = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<number>(PRIORITY.length);
   const text: Entry = {
     id: 'text',
     label: 'Text',
@@ -617,6 +773,36 @@ export function Dock() {
     icon: <Type />,
     run: openText,
   };
+
+  // The groups that can open out, in the order they do: only those with something pinned.
+  const byId: Record<GroupId, Entry[]> = { cut: cuts, shapes, lines, select: selects, more };
+  const order = PRIORITY.filter((id) => extraButtons(byId[id], pins) > 0);
+  const level = Math.min(stored, order.length);
+  const shown = Math.min(level, fit);
+  const open = new Set(order.slice(0, shown));
+  const extras = order.map((id) => extraButtons(byId[id], pins));
+  const width = useRef(56);
+  const growth = (n: number): number => extras.slice(0, n).reduce((a, b) => a + b, 0) * width.current;
+
+  // How many groups fit: the bar stays clear of the zoom buttons in the corner.
+  useLayoutEffect(() => {
+    if (phone || side) return;
+    const measure = (): void => {
+      const el = bar.current;
+      if (!el) return;
+      const tool = el.querySelector<HTMLElement>('.tool');
+      if (tool) width.current = tool.offsetWidth + 2;
+      const compact = el.offsetWidth - growth(shown);
+      const zoom = document.querySelector('.zoom-control')?.getBoundingClientRect().width ?? 190;
+      const room = window.innerWidth - 2 * (zoom + 26);
+      let n = 0;
+      while (n < order.length && compact + growth(n + 1) <= room) n++;
+      setFit(n);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  });
 
   if (side) {
     // A phone on its side: the tools run down the left edge, Select sits with the zoom on the right.
@@ -631,21 +817,31 @@ export function Dock() {
     );
   }
 
+  if (phone) {
+    return (
+      <div className="glass dock" role="toolbar" aria-label="Tools">
+        <Single entry={text} />
+        <Group label="Shapes" entries={shapes} caret />
+        <Group label="Lines" entries={lines} caret />
+        <Group label="Cut" entries={cuts} caret />
+        <Group label="Select" entries={selects} />
+        <Group label="More" entries={more} icon={<Ellipsis />} />
+      </div>
+    );
+  }
+
   return (
-    <div className="glass dock" role="toolbar" aria-label="Tools">
+    <div ref={bar} className="glass dock" role="toolbar" aria-label="Tools">
       <Single entry={text} />
-      <Group label="Shapes" entries={shapes} caret />
-      <Group label="Lines" entries={lines} caret />
-      <Group label="Cut" entries={cuts} caret />
-      {!phone && (
-        <>
-          <span className="sep" />
-          <Colors />
-          <span className="sep" />
-        </>
-      )}
-      <Group label="Select" entries={selects} />
-      <Group label="More" entries={more} icon={<Ellipsis />} />
+      <Section label="Shapes" entries={shapes} open={open.has('shapes')} pins={pins} caret />
+      <Section label="Lines" entries={lines} open={open.has('lines')} pins={pins} caret />
+      <Section label="Cut" entries={cuts} open={open.has('cut')} pins={pins} caret />
+      <span className="sep" />
+      <Colors />
+      <span className="sep" />
+      <Section label="Select" entries={selects} open={open.has('select')} pins={pins} />
+      <Section label="More" entries={more} open={open.has('more')} pins={pins} icon={<Ellipsis />} />
+      {order.length > 0 && <ExpandTab level={shown} max={Math.min(fit, order.length)} growth={growth} onLevel={(n) => settings().set({ dockLevel: n })} />}
     </div>
   );
 }

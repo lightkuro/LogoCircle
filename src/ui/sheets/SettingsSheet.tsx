@@ -4,6 +4,7 @@ import { useUi } from '@/store/ui';
 import { settings, useIsTouch, useSettings, type DragEmpty, type Layout, type Theme } from '@/store/settings';
 import { COMMANDS, GROUPS, bind, combosFor, comboOf, commandFor, formatCombo, isCustom, unbind, type Command } from '@/keys';
 import { InfoTip, Segmented, Sheet } from '../primitives';
+import { DEFAULT_PINS, togglePin, useBarGroups } from '../Dock';
 import '@/styles/settings.css';
 
 const LAYOUT_NOTE = 'Auto picks the phone or desktop layout by screen size.';
@@ -36,6 +37,45 @@ function Choice({ checked, onSelect, icon, children }: { checked: boolean; onSel
       <span className="min-w-0 flex-1">{children}</span>
       {icon}
     </button>
+  );
+}
+
+/**
+ * Desktop: which tools get their own button when the bar is opened out (the
+ * tab at its end). Right-clicking a tool does the same.
+ */
+function BarTools() {
+  const groups = useBarGroups();
+  const pins = useSettings((s) => s.pins) ?? DEFAULT_PINS;
+  const level = useSettings((s) => s.dockLevel);
+  return (
+    <>
+      <div className="set-row">
+        <Title info="Tools with their own button when bar is expanded. Right-click any tool to pin or unpin it.">Expanded bar</Title>
+        <button type="button" role="switch" className="switch" aria-label="Expanded bar" aria-checked={level > 0} onClick={() => settings().set({ dockLevel: level > 0 ? 0 : 5 })}>
+          <span className="switch-thumb" />
+        </button>
+      </div>
+      <div className="pin-groups">
+        {groups.map((g) => {
+          const tools = g.entries.filter((e) => e.checked === undefined && !e.children);
+          if (!tools.length) return null;
+          return (
+            <div key={g.id} className="pin-group" role="group" aria-label={g.label}>
+              <span className="pin-group-name">{g.label}</span>
+              <div className="pin-chips">
+                {tools.map((e) => (
+                  <button key={e.id} type="button" className="pin-chip" aria-pressed={pins.includes(e.id)} onClick={() => togglePin(e.id)}>
+                    {e.icon}
+                    {e.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -253,7 +293,13 @@ export function SettingsSheet() {
       <Switch label="Snapping" hint="Things line up with nearby outlines, edges and centres as you drag them." checked={snap} onChange={(v) => useUi.setState({ snap: v })} />
       {touch && <Switch label="Vibration" hint="A short tick when a color lands or a hold menu opens, where the device has one." checked={haptics} onChange={(v) => set({ haptics: v })} />}
 
-      {!touch && <Shortcuts />}
+      {!touch && (
+        <>
+          <div className="label">Bar</div>
+          <BarTools />
+          <Shortcuts />
+        </>
+      )}
 
       <div className="set-foot">
         <button

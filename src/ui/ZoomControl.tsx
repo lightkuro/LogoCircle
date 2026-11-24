@@ -7,17 +7,11 @@ import { IconButton } from './primitives';
 export function ZoomControl() {
   const k = useUi((s) => s.view.k);
   return (
-    <div className="glass bar" style={{ position: 'absolute', right: 10, bottom: 12, zIndex: 9 }}>
+    <div className="glass bar zoom-control" style={{ position: 'absolute', right: 10, bottom: 12, zIndex: 9 }}>
       <IconButton label="Zoom out" tipSide="top" onClick={() => zoomBy(0.8)}>
         <Minus />
       </IconButton>
-      <button
-        type="button"
-        className="chip"
-        style={{ minWidth: 56, justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}
-        onClick={() => fitToScreen()}
-        aria-label="Fit to screen"
-      >
+      <button type="button" className="chip" style={{ minWidth: 56, justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }} onClick={() => fitToScreen()} aria-label="Fit to screen">
         {Math.round(k * 100)}%
       </button>
       <IconButton label="Zoom in" tipSide="top" onClick={() => zoomBy(1.25)}>

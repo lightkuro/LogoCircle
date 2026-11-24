@@ -1,0 +1,10 @@
+// Cloudflare Workers static assets (free). No "main": this is an assets-only deploy.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "logocircle",
+  "compatibility_date": "2026-11-24",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

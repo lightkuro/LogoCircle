@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/engine", "src/geom", "src/vite-env.d.ts"]
+}

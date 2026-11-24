@@ -117,7 +117,7 @@ function cornerItems(g: Guide, index: number | undefined): MenuItem[] {
     });
     if (r > 0)
       items.push({
-        label: 'Sharpen this corner',
+        label: 'Sharpen corner',
         icon: Square,
         onSelect: () => patchGuide(setCornerRadius(g, index, 0)),
       });
@@ -167,7 +167,7 @@ function pointMenu(g: Guide, h: Handle, d: Pt): MenuItem[] {
   if (g.type === 'poly' || g.type === 'curve' || g.type === 'path') {
     const next = removeGuidePoint(g, i);
     items.push({
-      label: 'Remove this point',
+      label: 'Remove point',
       icon: Minus,
       disabled: !next,
       divide: items.length > 0,
@@ -239,7 +239,7 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
       onSelect: () => set({ locked: !r.locked }),
     });
     items.push({
-      label: r.above ? 'Show under the colors' : 'Show over the colors',
+      label: r.above ? 'Show under colors' : 'Show over colors',
       icon: Layers2,
       onSelect: () => set({ above: !r.above }),
     });
@@ -307,7 +307,7 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
   });
   if (canRepeat())
     items.push({
-      label: 'Repeat with the same spacing',
+      label: 'Repeat, same spacing',
       icon: Repeat2,
       keys: key('repeat'),
       onSelect: repeatDuplicate,
@@ -391,7 +391,7 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
   }
   if (shapes.some((x) => x.from)) {
     items.push({
-      label: 'Detach from its outlines',
+      label: 'Detach from outlines',
       icon: Unlink,
       divide: true,
       onSelect: detachSelection,
@@ -449,7 +449,7 @@ function canvasMenu(at?: Pt): MenuItem[] {
     onSelect: () => editFrame(true),
   });
   items.push({
-    label: 'Fit the frame to the artwork',
+    label: 'Fit frame to artwork',
     icon: Scaling,
     disabled: !doc.shapes.length,
     onSelect: fitBoardToArtwork,
@@ -494,7 +494,7 @@ function frameMenu(): MenuItem[] {
     { label: 'Wide 4 : 3', onSelect: () => setBoardRatio(4, 3) },
     { label: 'Wide 16 : 9', onSelect: () => setBoardRatio(16, 9) },
     { label: 'Tall 3 : 4', onSelect: () => setBoardRatio(3, 4) },
-    { label: 'Fit to the artwork', divide: true, onSelect: fitBoardToArtwork },
+    { label: 'Fit to artwork', divide: true, onSelect: fitBoardToArtwork },
     {
       label: `Done (${Math.round(b.w)} by ${Math.round(b.h)})`,
       divide: true,
@@ -539,7 +539,7 @@ export function openSwatchMenu(at: Pt, index: number, touch = false): void {
       onSelect: () => useUi.setState({ colorPanel: index }),
     },
     {
-      label: 'Select everything in this color',
+      label: 'Select all in this color',
       icon: SquareDashedMousePointer,
       disabled: used === 0,
       onSelect: () =>

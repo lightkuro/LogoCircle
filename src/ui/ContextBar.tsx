@@ -142,16 +142,16 @@ const Hint = ({ children }: { children: ReactNode }) => <span className="bar-hin
 
 function Done({ onClick = doneTool, label = 'Done' }: { onClick?: () => void; label?: string }) {
   const touch = useIsTouch();
-  return <Chip tip="Finish and go back to moving things" keys={touch ? undefined : 'Esc'} label={label} icon={<Check />} onClick={onClick} />;
+  return <Chip tip="Finish tool" keys={touch ? undefined : 'Esc'} label={label} icon={<Check />} onClick={onClick} />;
 }
 
 // --- What to say about the tool in hand ------------------------------------------
 
 const MODE_HINT = (tap: string): Record<string, string> => ({
-  pan: 'Pan: drag to move around',
-  box: 'Box select: drag a box around things',
-  lasso: 'Lasso: draw around things to select them',
-  single: `One at a time: ${tap.toLowerCase()} pieces to select them, even inside a group`,
+  pan: 'Pan: drag to move view',
+  box: 'Box select: drag around items',
+  lasso: 'Lasso: draw around items to select',
+  single: `One at a time: ${tap.toLowerCase()} pieces to select, even in groups`,
 });
 
 /** One line about what the current tool or mode expects. Null when nothing needs saying. */
@@ -168,16 +168,16 @@ function useHint(): string | null {
   const points = usePen((s) => s.count);
   const marks = useUi((s) => s.showCuts);
   const tap = touch ? 'Tap' : 'Click';
-  if (frameEdit) return 'Drag the frame or its handles to set what gets exported';
-  if (tool === 'color') return erasing ? `${tap} areas to clear them` : `${tap} areas to color them`;
-  if (tool === 'pen') return points === 0 ? `${tap} to place points. Drag to bend.` : `${points} point${points === 1 ? '' : 's'}`;
-  if (tool === 'brush') return 'Paint with the color you picked';
-  if (tool === 'cut') return marks ? `${tap} a piece to remove it, or a dotted one to bring it back` : `${tap} a piece of an outline to remove it. Drag across a shape to slice it.`;
-  if (tool === 'draw') return 'Draw a line. It comes out as a smooth curve.';
-  if (tool === 'mirror') return `${tap} a line to mirror across, or draw one`;
-  if (corner) return corner.index < 0 ? 'Rounding all the corners' : 'Rounding this corner';
-  if (multi) return `${tap} things to add them to the selection`;
-  if (selectMode === 'single' && tool === 'arrange' && !none) return `${count} selected. ${tap} pieces to add or remove them.`;
+  if (frameEdit) return 'Drag frame or handles to set export area';
+  if (tool === 'color') return erasing ? `${tap} areas to clear` : `${tap} areas to color`;
+  if (tool === 'pen') return points === 0 ? `${tap} to add points. Drag to bend.` : `${points} point${points === 1 ? '' : 's'}`;
+  if (tool === 'brush') return 'Paint with chosen color';
+  if (tool === 'cut') return marks ? `${tap} segment to remove. ${tap} dotted segment to restore.` : `${tap} segment to remove. Drag to slice shape.`;
+  if (tool === 'draw') return 'Draw line. It becomes smooth curve.';
+  if (tool === 'mirror') return `${tap} line to mirror across, or draw one`;
+  if (corner) return corner.index < 0 ? 'Rounding all corners' : 'Rounding one corner';
+  if (multi) return `${tap} items to add to selection`;
+  if (selectMode === 'single' && tool === 'arrange' && !none) return `${count} selected. ${tap} pieces to add or remove.`;
   if (none && selectMode !== 'move') return MODE_HINT(tap)[selectMode] ?? null;
   return null;
 }
@@ -254,7 +254,7 @@ function CornerBar({ guide, index }: { guide: Guide; index: number }) {
       </div>
       {!phone && (
         <Chip
-          tip="Make it sharp again"
+          tip="Remove rounding"
           label="Sharp"
           icon={<Square />}
           disabled={value === 0}
@@ -288,17 +288,17 @@ function PhotoBar({ id }: { id: string }) {
       <span className="sep" />
       {phone ? (
         <Menu name="More for this photo" icon={<Ellipsis />} label="More" width={236}>
-          <Row icon={ref.locked ? <LockOpen /> : <Lock />} label={ref.locked ? 'Move or resize it' : 'Lock it in place'} onClick={lock} />
-          <Row icon={<Layers2 />} label="Show over the colors" active={!!ref.above} onClick={top} />
-          <Row icon={<Replace />} label="Choose another photo" onClick={pickPhoto} />
+          <Row icon={ref.locked ? <LockOpen /> : <Lock />} label={ref.locked ? 'Unlock' : 'Lock in place'} onClick={lock} />
+          <Row icon={<Layers2 />} label="Show over colors" active={!!ref.above} onClick={top} />
+          <Row icon={<Replace />} label="Replace photo" onClick={pickPhoto} />
           <div className="menu-sep" />
           <Row icon={<Trash2 />} label="Remove photo" tone="danger" onClick={deleteSelection} />
         </Menu>
       ) : (
         <>
           <Chip tip={ref.locked ? 'Unlock to move or resize the photo' : 'Lock the photo in place'} label={ref.locked ? 'Adjust' : 'Lock'} icon={ref.locked ? <LockOpen /> : <Lock />} onClick={lock} />
-          <Chip tip={ref.above ? 'Put the photo back underneath' : 'Show the photo over the colors, to keep tracing'} label="On top" icon={<Layers2 />} active={!!ref.above} onClick={top} />
-          <Chip tip="Choose another photo" label="Replace" icon={<Replace />} onClick={pickPhoto} />
+          <Chip tip={ref.above ? 'Put photo back underneath' : 'Show photo over colors to keep tracing'} label="On top" icon={<Layers2 />} active={!!ref.above} onClick={top} />
+          <Chip tip="Replace photo" label="Replace" icon={<Replace />} onClick={pickPhoto} />
           <Chip tip="Remove photo" icon={<Trash2 />} tone="danger" onClick={deleteSelection} />
         </>
       )}
@@ -337,8 +337,8 @@ function PenBar({ hint }: { hint: string | null }) {
     <ToolBar name="Pen" hint={hint}>
       {count > 0 && (
         <>
-          <Chip tip="Remove the last point" keys={touch ? undefined : 'Backspace'} label="Back" icon={<Undo2 />} onClick={undoPenPoint} />
-          <Chip tip="Join the end to the start" label="Close" icon={<CircleDot />} disabled={count < 3} onClick={() => finishPen(true)} />
+          <Chip tip="Remove last point" keys={touch ? undefined : 'Backspace'} label="Back" icon={<Undo2 />} onClick={undoPenPoint} />
+          <Chip tip="Close shape" label="Close" icon={<CircleDot />} disabled={count < 3} onClick={() => finishPen(true)} />
         </>
       )}
       <Chip
@@ -439,7 +439,7 @@ function FrameBar() {
           <Row icon={<Crop />} label="Wide 4 : 3" keep onClick={() => setBoardRatio(4, 3)} />
           <Row icon={<Crop />} label="Wide 16 : 9" keep onClick={() => setBoardRatio(16, 9)} />
           <Row icon={<Crop />} label="Tall 3 : 4" keep onClick={() => setBoardRatio(3, 4)} />
-          <Row icon={<Scaling />} label="Fit to the artwork" keep disabled={!hasArt} onClick={fitBoardToArtwork} />
+          <Row icon={<Scaling />} label="Fit to artwork" keep disabled={!hasArt} onClick={fitBoardToArtwork} />
         </Menu>
         <span className="sep" />
         <Done onClick={() => editFrame(false)} />
@@ -454,7 +454,7 @@ function FrameBar() {
       <Chip tip="Square" label="1:1" onClick={() => setBoardRatio(1, 1)} />
       <Chip tip="Wide 4 : 3" label="4:3" onClick={() => setBoardRatio(4, 3)} />
       <Chip tip="Wide 16 : 9" label="16:9" onClick={() => setBoardRatio(16, 9)} />
-      <Chip tip="Wrap the frame around the artwork" label="Fit artwork" disabled={!hasArt} onClick={fitBoardToArtwork} />
+      <Chip tip="Fit frame to artwork" label="Fit artwork" disabled={!hasArt} onClick={fitBoardToArtwork} />
       <span className="sep" />
       <Done onClick={() => editFrame(false)} />
     </div>
@@ -535,9 +535,9 @@ export function ContextBar() {
               <div className="menu-sep" />
             </>
           )}
-          {cornered && <Row icon={<SquareRoundCorner />} label="Round the corners" onClick={() => roundCorner(cornered, -1)} />}
+          {cornered && <Row icon={<SquareRoundCorner />} label="Round corners" onClick={() => roundCorner(cornered, -1)} />}
           {editable && <Row icon={<CopyPlus />} label="Duplicate" onClick={duplicateSelection} />}
-          <Row icon={<Repeat2 />} label="Repeat with the same spacing" disabled={!canRepeat()} onClick={repeatDuplicate} />
+          <Row icon={<Repeat2 />} label="Repeat, same spacing" disabled={!canRepeat()} onClick={repeatDuplicate} />
           <Row icon={<FlipVertical2 />} label="Flip sideways" onClick={() => flipSelection('h')} />
           <Row icon={<FlipHorizontal2 />} label="Flip upside down" onClick={() => flipSelection('v')} />
           <Row icon={<FlipHorizontal />} label="Mirror copy" onClick={startMirror} />
@@ -549,7 +549,7 @@ export function ContextBar() {
             <Row icon={<SquareDashedMousePointer />} label="Select more" active={multi} onClick={toggleMulti} />
           )}
         </Menu>
-        {editable ? <Chip tip="Edit the text" label="Edit" icon={<Pencil />} onClick={editText} /> : <Chip tip="Duplicate" label="Duplicate" icon={<CopyPlus />} onClick={duplicateSelection} />}
+        {editable ? <Chip tip="Edit text" label="Edit" icon={<Pencil />} onClick={editText} /> : <Chip tip="Duplicate" label="Duplicate" icon={<CopyPlus />} onClick={duplicateSelection} />}
         <span className="sep" />
         <Chip tip="Delete" icon={<Trash2 />} tone="danger" onClick={deleteSelection} />
       </div>
@@ -558,7 +558,7 @@ export function ContextBar() {
 
   return (
     <div className="glass bar rise scroll-x" role="toolbar" aria-label="Selection">
-      {editable && <Chip tip={`Edit the text (or ${touch ? 'double-tap' : 'double-click'} it)`} label="Edit" icon={<Pencil />} onClick={editText} />}
+      {editable && <Chip tip={`Edit text (or ${touch ? 'double-tap' : 'double-click'})`} label="Edit" icon={<Pencil />} onClick={editText} />}
       {onlyOutlines && (
         <Menu name="Thickness" icon={<SlidersHorizontal />} label="Thickness" width={280}>
           <ThicknessControls guides={guides} />
@@ -566,14 +566,14 @@ export function ContextBar() {
       )}
       {cornered && <Chip tip={`Round all the corners (${hold} a corner for just that one)`} label="Corners" icon={<SquareRoundCorner />} onClick={() => roundCorner(cornered, -1)} />}
       {touch && selectMode !== 'single' && (
-        <Chip tip="Keep adding to the selection with each tap" label={multi ? 'Selecting' : 'Select more'} icon={<SquareDashedMousePointer />} active={multi} onClick={toggleMulti} />
+        <Chip tip="Add to selection with each tap" label={multi ? 'Selecting' : 'Select more'} icon={<SquareDashedMousePointer />} active={multi} onClick={toggleMulti} />
       )}
       <Chip tip="Duplicate" keys={key('duplicate')} label="Duplicate" icon={<CopyPlus />} onClick={duplicateSelection} />
-      <Chip tip="Repeat: copy again with the same spacing" keys={key('repeat')} label="Repeat" icon={<Repeat2 />} disabled={!canRepeat()} onClick={repeatDuplicate} />
+      <Chip tip="Repeat: copy again, same spacing" keys={key('repeat')} label="Repeat" icon={<Repeat2 />} disabled={!canRepeat()} onClick={repeatDuplicate} />
       <Chip tip="Flip sideways" icon={<FlipVertical2 />} onClick={() => flipSelection('h')} />
       <Chip tip="Flip upside down" icon={<FlipHorizontal2 />} onClick={() => flipSelection('v')} />
-      <Chip tip="Mirror copy: copy across a line" keys={key('mirror')} icon={<FlipHorizontal />} onClick={startMirror} />
-      {selection.length > 1 && !grouped && <Chip tip="Group: select and move these as one" keys={key('group')} label="Group" icon={<GroupIcon />} onClick={groupSelection} />}
+      <Chip tip="Mirror copy across line" keys={key('mirror')} icon={<FlipHorizontal />} onClick={startMirror} />
+      {selection.length > 1 && !grouped && <Chip tip="Group: move as one" keys={key('group')} label="Group" icon={<GroupIcon />} onClick={groupSelection} />}
       {grouped && !group?.text && <Chip tip="Ungroup" keys={key('ungroup')} label="Ungroup" icon={<Ungroup />} onClick={ungroupSelection} />}
       <span className="sep" />
       <Chip tip="Delete" keys={key('delete')} icon={<Trash2 />} tone="danger" onClick={deleteSelection} />

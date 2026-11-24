@@ -80,7 +80,7 @@ export function ExportSheet() {
       if (share) await shareOrDownload(blob, name);
       else download(blob, name);
     } catch {
-      toast.error('The image could not be created.');
+      toast.error("Couldn't create image.");
     }
   };
 
@@ -98,9 +98,9 @@ export function ExportSheet() {
       </div>
 
       <div className="mt-2">
-        <Toggle label="Background" hint="Off keeps the logo transparent" checked={background} onChange={setBackground} />
-        <Toggle label="Construction lines" hint="Show the outlines the logo was built from" checked={guides} onChange={setGuides} />
-        {mode === 'advanced' && <Toggle label="Crop to artwork" hint="Trim the empty space around the logo" checked={content} onChange={setContent} />}
+        <Toggle label="Background" hint="Off: transparent background" checked={background} onChange={setBackground} />
+        <Toggle label="Construction lines" hint="Show construction outlines" checked={guides} onChange={setGuides} />
+        {mode === 'advanced' && <Toggle label="Crop to artwork" hint="Trim empty space around logo" checked={content} onChange={setContent} />}
         <Tip label="Move or resize what gets exported" side="right">
           <button type="button" className="row-btn" style={{ paddingLeft: 4, paddingRight: 4 }} onClick={() => editFrame(true)}>
             <span className="min-w-0 flex-1 text-[15px] font-medium">Frame size</span>
@@ -157,7 +157,7 @@ export function ExportSheet() {
               if (ok) {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1600);
-              } else toast.error('Copying was blocked by the browser.');
+              } else toast.error('Browser blocked copying.');
             }}
           >
             {copied ? <Check /> : <Copy />}

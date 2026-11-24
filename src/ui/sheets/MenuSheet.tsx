@@ -62,7 +62,7 @@ export function MenuSheet() {
       <Row
         icon={<FilePlus2 />}
         label="New logo"
-        hint="Your current one stays in My logos"
+        hint="Current logo stays in My logos"
         onClick={() => {
           createNewDoc();
           close();
@@ -71,7 +71,7 @@ export function MenuSheet() {
       <Row icon={<LayoutGrid />} label="My logos" onClick={() => useUi.setState({ sheet: 'gallery', galleryTab: 'mine' })} />
       {mode === 'advanced' && (
         <>
-          <Row icon={<Save />} label="Save project file" hint="Everything, including outlines and photos" onClick={() => void saveProjectFile().then(close)} />
+          <Row icon={<Save />} label="Save project file" hint="Everything, with outlines and photos" onClick={() => void saveProjectFile().then(close)} />
           <Row icon={<FolderOpen />} label="Open project file" onClick={() => void openProjectFile().then(close)} />
         </>
       )}

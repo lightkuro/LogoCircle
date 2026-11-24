@@ -358,8 +358,8 @@ function Colors() {
       ))}
       {(palette.length < limit || adding) && (
         <div className="swatch-wrap">
-          <Tip label="Add a color">
-            <button type="button" className="swatch" data-swatch aria-label="Add a color" aria-expanded={adding} onClick={addSwatch}>
+          <Tip label="Add color">
+            <button type="button" className="swatch" data-swatch aria-label="Add color" aria-expanded={adding} onClick={addSwatch}>
               <span
                 className="swatch-dot flex items-center justify-center"
                 style={{
@@ -397,7 +397,7 @@ export function ColorStrip() {
   if (folded) {
     return (
       <div className="color-strip-area is-folded">
-        <button type="button" className="glass color-fold" aria-label="Show the colors" aria-expanded={false} onClick={() => fold(false)}>
+        <button type="button" className="glass color-fold" aria-label="Show colors" aria-expanded={false} onClick={() => fold(false)}>
           {erasing ? <EraseIcon /> : <span className="swatch-dot" style={{ background: resolveFill({ palette }, ink) }} />}
         </button>
       </div>
@@ -407,7 +407,7 @@ export function ColorStrip() {
     <div className="color-strip-area">
       <div className="glass color-strip" role="toolbar" aria-label="Colors" aria-orientation="vertical">
         <Colors />
-        <button type="button" className="strip-fold" aria-label="Hide the colors" aria-expanded onClick={() => fold(true)}>
+        <button type="button" className="strip-fold" aria-label="Hide colors" aria-expanded onClick={() => fold(true)}>
           <ChevronLeft />
         </button>
       </div>

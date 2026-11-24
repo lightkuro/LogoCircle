@@ -250,7 +250,7 @@ export function startMirror(): void {
   const s = ui();
   if (s.tool === 'mirror') return doneTool();
   if (!mirrorable(getDoc(), s.selection).length) {
-    toast('Select what to mirror first', { description: `Then choose Mirror copy and ${isTouch() ? 'tap' : 'click'} a straight line.` });
+    toast('Select something to mirror first', { description: `Then pick Mirror copy and ${isTouch() ? 'tap' : 'click'} a line.` });
     return;
   }
   useUi.setState({ tool: 'mirror', erasing: false, trayOpen: false, colorPanel: null, frameEdit: false, multi: false });
@@ -537,9 +537,9 @@ export async function addPhoto(file: Blob): Promise<void> {
     commit(addRef(doc, ref, ui().mode === 'classic'));
     // Selected, so its settings (fade, lock, on top) show straight away.
     useUi.setState({ tool: 'arrange', erasing: false, selection: [ref.id], trayOpen: false, colorPanel: null });
-    toast('Photo added', { description: 'It stays underneath as a guide and is never exported.' });
+    toast('Photo added', { description: 'Stays underneath as guide. Never exported.' });
   } catch {
-    toast.error('That file could not be opened as an image.');
+    toast.error("Couldn't open that file as image.");
   }
 }
 
@@ -566,7 +566,7 @@ export function openPhoto(): void {
 export async function pastePhoto(): Promise<void> {
   const fail = (): void => {
     const extra = isTouch() ? '' : ` ${keyLabel('paste') ?? 'Ctrl+V'} also pastes one straight onto the canvas.`;
-    toast('No picture to paste', { description: `Copy a picture first, then try again.${extra}` });
+    toast('No image to paste', { description: `Copy image first, then try again.${extra}` });
   };
   try {
     if (!navigator.clipboard?.read) return fail();
@@ -586,9 +586,9 @@ export async function pastePhoto(): Promise<void> {
 export async function saveToDevice(): Promise<void> {
   try {
     await saveNow();
-    toast('Saved', { description: 'It is in My logos, on this device.' });
+    toast('Saved', { description: 'In My logos, on this device.' });
   } catch {
-    toast('Could not save', { description: 'This browser is not letting the app store anything right now.' });
+    toast('Could not save', { description: 'Browser is blocking storage right now.' });
   }
 }
 
@@ -599,7 +599,7 @@ export async function resetToStarter(): Promise<void> {
   commit({ ...fresh, id: doc.id, name: doc.name, createdAt: doc.createdAt, updatedAt: Date.now() });
   useUi.setState({ selection: [], tool: 'arrange', erasing: false, selectMode: 'move', showGuides: true, frameEdit: false, colorPanel: null, menu: null, ink: 0, sheet: null, lastDup: null });
   fitToScreen();
-  toast('Back to the default', { description: 'Undo brings your logo back.', action: { label: 'Undo', onClick: () => useDoc.getState().undo() } });
+  toast('Reset to default', { description: 'Undo brings logo back.', action: { label: 'Undo', onClick: () => useDoc.getState().undo() } });
 }
 
 // --- text -----------------------------------------------------------------------
@@ -636,7 +636,7 @@ export async function commitText(input: TextInput, target: string | null): Promi
     commit({ ...doc, shapes: [...doc.shapes, ...shapes], groups: { ...doc.groups, [group.id]: group }, updatedAt: Date.now() });
     useUi.setState({ selection: shapes.map((s) => s.id), tool: 'arrange', erasing: false });
   }
-  if (layout.missing.length) toast(`This font has no “${layout.missing.join('')}”`, { description: 'Try another font for those characters.' });
+  if (layout.missing.length) toast(`This font has no “${layout.missing.join('')}”`, { description: 'Try another font for these.' });
   return true;
 }
 

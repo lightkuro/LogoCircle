@@ -329,7 +329,7 @@ registerDrawTool('cut', {
     const tap = isTouch() ? 'Tap' : 'Click';
     if (!sliced) {
       if (!target) {
-        toast('Nothing to cut there', { description: `${tap} a piece of an outline to remove it, or drag a line across a shape to slice it.` });
+        toast('Nothing to cut there', { description: `${tap} segment to remove. Drag to slice shape.` });
         return;
       }
       let next = doc;
@@ -351,7 +351,7 @@ registerDrawTool('cut', {
       next = doc;
     }
     if (next === doc) {
-      toast('Nothing to cut there', { description: 'Drag the line all the way across a shape or an outline.' });
+      toast('Nothing to cut there', { description: 'Drag fully across shape or outline.' });
       return;
     }
     buzz(8);
@@ -438,13 +438,13 @@ registerDrawTool('mirror', {
     clearMirror();
     const tap = isTouch() ? 'Tap' : 'Click';
     if (!axis || (drawn && dist(axis.a, axis.b) < 4 / ui().view.k)) {
-      if (!drawn) toast('No straight line there', { description: `${tap} a straight line to mirror across, or drag to draw one.` });
+      if (!drawn) toast('No straight line there', { description: `${tap} straight line, or drag to draw one.` });
       return;
     }
     const s = ui();
     const r = mirrorCopy(getDoc(), s.selection, axis);
     if (!r) {
-      toast('Select what to mirror first');
+      toast('Select something to mirror first');
       return;
     }
     buzz(8);

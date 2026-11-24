@@ -276,9 +276,9 @@ function Inspector() {
         <Section title="Combine and arrange">
           <div className="flex flex-wrap gap-0.5">
             <IconButton label="Unite" disabled={shapes.length < 2} onClick={() => booleanSelection('unite')}><SquaresUnite /></IconButton>
-            <IconButton label="Subtract the ones on top" disabled={shapes.length < 2} onClick={() => booleanSelection('subtract')}><SquaresSubtract /></IconButton>
-            <IconButton label="Keep the overlap" disabled={shapes.length < 2} onClick={() => booleanSelection('intersect')}><SquaresIntersect /></IconButton>
-            <IconButton label="Remove the overlap" disabled={shapes.length < 2} onClick={() => booleanSelection('exclude')}><SquaresExclude /></IconButton>
+            <IconButton label="Subtract top shapes" disabled={shapes.length < 2} onClick={() => booleanSelection('subtract')}><SquaresSubtract /></IconButton>
+            <IconButton label="Keep overlap" disabled={shapes.length < 2} onClick={() => booleanSelection('intersect')}><SquaresIntersect /></IconButton>
+            <IconButton label="Remove overlap" disabled={shapes.length < 2} onClick={() => booleanSelection('exclude')}><SquaresExclude /></IconButton>
           </div>
           <div className="flex flex-wrap gap-0.5 pt-1">
             <IconButton label="Bring to front" onClick={() => orderSelection('front')}><ArrowUpToLine /></IconButton>

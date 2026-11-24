@@ -32,9 +32,9 @@ export function booleanSelection(op: BooleanOp): void {
     }
     commit({ ...doc, shapes: out, updatedAt: Date.now() });
     useUi.setState({ selection: rings.length ? [base.id] : [] });
-    if (!rings.length) toast('Nothing left', { description: 'Those shapes cancel each other out.' });
+    if (!rings.length) toast('Nothing left', { description: 'Shapes cancel each other out.' });
   } catch {
-    toast.error('Those shapes could not be combined.');
+    toast.error("Couldn't combine shapes.");
   }
 }
 
@@ -206,7 +206,7 @@ export function shapesToOutlines(): void {
   const ids = new Set(shapes.map((s) => s.id));
   commit({ ...doc, shapes: doc.shapes.filter((s) => !ids.has(s.id)), guides: [...doc.guides, ...guides], updatedAt: Date.now() });
   useUi.setState({ selection: guides.map((g) => g.id), showGuides: true });
-  toast('Now editable as outlines', { description: 'Drag the points, then color the areas again.' });
+  toast('Now editable as outlines', { description: 'Drag points, then recolor areas.' });
 }
 
 export function toggleHidden(id: string): void {

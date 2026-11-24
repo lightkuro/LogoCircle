@@ -7,7 +7,7 @@ import { InfoTip, Segmented, Sheet } from '../primitives';
 import { DEFAULT_PINS, togglePin, useBarGroups } from '../Dock';
 import '@/styles/settings.css';
 
-const LAYOUT_NOTE = 'Auto picks the phone or desktop layout by screen size.';
+const LAYOUT_NOTE = 'Auto picks phone or desktop layout by screen size.';
 const THEME_NOTE = 'Auto follows this device.';
 
 /** A setting's name with its (i). */
@@ -51,7 +51,7 @@ function BarTools() {
   return (
     <>
       <div className="set-row">
-        <Title info="Tools with their own button when bar is expanded. Right-click any tool to pin or unpin it.">Expanded bar</Title>
+        <Title info="Tools with own button when bar is expanded. Right-click any tool to pin or unpin.">Expanded bar</Title>
         <button type="button" role="switch" className="switch" aria-label="Expanded bar" aria-checked={level > 0} onClick={() => settings().set({ dockLevel: level > 0 ? 0 : 5 })}>
           <span className="switch-thumb" />
         </button>
@@ -153,7 +153,7 @@ function Shortcuts() {
         <button
           type="button"
           className="key-icon"
-          aria-label={`Remove the shortcut for ${c.label}`}
+          aria-label={`Remove shortcut for ${c.label}`}
           disabled={!shown}
           onClick={() => {
             setNote(null);
@@ -165,7 +165,7 @@ function Shortcuts() {
         <button
           type="button"
           className="key-icon"
-          aria-label={`Restore the default shortcut for ${c.label}`}
+          aria-label={`Restore default shortcut for ${c.label}`}
           style={changed ? undefined : { visibility: 'hidden' }}
           onClick={() => {
             setNote(null);
@@ -189,7 +189,7 @@ function Shortcuts() {
         Keyboard shortcuts
         <InfoTip
           about="keyboard shortcuts"
-          text="Pick a key, then press the new one. Esc leaves it as it was. Arrow keys nudge the selection, Esc steps back and Space moves the view; those stay as they are."
+          text="Click shortcut, then press new key. Esc cancels. Arrows, Esc and Space stay fixed."
         />
       </div>
       {GROUPS.map((group) => {
@@ -268,30 +268,30 @@ export function SettingsSheet() {
         <>
           <div className="label set-label">
             Mouse
-            <InfoTip about="the mouse" text="What dragging on empty canvas does. Either way, Shift and drag selects a box, and Space or the middle button moves the view." />
+            <InfoTip about="the mouse" text="What dragging empty canvas does. Shift-drag always box-selects. Space or middle button always moves view." />
           </div>
           <div role="radiogroup" aria-label="Dragging on empty canvas" className="grid gap-1.5">
             <Choice checked={dragEmpty === 'pan'} onSelect={drag('pan')} icon={<Hand />}>
-              Left drag moves the view, right drag selects a box
+              Left drag moves view, right drag box-selects
             </Choice>
             <Choice checked={dragEmpty === 'select'} onSelect={drag('select')} icon={<SquareDashed />}>
-              Left drag selects a box, right drag moves the view
+              Left drag box-selects, right drag moves view
             </Choice>
           </div>
         </>
       )}
 
-      <Switch label="Tool names" hint="Words under the icons in the bar of tools. Off leaves just the icons." checked={toolLabels} onChange={(v) => set({ toolLabels: v })} />
+      <Switch label="Tool names" hint="Names under tool icons. Off shows icons only." checked={toolLabels} onChange={(v) => set({ toolLabels: v })} />
       <Switch
         label="Hold and drag to pick"
-        hint={`${touch ? 'Press' : 'Press down on'} a tool button that has a list, slide onto a choice and let go to pick it, in one move.`}
+        hint="Press tool button, slide to choice, release to pick."
         checked={slidePick}
         onChange={(v) => set({ slidePick: v })}
       />
 
       <div className="label">Helpers</div>
-      <Switch label="Snapping" hint="Things line up with nearby outlines, edges and centres as you drag them." checked={snap} onChange={(v) => useUi.setState({ snap: v })} />
-      {touch && <Switch label="Vibration" hint="A short tick when a color lands or a hold menu opens, where the device has one." checked={haptics} onChange={(v) => set({ haptics: v })} />}
+      <Switch label="Snapping" hint="Items line up with nearby outlines, edges and centres while dragging." checked={snap} onChange={(v) => useUi.setState({ snap: v })} />
+      {touch && <Switch label="Vibration" hint="Short tick when coloring or opening hold menu, if supported." checked={haptics} onChange={(v) => set({ haptics: v })} />}
 
       {!touch && (
         <>

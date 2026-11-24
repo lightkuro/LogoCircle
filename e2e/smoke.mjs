@@ -683,7 +683,7 @@ async function refinements(browser) {
   await page.getByRole('button', { name: /^Settings/ }).click();
   await page.getByRole('button', { name: /^Shortcut for Circle/ }).click();
   await page.keyboard.press('k');
-  await page.getByRole('radio', { name: /Left drag selects a box/ }).click();
+  await page.getByRole('radio', { name: /Left drag box-selects/ }).click();
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.__lc.ui().sheet === null);
   await page.waitForTimeout(300);
@@ -742,9 +742,9 @@ async function phoneLayout(browser) {
   check((await page.getByRole('toolbar').count()) === 2, 'with nothing selected there is one bar of tools and the colors at the side');
   const strip = await page.getByRole('toolbar', { name: 'Colors' }).boundingBox();
   check(strip.x < 20 && strip.height > strip.width * 2, 'the colors run down the left edge');
-  await btn('Hide the colors').click();
+  await btn('Hide colors').click();
   check((await page.getByRole('toolbar', { name: 'Colors' }).count()) === 0, 'and fold away');
-  await btn('Show the colors').click();
+  await btn('Show colors').click();
 
   // Text: half the screen at most, more on request, and "Test" when nothing is typed.
   await btn('Text').click();
@@ -916,7 +916,7 @@ async function firstVisit(browser, phone) {
   check(d.shapes >= 3 && d.word === 'default' && d.colors === 2, `starts with a small example and two colors (${d.shapes} shapes, "${d.word}", ${d.colors} colors)`);
 
   // Colors: a new one only exists once a color is picked for it; up to four in Classic; remove one again.
-  const addBtn = page.getByRole('button', { name: 'Add a color', exact: true });
+  const addBtn = page.getByRole('button', { name: 'Add color', exact: true });
   await addBtn.click();
   const newPanel = page.getByRole('dialog', { name: 'New color' });
   check((await newPanel.locator('.basic-dot[data-active]').count()) === 0 && (await newPanel.getByLabel('Hex color').inputValue()) === '#2a9d55', 'a new color starts on green, with nothing marked as chosen');

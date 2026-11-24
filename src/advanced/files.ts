@@ -57,7 +57,7 @@ export async function openProjectFile(): Promise<void> {
     openDoc({ ...data.doc, id: uid('d'), updatedAt: Date.now() });
     toast('Project opened');
   } catch {
-    toast.error('That file is not a LogoCircle project.');
+    toast.error('Not a LogoCircle project file.');
   }
 }
 
@@ -67,9 +67,9 @@ export async function importSvgFile(): Promise<void> {
   try {
     const { importSvg } = await import('./importSvg');
     const count = importSvg(await f.text());
-    if (count === 0) toast('Nothing to import', { description: 'No filled shapes were found in that file.' });
+    if (count === 0) toast('Nothing to import', { description: 'No filled shapes found in file.' });
     else toast(`Imported ${count} shape${count === 1 ? '' : 's'}`);
   } catch {
-    toast.error('That SVG could not be read.');
+    toast.error("Couldn't read SVG.");
   }
 }

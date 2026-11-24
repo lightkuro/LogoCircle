@@ -21,7 +21,7 @@ export interface Command {
 }
 
 export const COMMANDS: Command[] = [
-  { id: 'move', label: 'Move things (leave a tool)', group: 'Tools', keys: ['v'] },
+  { id: 'move', label: 'Move (leave tool)', group: 'Tools', keys: ['v'] },
   { id: 'text', label: 'Text', group: 'Tools', keys: ['t'] },
   { id: 'circle', label: 'Circle', group: 'Tools', keys: ['o'] },
   { id: 'square', label: 'Square', group: 'Tools', keys: ['r'] },
@@ -43,9 +43,9 @@ export const COMMANDS: Command[] = [
   { id: 'undo', label: 'Undo', group: 'Edit', keys: ['mod+z'] },
   { id: 'redo', label: 'Redo', group: 'Edit', keys: ['mod+shift+z', 'mod+y'] },
   { id: 'duplicate', label: 'Duplicate', group: 'Edit', keys: ['mod+d'] },
-  { id: 'repeat', label: 'Repeat with the same spacing', group: 'Edit', keys: ['mod+shift+d'] },
+  { id: 'repeat', label: 'Repeat, same spacing', group: 'Edit', keys: ['mod+shift+d'] },
   { id: 'copy', label: 'Copy', group: 'Edit', keys: ['mod+c'] },
-  { id: 'cutSelection', label: 'Cut to the clipboard', group: 'Edit', keys: ['mod+x'] },
+  { id: 'cutSelection', label: 'Cut to clipboard', group: 'Edit', keys: ['mod+x'] },
   { id: 'paste', label: 'Paste', group: 'Edit', keys: ['mod+v'] },
   { id: 'selectAll', label: 'Select all', group: 'Edit', keys: ['mod+a'] },
   { id: 'group', label: 'Group', group: 'Edit', keys: ['mod+g'] },

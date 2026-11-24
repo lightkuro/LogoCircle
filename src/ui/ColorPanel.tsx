@@ -248,7 +248,7 @@ export function ColorPanel({ target, align }: { target: number | 'paper' | 'new'
               className="ib"
               style={{ width: 34, height: 34 }}
               aria-label="Remove color"
-              title="Remove this color"
+              title="Remove color"
               disabled={palette.length <= 1}
               onClick={() => removeSwatch(slot)}
             >

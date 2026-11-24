@@ -215,9 +215,9 @@ export function placeHandles(doc: Doc, ids: string[], frame: Frame, k: number, m
       });
     }
     pts.forEach((p, index) => out.push({ handle: { kind: 'pt', index }, p }));
-    // The small dots that add a point sit on curves only; a polygon gets new points from its menu.
-    if (g.type === 'curve') {
-      const closed = g.closed;
+    // The small dots that add a point, on each side long enough for one.
+    if (g.type === 'curve' || g.type === 'poly') {
+      const closed = g.type === 'poly' || g.closed;
       const n = pts.length;
       const count = closed ? n : n - 1;
       const edges = g.type === 'curve' ? guideCenterline(g)[0]?.edges : undefined;

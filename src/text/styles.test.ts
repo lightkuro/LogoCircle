@@ -3,16 +3,20 @@ import { FONTS } from './fonts';
 import { fontWeights, hasItalic, styledFonts, styleUrls } from './styleTable';
 
 describe('font weights and italics', () => {
-  it('every bundled font but Paper Mono has its styles, its own weight among them', () => {
+  it('every bundled font has its styles, its own weight among them', () => {
     const styled = new Set(styledFonts());
     for (const def of FONTS) {
-      if (def.id === 'paper-mono') {
-        expect(fontWeights(def)).toEqual([]);
-        continue;
-      }
       expect(styled.has(def.id), def.id).toBe(true);
       expect(fontWeights(def), def.id).toContain(def.weight);
     }
+  });
+
+  it('Paper Mono comes from Light to Extra bold, upright only', () => {
+    const mono = FONTS.find((f) => f.id === 'paper-mono')!;
+    expect(fontWeights(mono)).toEqual([300, 400, 500, 600, 700, 800]);
+    expect(hasItalic(mono)).toBe(false);
+    expect(styleUrls(mono, 400, false)).toBeNull(); // the default file
+    expect(styleUrls(mono, 700, false)!.join()).toMatch(/PaperMono-Bold/);
   });
 
   it('finds the files for a weight and slant, or the nearest weight', () => {

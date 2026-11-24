@@ -12,8 +12,20 @@ const FILES = import.meta.glob<string>(['/node_modules/@fontsource/*/files/*-lat
   import: 'default',
 });
 
+/** Paper Mono's own weights (one file each, Latin and extended Latin together), vendored from its repository. */
+const PAPER_MONO = import.meta.glob<string>('/src/text/vendor/paper-mono/PaperMono-*.woff', { eager: true, query: '?url', import: 'default' });
+const PAPER_WEIGHTS: Record<string, number> = { Light: 300, Regular: 400, Medium: 500, SemiBold: 600, Bold: 700, ExtraBold: 800 };
+
 /** package → "weight-style" → [latin, latin-ext] */
 const TABLE = new Map<string, Map<string, [string | undefined, string | undefined]>>();
+{
+  const styles = new Map<string, [string | undefined, string | undefined]>();
+  for (const [path, url] of Object.entries(PAPER_MONO)) {
+    const w = PAPER_WEIGHTS[/PaperMono-(\w+)\.woff$/.exec(path)?.[1] ?? ''];
+    if (w) styles.set(`${w}-normal`, [url, undefined]);
+  }
+  if (styles.size) TABLE.set('paper-mono', styles);
+}
 for (const [path, url] of Object.entries(FILES)) {
   const m = /@fontsource\/([^/]+)\/files\/.*-latin(-ext)?-(\d+)-(normal|italic)\.woff$/.exec(path);
   if (!m) continue;

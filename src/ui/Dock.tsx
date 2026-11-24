@@ -31,6 +31,7 @@ import {
   SlidersHorizontal,
   Square,
   SquareDashed,
+  SquareDashedMousePointer,
   Star,
   Triangle,
   Type,
@@ -119,6 +120,12 @@ function Single({ entry, pin }: { entry: Entry; pin?: boolean }) {
   );
 }
 
+/** The list open right now: a list opening closes it at once, so two never show together. */
+let openList: (() => void) | null = null;
+
+/** Every tool a list holds, those under its headings too. */
+const allEntries = (entries: Entry[]): Entry[] => entries.flatMap((e) => (e.children ? [e, ...e.children] : [e]));
+
 /**
  * Several related tools behind one button, marked with a small arrow. A tap
  * opens the list. With a mouse, hovering opens it too, and clicking the button
@@ -146,6 +153,13 @@ function Group({
 }) {
   const touch = useIsTouch();
   const [open, setOpen] = useState(false);
+  const closeMe = useRef(() => setOpen(false)).current;
+  useLayoutEffect(() => {
+    if (open) {
+      if (openList && openList !== closeMe) openList();
+      openList = closeMe;
+    } else if (openList === closeMe) openList = null;
+  }, [open, closeMe]);
   // the tool shown on the button: never a switch such as Cut lines
   const [last, setLast] = useState(() =>
     Math.max(
@@ -171,8 +185,10 @@ function Group({
     }
   }, [open, out, entries.length]);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const activeIndex = entries.findIndex((e) => e.active);
-  const shown = entries[activeIndex >= 0 ? activeIndex : Math.min(last, entries.length - 1)]!;
+  // a tool in use, even one under a heading, shows on the button
+  const activeEntry = allEntries(entries).find((e) => e.active && !e.children);
+  const activeIndex = activeEntry ? 0 : -1;
+  const shown = activeEntry ?? entries[Math.min(last, entries.length - 1)]!;
 
   useEffect(() => {
     if (!open) return;
@@ -192,6 +208,12 @@ function Group({
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const [unfolded, setUnfolded] = useState<string | null>(null);
+  // With a mouse a heading's tools open beside the list, to whichever side has room.
+  const [subSide, setSubSide] = useState<'left' | 'right'>('right');
+  const besideFrom = (el: HTMLElement): void => {
+    const r = el.getBoundingClientRect();
+    setSubSide(out === 'left' || r.right + 220 > window.innerWidth ? 'left' : 'right');
+  };
   useEffect(() => {
     if (!open) setUnfolded(null);
   }, [open]);
@@ -206,36 +228,56 @@ function Group({
     list,
   });
   const pick = (e: Entry): void => {
-    if (e.children) return setUnfolded(unfolded === e.id ? null : e.id);
+    if (e.children) return setUnfolded(touch ? (unfolded === e.id ? null : e.id) : e.id);
     const i = entries.indexOf(e);
     if (i >= 0 && e.checked === undefined) setLast(i);
     const from = wrap.current?.getBoundingClientRect();
     setOpen(false);
     e.run(from);
   };
-  const row = (e: Entry, inner = false): ReactNode => (
-    <div key={e.id}>
-      {e.divide && <div className="menu-sep" />}
-      <button
-        type="button"
-        role={e.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
-        aria-checked={e.checked}
-        aria-expanded={e.children ? unfolded === e.id : undefined}
-        className={inner ? 'menu-item menu-inner' : 'menu-item'}
-        data-active={e.active || undefined}
-        onClick={() => pick(e)}
-        onContextMenu={pin ? (ev) => pinMenu(e, ev.nativeEvent) : undefined}
-      >
-        {e.checked === undefined && e.icon}
-        {e.label}
-        {e.keys && <kbd>{e.keys}</kbd>}
-        {/* a switch shows its state with its icon, after the words */}
-        {e.checked !== undefined && <span className="menu-trail">{e.icon}</span>}
-        {e.children && <ChevronDown className="menu-fold" data-open={unfolded === e.id || undefined} aria-hidden />}
-      </button>
-      {e.children && unfolded === e.id && e.children.map((c) => row(c, true))}
-    </div>
-  );
+  const row = (e: Entry, inner = false, sub = false): ReactNode => {
+    const beside = !!e.children && !touch;
+    return (
+      <div key={e.id} className={beside ? 'menu-sub-wrap' : undefined}>
+        {e.divide && <div className="menu-sep" />}
+        <button
+          type="button"
+          role={e.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+          aria-checked={e.checked}
+          aria-haspopup={beside ? 'menu' : undefined}
+          aria-expanded={e.children ? unfolded === e.id : undefined}
+          className={inner ? 'menu-item menu-inner' : 'menu-item'}
+          data-active={e.active || e.children?.some((c) => c.active) || undefined}
+          data-open={(beside && unfolded === e.id) || undefined}
+          onPointerEnter={(ev) => {
+            if (ev.pointerType !== 'mouse' || sub) return;
+            if (beside) {
+              besideFrom(ev.currentTarget);
+              setUnfolded(e.id);
+            } else if (!touch && !inner && unfolded) setUnfolded(null);
+          }}
+          onClick={(ev) => {
+            if (beside) besideFrom(ev.currentTarget);
+            pick(e);
+          }}
+          onContextMenu={pin ? (ev) => pinMenu(e, ev.nativeEvent) : undefined}
+        >
+          {e.checked === undefined && e.icon}
+          {e.label}
+          {e.keys && <kbd>{e.keys}</kbd>}
+          {/* a switch shows its state with its icon, after the words */}
+          {e.checked !== undefined && <span className="menu-trail">{e.icon}</span>}
+          {e.children && (beside ? <ChevronRight className="menu-fold" aria-hidden /> : <ChevronDown className="menu-fold" data-open={unfolded === e.id || undefined} aria-hidden />)}
+        </button>
+        {e.children && unfolded === e.id && !beside && e.children.map((c) => row(c, true))}
+        {e.children && unfolded === e.id && beside && (
+          <div className="pop flyout-sub" data-side={subSide} role="menu" aria-label={e.label}>
+            {e.children.map((c) => row(c, false, true))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
@@ -455,27 +497,36 @@ function useEntries() {
       run: select('pan'),
       active: arranging && selectMode === 'pan',
     },
+    // the ways of selecting other than a plain click, one step further in
     {
-      id: 'box',
-      label: 'Box select',
-      keys: touch ? undefined : 'Shift drag',
-      icon: <SquareDashed />,
-      run: select('box'),
-      active: arranging && selectMode === 'box',
-    },
-    {
-      id: 'lasso',
-      label: 'Lasso select',
-      icon: <Lasso />,
-      run: select('lasso'),
-      active: arranging && selectMode === 'lasso',
-    },
-    {
-      id: 'single',
-      label: 'One at a time',
-      icon: <MousePointerClick />,
-      run: select('single'),
-      active: arranging && selectMode === 'single',
+      id: 'selecting',
+      label: 'Selection',
+      icon: <SquareDashedMousePointer />,
+      run: () => undefined,
+      children: [
+        {
+          id: 'box',
+          label: 'Box select',
+          keys: touch ? undefined : 'Shift drag',
+          icon: <SquareDashed />,
+          run: select('box'),
+          active: arranging && selectMode === 'box',
+        },
+        {
+          id: 'lasso',
+          label: 'Lasso select',
+          icon: <Lasso />,
+          run: select('lasso'),
+          active: arranging && selectMode === 'lasso',
+        },
+        {
+          id: 'single',
+          label: 'One at a time',
+          icon: <MousePointerClick />,
+          run: select('single'),
+          active: arranging && selectMode === 'single',
+        },
+      ],
     },
   ];
   const add = (kind: AddKind) => (): void => addOutline(kind);
@@ -674,8 +725,14 @@ export function useBarGroups(): { id: GroupId; label: string; entries: Entry[] }
  */
 function Section({ label, entries, open, pins, icon, caret }: { label: string; entries: Entry[]; open: boolean; pins: string[]; icon?: ReactNode; caret?: boolean }) {
   if (!open) return <Group label={label} entries={entries} icon={icon} caret={caret} pin />;
-  const pinned = entries.filter((e) => pinnable(e) && pins.includes(e.id));
-  const rest = entries.filter((e) => !pinned.includes(e));
+  const pinned = allEntries(entries).filter((e) => pinnable(e) && pins.includes(e.id));
+  // what is left in the list: headings keep only their unpinned tools, and go when none are left
+  const rest = entries.flatMap((e): Entry[] => {
+    if (pinned.includes(e)) return [];
+    if (!e.children) return [e];
+    const left = e.children.filter((c) => !pinned.includes(c));
+    return left.length ? [{ ...e, children: left }] : [];
+  });
   if (!pinned.length) return <Group label={label} entries={entries} icon={icon} caret={caret} pin />;
   if (rest.some((e) => e.checked === undefined)) {
     return (
@@ -700,9 +757,9 @@ function Section({ label, entries, open, pins, icon, caret }: { label: string; e
 
 /** How many more buttons a group takes up opened out than as one button. */
 function extraButtons(entries: Entry[], pins: string[]): number {
-  const pinned = entries.filter((e) => pinnable(e) && pins.includes(e.id)).length;
+  const pinned = allEntries(entries).filter((e) => pinnable(e) && pins.includes(e.id)).length;
   if (!pinned) return 0;
-  const restTools = entries.some((e) => !(pinnable(e) && pins.includes(e.id)) && e.checked === undefined);
+  const restTools = allEntries(entries).some((e) => !e.children && !(pinnable(e) && pins.includes(e.id)) && e.checked === undefined);
   return pinned + (restTools ? 1 : 0) - 1;
 }
 

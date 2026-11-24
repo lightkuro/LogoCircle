@@ -58,7 +58,7 @@ function BarTools() {
       </div>
       <div className="pin-groups">
         {groups.map((g) => {
-          const tools = g.entries.filter((e) => e.checked === undefined && !e.children);
+          const tools = g.entries.flatMap((e) => (e.children ? e.children : [e])).filter((e) => e.checked === undefined && !e.children);
           if (!tools.length) return null;
           return (
             <div key={g.id} className="pin-group" role="group" aria-label={g.label}>
@@ -187,10 +187,7 @@ function Shortcuts() {
     <>
       <div className="label set-label">
         Keyboard shortcuts
-        <InfoTip
-          about="keyboard shortcuts"
-          text="Click shortcut, then press new key. Esc cancels. Arrows, Esc and Space stay fixed."
-        />
+        <InfoTip about="keyboard shortcuts" text="Click shortcut, then press new key. Esc cancels. Arrows, Esc and Space stay fixed." />
       </div>
       {GROUPS.map((group) => {
         const list = COMMANDS.filter((c) => c.group === group && (advanced || !c.advanced));
@@ -282,12 +279,7 @@ export function SettingsSheet() {
       )}
 
       <Switch label="Tool names" hint="Names under tool icons. Off shows icons only." checked={toolLabels} onChange={(v) => set({ toolLabels: v })} />
-      <Switch
-        label="Hold and drag to pick"
-        hint="Press tool button, slide to choice, release to pick."
-        checked={slidePick}
-        onChange={(v) => set({ slidePick: v })}
-      />
+      <Switch label="Hold and drag to pick" hint="Press tool button, slide to choice, release to pick." checked={slidePick} onChange={(v) => set({ slidePick: v })} />
 
       <div className="label">Helpers</div>
       <Switch label="Snapping" hint="Items line up with nearby outlines, edges and centres while dragging." checked={snap} onChange={(v) => useUi.setState({ snap: v })} />

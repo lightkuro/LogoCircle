@@ -403,6 +403,8 @@ export function SelectionOverlay() {
             );
           }
           case 'mid':
+            // under a stretch handle (the sides of a hexagon), the stretch handle is what is there
+            if (handles.some((o) => o.handle.kind === 'box' && Math.hypot(toScreen(view, o.p).x - p.x, toScreen(view, o.p).y - p.y) < 10)) return null;
             return <circle key={i} cx={p.x} cy={p.y} r={3.2} className="handle-mid" />;
           default: {
             const at = h.handle.kind === 'box' ? RECT_CORNER[h.handle.at] : undefined;

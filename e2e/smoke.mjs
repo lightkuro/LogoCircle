@@ -422,7 +422,7 @@ async function controls(browser) {
   await page.keyboard.press('Control+Shift+g');
   check(Object.keys((await doc()).groups).length === 0, 'Ctrl+Shift+G ungroups');
   await page.keyboard.press('Escape');
-  await pick('Select', 'Lasso');
+  await fromGroup(page, 'Select', 'Selection/Lasso');
   await stroke([[150, 150], [900, 150], [900, 900], [150, 900], [150, 160]]);
   check((await ui()).sel === 2, 'the lasso selects what it surrounds');
   await page.keyboard.press('Escape');
@@ -761,11 +761,13 @@ async function phoneLayout(browser) {
   const spacingBox = await page.getByRole('slider', { name: 'Letter spacing' }).boundingBox();
   const panelBox = await panel.boundingBox();
   check(sizeBox.y + sizeBox.height <= panelBox.y + panelBox.height && spacingBox.y + spacingBox.height <= panelBox.y + panelBox.height, 'Size shows both sliders without scrolling or growing the panel');
-  const h0 = (await page.getByLabel('Preview').boundingBox()).height;
-  await page.getByLabel('Size value').fill('460');
+  // the word shows on the canvas, above the panel, and follows the size
+  await page.waitForTimeout(500);
+  const h0 = (await page.locator('.text-preview').boundingBox()).height;
+  await page.getByLabel('Size value').fill('330');
   await page.getByLabel('Size value').press('Enter');
-  await page.waitForTimeout(150);
-  check((await page.getByLabel('Preview').boundingBox()).height > h0 * 1.2, 'the preview shows the size as it changes');
+  await page.waitForTimeout(600);
+  check((await page.locator('.text-preview').boundingBox()).height > h0 * 1.2, 'the word on the canvas follows the size as it changes');
   await page.getByRole('radio', { name: 'Color' }).click();
   check((await page.getByRole('group', { name: 'Color' }).count()) === 1, 'Color is a page too');
   // More room for fonts is there when wanted.
@@ -773,10 +775,11 @@ async function phoneLayout(browser) {
   await btn('Make the panel bigger').click();
   await page.waitForTimeout(500);
   check((await panel.boundingBox()).height > vh * 0.85, 'the panel opens up to show more fonts at once');
-  const y0 = (await page.getByLabel('Preview').boundingBox()).y;
+  const field = page.getByRole('textbox', { name: 'Text', exact: true });
+  const y0 = (await field.boundingBox()).y;
   await page.locator('.txp-body').evaluate((el) => el.scrollTo(0, 900));
   await page.waitForTimeout(150);
-  check(Math.abs((await page.getByLabel('Preview').boundingBox()).y - y0) < 1, 'the preview stays in place while the fonts scroll');
+  check(Math.abs((await field.boundingBox()).y - y0) < 1, 'the text field stays in place while the fonts scroll');
   await btn('Add').click();
   await page.waitForFunction(() => window.__lc.ui().sheet === null);
   check((await page.evaluate(() => Object.values(window.__lc.doc().groups)[0]?.text?.value)) === 'Test', 'adding with nothing typed places the word Test');
@@ -1157,6 +1160,83 @@ async function shapesAndMenus(browser) {
   await ctx.close();
 }
 
+async function listsAndPhoneText(browser) {
+  console.log('\nOne list at a time, Selection beside Select, point dots, phone menus and text');
+  {
+    const { ctx, page, errors } = await fresh(browser, false);
+    const btn = (name) => page.getByRole('button', { name, exact: true });
+    // Moving quickly from one button to the next: the first list goes at once.
+    await btn('Shapes').hover();
+    await btn('Lines').hover();
+    await page.waitForTimeout(30);
+    check((await page.locator('.flyout').count()) === 1, 'moving across the bar shows one list at a time');
+    // Box, Lasso and One at a time sit under Selection, beside the list.
+    await btn('Select').hover();
+    check((await page.getByRole('menuitem', { name: /^Box select/ }).count()) === 0, 'Select lists Move, Pan and Selection');
+    await page.getByRole('menuitem', { name: /^Selection/ }).hover();
+    await page.getByRole('menuitem', { name: /^Lasso select/ }).click();
+    check((await page.evaluate(() => window.__lc.ui().selectMode)) === 'lasso', 'hovering Selection shows the ways of selecting beside it');
+    await page.keyboard.press('Escape');
+    await page.mouse.move(700, 120);
+    // A polygon's sides have the small dots that add a point.
+    await add(page, false, 'Triangle');
+    await page.mouse.move(700, 120);
+    // (the base's dot would sit under the bottom stretch handle, so that one stays hidden)
+    check((await page.locator('.handle-mid').count()) === 2, "a triangle's sides have dots that add a point");
+    const before = (await page.evaluate(() => window.__lc.doc().guides[0].pts.length));
+    const dot = await page.locator('.handle-mid').first().boundingBox();
+    await page.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(dot.x + 40, dot.y + 30, { steps: 4 });
+    await page.mouse.up();
+    check((await page.evaluate(() => window.__lc.doc().guides[0].pts.length)) === before + 1, 'dragging a dot adds a point there');
+    check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+    await ctx.close();
+  }
+  {
+    const { ctx, page, errors } = await fresh(browser, true);
+    const vh = page.viewportSize().height;
+    // The hold menu stays on the screen when a heading in it folds out.
+    await add(page, true, 'Circle');
+    const g = await page.evaluate(() => window.__lc.doc().guides[0]);
+    const low = await toScreen(page, g.cx + g.rx, g.cy + g.ry * 0.3);
+    const cdp = await ctx.newCDPSession(page);
+    const touchEv = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, id) => ({ x: p[0], y: p[1], id })) });
+    await touchEv('touchStart', [[low.x, low.y]]);
+    await page.waitForTimeout(700);
+    await touchEv('touchEnd', []);
+    await page.waitForTimeout(500);
+    await page.getByRole('menuitem', { name: /^Color/ }).first().click();
+    await page.waitForTimeout(150);
+    const m = await page.locator('.ctx-menu').boundingBox();
+    check(m && m.y >= 0 && m.y + m.height <= vh + 1, `the hold menu stays on the screen as it grows (${Math.round(m?.y ?? -1)} to ${Math.round((m?.y ?? 0) + (m?.height ?? 0))} of ${vh})`);
+    await page.keyboard.press('Escape');
+    await page.mouse.click(5, 300);
+    // Text shows live on the canvas, above the panel; X cancels; Add puts it down.
+    const shapes = () => page.evaluate(() => window.__lc.doc().shapes.length);
+    await page.getByRole('button', { name: 'Text', exact: true }).click();
+    await page.waitForTimeout(500);
+    await page.getByRole('textbox', { name: 'Text', exact: true }).fill('Live');
+    await page.waitForTimeout(900);
+    const word = await page.locator('.text-preview').boundingBox();
+    const panel = await page.getByRole('dialog', { name: 'Add text' }).boundingBox();
+    check(word && (await shapes()) === 0, 'on a phone too, the word shows on the canvas while typing');
+    check(word && panel && word.y + word.height <= panel.y + 1 && word.y >= 0, `above the panel (${Math.round(word?.y ?? 0)}–${Math.round((word?.y ?? 0) + (word?.height ?? 0))}, panel at ${Math.round(panel?.y ?? 0)})`);
+    await page.getByRole('dialog', { name: 'Add text' }).getByRole('button', { name: 'Close' }).click();
+    await page.waitForTimeout(500);
+    check((await shapes()) === 0 && (await page.locator('.text-preview').count()) === 0, 'X cancels');
+    await page.getByRole('button', { name: 'Text', exact: true }).click();
+    await page.waitForTimeout(500);
+    await page.getByRole('textbox', { name: 'Text', exact: true }).fill('Live');
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await page.waitForTimeout(900);
+    check((await shapes()) === 4, 'Add puts the word down');
+    await page.screenshot({ path: join(shots, 'phone-text-live.png') });
+    check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+    await ctx.close();
+  }
+}
+
 async function mirrorAndPicking(browser) {
   console.log('\nMirror copy, one at a time, hold and drag');
   // Mirror copy, with a mouse.
@@ -1217,6 +1297,8 @@ async function mirrorAndPicking(browser) {
     await moveSelectionTo(page, cx + 200, cy);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Select', exact: true }).click();
+    // the ways of selecting are one step in, under Selection
+    await page.getByRole('menuitem', { name: /^Selection/ }).click();
     await page.getByRole('menuitem', { name: /^One at a time/ }).click();
     const tap = async (x, y) => {
       const p = await toScreen(page, x, y);
@@ -1434,6 +1516,7 @@ async function textDesktop(browser) {
   await page.waitForTimeout(400);
   const names = await page.locator('.tx-style [role=switch]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
   check(['Ligatures', 'Single-story a', 'Slashed zero'].every((n) => names.includes(n)) && !names.includes('Italic'), `Paper Mono offers its own features (${names.join(', ')})`);
+  check((await page.getByRole('slider', { name: 'Weight' }).count()) === 1, 'and its weights, Light to Extra bold');
   await page.getByRole('switch', { name: 'Single-story a' }).click();
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
@@ -1469,7 +1552,7 @@ try {
       await fn(b, false);
       await fn(b, true);
     };
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1488,6 +1571,7 @@ try {
   await desktopBar(browser);
   await help(browser);
   await shapesAndMenus(browser);
+  await listsAndPhoneText(browser);
   await textDesktop(browser);
 } catch (err) {
   if (err !== 'only') {

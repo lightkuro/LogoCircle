@@ -11,7 +11,7 @@ export function ContextMenu() {
   const menu = useUi((s) => s.menu);
   const ref = useRef<HTMLDivElement>(null);
   const subRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
   // The heading whose items are open beside it (mouse), and where its panel goes.
   const [sub, setSub] = useState<{ index: number; anchor: DOMRect } | null>(null);
   const [subPos, setSubPos] = useState<{ left: number; top: number } | null>(null);
@@ -24,23 +24,33 @@ export function ContextMenu() {
   useLayoutEffect(() => {
     setSub(null);
     setUnfolded(null);
+    if (menu) openedAt.current = performance.now();
+  }, [menu]);
+
+  // Placed when it opens, and again whenever a heading folds out and makes it taller: always on
+  // the screen that can be seen (above a phone browser's own bars), scrolling when it is too tall.
+  useLayoutEffect(() => {
     if (!menu || !ref.current) return setPos(null);
-    openedAt.current = performance.now();
-    const r = ref.current.getBoundingClientRect();
+    const el = ref.current;
     const pad = 8;
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const maxHeight = vh - pad * 2;
+    const h = Math.min(el.scrollHeight, maxHeight);
+    const w = el.offsetWidth;
     // Opened by a finger: sit above it (or below when there is no room), never underneath it.
     let top = menu.y;
     let left = menu.x;
     if (menu.touch) {
-      left = menu.x - r.width / 2;
-      top = menu.y - r.height - 18;
+      left = menu.x - w / 2;
+      top = menu.y - h - 18;
       if (top < pad) top = menu.y + 28;
     }
     setPos({
-      left: Math.max(pad, Math.min(left, window.innerWidth - r.width - pad)),
-      top: Math.max(pad, Math.min(top, window.innerHeight - r.height - pad)),
+      left: Math.max(pad, Math.min(left, window.innerWidth - w - pad)),
+      top: Math.max(pad, Math.min(top, vh - h - pad)),
+      maxHeight,
     });
-  }, [menu]);
+  }, [menu, unfolded]);
 
   // A side panel goes to the right of its heading, or to the left when there is no room.
   useLayoutEffect(() => {
@@ -142,7 +152,7 @@ export function ContextMenu() {
         ref={ref}
         className="pop ctx-menu"
         role="menu"
-        style={{ left: pos?.left ?? menu.x, top: pos?.top ?? menu.y, visibility: pos ? 'visible' : 'hidden' }}
+        style={{ left: pos?.left ?? menu.x, top: pos?.top ?? menu.y, maxHeight: pos?.maxHeight, visibility: pos ? 'visible' : 'hidden' }}
         onContextMenu={(e) => e.preventDefault()}
       >
         {menu.items.map((it, i) => row(it, i))}

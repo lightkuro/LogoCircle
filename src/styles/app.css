@@ -2016,3 +2016,36 @@ html[data-input='mouse'] .tool .tool-caret {
 .ctx-menu .menu-item[data-open] {
   background: var(--hover);
 }
+
+/* A heading in a bar's list: its tools open beside the list on hover (mouse). */
+.menu-sub-wrap {
+  position: relative;
+}
+.flyout-sub {
+  position: absolute;
+  top: -5px;
+  left: calc(100% + 10px);
+  z-index: 21;
+  min-width: 176px;
+  padding: 5px;
+}
+.flyout-sub[data-side='left'] {
+  left: auto;
+  right: calc(100% + 10px);
+}
+/* a bridge across the gap, so the pointer can cross to it */
+.flyout-sub::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  left: -12px;
+}
+.flyout-sub[data-side='left']::before {
+  left: auto;
+  right: -12px;
+}
+.flyout .menu-item[data-open] {
+  background: var(--hover);
+}

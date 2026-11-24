@@ -5,14 +5,12 @@ import '@/styles/text.css';
 import { ringsBBox, ringsToPath, type Pt } from '@/geom';
 import { useDoc } from '@/store/doc';
 import { ui, useUi } from '@/store/ui';
-import { resolveFill } from '@/model/doc';
 import { buildText, commitText, placeText, viewCenter, type BuiltText, type TextInput } from '@/actions';
 import { clearTextPreview, useTextPreview } from '@/canvas/textPreview';
 import type { TextStyle } from '@/text/styles';
 import { FontSettings, rememberedStyle, rememberStyle } from './FontSettings';
 import { DEFAULT_FONT, FONTS, FONT_KINDS, type FontDef, type FontKind } from '@/text/fonts';
 import { addCustomFont, cssFontLoaded, cssFontReady, customFonts, cssFamily, isCustomFont, removeCustomFont, restoreCustomFonts } from '@/text/load';
-import type { Layout } from '@/text/layout';
 import { useIsPhone, useLayoutKind } from '@/store/settings';
 import { Segmented, Sheet, Slider } from '../primitives';
 
@@ -104,40 +102,6 @@ const FontTile = memo(function FontTile({ def, word, active, onPick, onRemove }:
   );
 });
 
-/** The word as it will land on the canvas, on the canvas's own background. Bigger sizes show bigger. */
-function Preview({ value, fontId, spacing, size, color, paper, style }: { value: string; fontId: string; spacing: number; size: number; color: string; paper: string | null; style: TextStyle }) {
-  const [layout, setLayout] = useState<Layout | null>(null);
-  const styleKey = JSON.stringify(style);
-  useEffect(() => {
-    let alive = true;
-    const t = setTimeout(() => {
-      void import('@/text/layout')
-        .then((m) => m.layoutText(value.trim() || PLACEHOLDER, fontId, 100, spacing, style))
-        .then((l) => alive && setLayout(l))
-        .catch(() => alive && setLayout(null));
-    }, 60);
-    return () => {
-      alive = false;
-      clearTimeout(t);
-    };
-    // style is compared by value
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, fontId, spacing, styleKey]);
-  const d = useMemo(() => (layout ? layout.glyphs.map((g) => ringsToPath(g.rings, 1)).join('') : ''), [layout]);
-  const w = Math.max(40, layout?.width ?? 200);
-  const asc = layout?.ascent ?? 100;
-  const desc = layout?.descent ?? -25;
-  // From half the box at the smallest size to all of it at the largest on the slider.
-  const k = 0.5 + 0.5 * Math.max(0, Math.min(1, (size - 40) / 440));
-  return (
-    <div className={`tx-preview${paper ? '' : ' tx-checker'}`} style={paper ? { background: paper } : undefined} data-paper={paper ?? 'none'}>
-      <svg viewBox={`${-6} ${-asc} ${w + 12} ${asc - desc}`} style={{ height: `${Math.round(k * 100)}%` }} aria-label="Preview">
-        <path d={d} fill={color} />
-      </svg>
-    </div>
-  );
-}
-
 /** How much of the bottom of the screen the on-screen keyboard is covering. */
 function useKeyboardInset(active: boolean): number {
   const [inset, setInset] = useState(0);
@@ -176,7 +140,8 @@ function HalfPanel({
   side?: boolean;
   open: boolean;
   title: string;
-  onClose: () => void;
+  /** Why it closes: Esc, or a tap elsewhere or a swipe down. */
+  onClose: (why: 'escape' | 'away') => void;
   expanded: boolean;
   onExpanded: (v: boolean) => void;
   top: ReactNode;
@@ -204,7 +169,7 @@ function HalfPanel({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onClose('escape');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -220,11 +185,11 @@ function HalfPanel({
     if (!d.moved)
       onExpanded(!expanded); // a tap on the grip
     else if (dy < -36) onExpanded(true);
-    else if (dy > 36) expanded ? onExpanded(false) : onClose();
+    else if (dy > 36) expanded ? onExpanded(false) : onClose('away');
   };
   return (
     <>
-      <div className="txp-away" data-shown={shown || undefined} onPointerDown={onClose} />
+      <div className="txp-away" data-shown={shown || undefined} onPointerDown={() => onClose('away')} />
       <div
         ref={panel}
         className={side ? 'txp txp-side' : 'txp'}
@@ -277,7 +242,6 @@ export function TextSheet() {
   const target = useUi((s) => s.textTarget);
   const ink = useUi((s) => s.ink);
   const palette = useDoc((s) => s.doc.palette);
-  const paper = useDoc((s) => s.doc.paper);
   const existing = useDoc((s) => (target ? s.doc.groups[target]?.text : undefined));
 
   const [value, setValue] = useState('');
@@ -356,8 +320,8 @@ export function TextSheet() {
   const params: TextInput = { value: text, fontId, size, spacing, fill: safeFill, weight: style.weight, italic: style.italic, features: style.features };
   const inputKey = JSON.stringify([params, target]);
 
-  // Desktop: the word is drawn on the canvas as it is typed, and lands when the panel closes.
-  const live = !upright;
+  // The word is drawn on the canvas as it is typed, and lands when the panel closes.
+  const live = true;
   const latest = useRef<{ key: string; built: BuiltText } | null>(null);
   // Where a new word lands, fixed when the panel opens, so moving the canvas aside does not move it.
   const anchor = useRef<Pt | undefined>(undefined);
@@ -367,20 +331,42 @@ export function TextSheet() {
     if (savedView.current) useUi.setState({ view: savedView.current });
     savedView.current = null;
   };
-  /** Slide the canvas just enough that the word is not under the panel. */
+  /**
+   * Slide the canvas just enough that the word is not under the panel: beside
+   * a panel down the left, above one along the bottom (phones).
+   */
   const reveal = (built: BuiltText | null | undefined): void => {
-    const panel = document.querySelector('.dialog[data-place="left"]')?.getBoundingClientRect();
+    const el = document.querySelector('.dialog[data-place="left"], .txp');
+    const panel = el?.getBoundingClientRect();
     const stage = document.querySelector('.stage-svg')?.getBoundingClientRect();
-    if (!built || !panel || !stage) return;
+    if (!built || !el || !panel || !stage) return;
     const base = savedView.current ?? ui().view;
     let lo = Infinity;
     let hi = -Infinity;
+    let top = Infinity;
+    let bottom = -Infinity;
     for (const sh of built.shapes) {
       const b = ringsBBox(sh.rings);
       lo = Math.min(lo, b.x);
       hi = Math.max(hi, b.x + b.w);
+      top = Math.min(top, b.y);
+      bottom = Math.max(bottom, b.y + b.h);
     }
     if (!Number.isFinite(lo)) return;
+    if (el.classList.contains('txp') && !el.classList.contains('txp-side')) {
+      // along the bottom: the word goes in the room between the top bar and the panel
+      const bars = [...document.querySelectorAll('.chrome-top > *, .hint-area > *')].map((x) => x.getBoundingClientRect().bottom);
+      const from = Math.max(stage.top, ...bars) + 12 - stage.top;
+      const to = panel.top - stage.top - 12;
+      const t = top * base.k + base.y;
+      const b = bottom * base.k + base.y;
+      if (t >= from && b <= to) return restoreView();
+      const room = to - from;
+      const dy = b - t <= room ? from + (room - (b - t)) / 2 - t : from - t;
+      savedView.current ??= ui().view;
+      useUi.setState({ view: { ...base, y: base.y + dy } });
+      return;
+    }
     const l = lo * base.k + base.x;
     const r = hi * base.k + base.x;
     const free = panel.right - stage.left + 24;
@@ -394,16 +380,22 @@ export function TextSheet() {
   useEffect(() => {
     if (!open || !live) return;
     anchor.current = viewCenter();
-    // Dragging the panel wider can cover the word: slide again.
+    // Dragging the panel wider (or taller), or a keyboard coming up, can cover the word: slide again.
     let ro: ResizeObserver | null = null;
+    const again = (): void => reveal(latest.current?.built);
     const id = requestAnimationFrame(() => {
-      const el = document.querySelector('.dialog[data-place="left"]');
+      const el = document.querySelector('.dialog[data-place="left"], .txp');
       if (!el || typeof ResizeObserver !== 'function') return;
-      ro = new ResizeObserver(() => reveal(latest.current?.built));
+      ro = new ResizeObserver(again);
       ro.observe(el);
     });
+    // once the panel has slid in
+    const settled = setTimeout(again, 380);
+    window.visualViewport?.addEventListener('resize', again);
     return () => {
       cancelAnimationFrame(id);
+      clearTimeout(settled);
+      window.visualViewport?.removeEventListener('resize', again);
       ro?.disconnect();
       // the canvas slides back when the panel goes
       restoreView();
@@ -556,7 +548,6 @@ export function TextSheet() {
       }}
     />
   );
-  const preview = <Preview value={value} fontId={fontId} spacing={spacing} size={size} color={resolveFill({ palette }, safeFill)} paper={paper} style={style} />;
 
   const ownFont = (
     <span className="tx-own">
@@ -684,13 +675,12 @@ export function TextSheet() {
         side={layout === 'side'}
         open={open}
         title={title}
-        onClose={close}
+        onClose={(why) => finish(why === 'escape' ? 'escape-key' : 'outside-press')}
         expanded={expanded}
         onExpanded={setExpanded}
         bodyRef={body}
         top={
           <>
-            {preview}
             <div className="txp-entry">
               {field}
               {add}
@@ -706,7 +696,7 @@ export function TextSheet() {
                   { value: 'size', label: 'Size' },
                 ]}
               />
-              <button type="button" className="ib" aria-label="Close" onClick={close}>
+              <button type="button" className="ib" aria-label="Close" onClick={() => finish('close-press')}>
                 <X />
               </button>
             </div>

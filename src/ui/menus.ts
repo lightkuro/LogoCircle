@@ -145,14 +145,8 @@ function cornerItems(g: Guide, index: number | undefined): MenuItem[] {
 
 function pointMenu(g: Guide, h: Handle, d: Pt): MenuItem[] {
   const items: MenuItem[] = [];
-  if (h.kind === 'mid') {
-    items.push({
-      label: 'Add a point here',
-      icon: Plus,
-      onSelect: () => patchGuide(insertGuidePoint(g, h.index, d)),
-    });
-    return items;
-  }
+  // On a side's small dot: the whole menu, which starts with "Add a point here".
+  if (h.kind === 'mid') return items;
   if (h.kind === 'box') {
     // A square's corner handles round that one corner; its side handles offer all four.
     if (g.type === 'rect') items.push(...cornerItems(g, RECT_CORNER[h.at]));

@@ -14,19 +14,7 @@ import { expandToGroup, transformSelection } from '@/actions';
 import { openCanvasMenu } from '@/ui/menus';
 import { useDrag } from './drag';
 import { hitItems } from './hit';
-import {
-  boardFrame,
-  boxHandleMatrix,
-  boxHandles,
-  placeHandles,
-  resizeBoard,
-  rotateMatrix,
-  selectionFrame,
-  singleGuide,
-  type BoxHandle,
-  type Frame,
-  type Handle,
-} from './frame';
+import { boardFrame, boxHandleMatrix, boxHandles, placeHandles, resizeBoard, rotateMatrix, selectionFrame, singleGuide, type BoxHandle, type Frame, type Handle } from './frame';
 import { snapMove, snapPoint, snapTangent, snapSticky, stickyPoint } from './snapping';
 import { toDoc, toScreen, zoomAt } from './view';
 
@@ -360,11 +348,13 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           if (Math.abs(lx) <= f.w / 2 && Math.abs(ly) <= f.h / 2) hit = s.selection[0];
         }
       }
-      if (hit && !press.shift) {
+      const single = s.selectMode === 'single' && !press.fromColor;
+      if (hit && (!press.shift || single)) {
         let ids = s.selection;
         if (press.fromColor) useUi.setState({ tool: 'arrange', erasing: false });
         if (!ids.includes(hit)) {
-          ids = s.selectMode === 'single' ? [hit] : expandToGroup(doc, hit);
+          // One at a time: dragging a new piece adds it, and the whole selection moves.
+          ids = single ? [...ids, hit] : expandToGroup(doc, hit);
           useUi.setState({ selection: ids });
         }
         // A locked photo shows its controls when selected but never moves.
@@ -415,15 +405,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           if (h.handle.kind === 'box') {
             const at = h.handle.at;
             const rotated = Math.abs(h.frame.rot % (Math.PI / 2)) > 0.01;
-            svg.style.cursor = rotated
-              ? 'move'
-              : at === 'n' || at === 's'
-                ? 'ns-resize'
-                : at === 'e' || at === 'w'
-                  ? 'ew-resize'
-                  : at === 'nw' || at === 'se'
-                    ? 'nwse-resize'
-                    : 'nesw-resize';
+            svg.style.cursor = rotated ? 'move' : at === 'n' || at === 's' ? 'ns-resize' : at === 'e' || at === 'w' ? 'ew-resize' : at === 'nw' || at === 'se' ? 'nwse-resize' : 'nesw-resize';
           }
           return;
         }
@@ -584,9 +566,17 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       }
       const hits = press.hits;
       if (press.fromColor) useUi.setState({ tool: 'arrange', erasing: false }); // tapping away from the areas puts the color down
+      // One at a time: every tap adds a piece or takes it away again, as Shift-click does.
+      const single = s.selectMode === 'single' && !press.fromColor;
       if (!hits.length) {
-        if (!press.shift) useUi.setState({ selection: [] });
+        if (!press.shift && !single) useUi.setState({ selection: [] });
         lastTap = { p: press.start, id: null, t: now };
+        return;
+      }
+      if (single) {
+        const top = hits[0]!;
+        useUi.setState({ selection: s.selection.includes(top) ? s.selection.filter((id) => id !== top) : [...s.selection, top] });
+        lastTap = { p: press.start, id: top, t: now };
         return;
       }
       // Tapping the same spot again steps to the next thing underneath.
@@ -626,7 +616,10 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
     const transformSelectionOf = (ids: Set<string>, m: Mat): void => {
       if (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0) return;
       // The dragged set is the selection, seen through followSet: commit it as the selection so Repeat keeps tracking.
-      const want = followSet(getDoc(), ui().selection.filter((id) => !getDoc().refs.find((r) => r.id === id)?.locked));
+      const want = followSet(
+        getDoc(),
+        ui().selection.filter((id) => !getDoc().refs.find((r) => r.id === id)?.locked),
+      );
       if (want.size === ids.size && [...want].every((id) => ids.has(id))) transformSelection(m);
       else commit(transformItems(getDoc(), ids, m));
     };

@@ -18,6 +18,7 @@ import {
   repeatDuplicate,
   selectAll,
   setTool,
+  startMirror,
   zoomBy,
 } from '@/actions';
 import { isTyping } from '@/canvas/useGestures';
@@ -29,10 +30,12 @@ import { comboOf, commandFor } from '@/keys';
  */
 type Handler = (e: KeyboardEvent) => boolean | void;
 
-const color = (i: number): Handler => () => {
-  if (i >= useDoc.getState().doc.palette.length) return false;
-  pickInk(i);
-};
+const color =
+  (i: number): Handler =>
+  () => {
+    if (i >= useDoc.getState().doc.palette.length) return false;
+    pickInk(i);
+  };
 
 const HANDLERS: Record<string, Handler> = {
   move: () => {
@@ -51,6 +54,7 @@ const HANDLERS: Record<string, Handler> = {
     setTool('pen');
   },
   cut: () => setTool('cut'),
+  mirror: startMirror,
   photo: () => openPhoto(),
 
   color1: color(0),

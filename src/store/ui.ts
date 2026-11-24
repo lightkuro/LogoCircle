@@ -4,7 +4,7 @@ import type { Mat } from '@/geom';
 
 export type Mode = 'classic' | 'advanced';
 /** arrange = move things around; color = tap areas; pen/brush are Advanced drawing tools. */
-export type Tool = 'arrange' | 'color' | 'pen' | 'brush' | 'draw' | 'cut';
+export type Tool = 'arrange' | 'color' | 'pen' | 'brush' | 'draw' | 'cut' | 'mirror';
 /**
  * What a drag does while no drawing tool is on. `move` is the everyday one:
  * drag a thing to move it, drag empty canvas to pan.

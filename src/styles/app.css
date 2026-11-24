@@ -316,6 +316,36 @@ select {
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
+/* Mirror copy: the frame's centre lines, the line picked, and where the copies would go. */
+.mirror-centre {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 1px;
+  stroke-dasharray: 3 5;
+  opacity: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+.mirror-reach {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 1px;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+.mirror-axis {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 3px;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.mirror-ghost {
+  fill: var(--accent-soft);
+  stroke: var(--snap);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
 /* The piece of outline the Cut tool is about to remove. */
 .trim-hot {
   fill: none;
@@ -678,6 +708,10 @@ select {
   height: 18px;
 }
 
+/* Hold and drag: the choice under the finger. */
+.menu-item[data-hot] {
+  background: var(--hover);
+}
 @media (hover: hover) and (pointer: fine) {
   .ib:hover:not(:disabled):not([data-active='true']),
   .tool:hover:not(:disabled):not([data-active='true']),

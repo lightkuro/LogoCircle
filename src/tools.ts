@@ -1,4 +1,4 @@
-/** Drawing tools: pen (click points, drag to bend), brush, freehand draw, and cut. */
+/** Drawing tools: pen (click points, drag to bend), brush, freehand draw, cut, and mirror copy. */
 import { buzz } from '@/store/settings';
 import { create } from 'zustand';
 import { chainsToPath, ellipseChain, fmt, splineChain, type Pt, type Ring } from '@/geom';
@@ -10,6 +10,8 @@ import { guideCenterline } from '@/model/guides';
 import type { CurveGuide, Guide, PathGuide, PathNode, Shape } from '@/model/types';
 import { cutAlong, markAt, pieceAt, restoreMark, trimPiece, type Mark, type Piece } from '@/model/cut';
 import { visibleGuides } from '@/model/paint';
+import { axisAt, mirrorAxes, mirrorCopy, mirrorPreview, type Axis } from '@/model/mirror';
+import { board } from '@/model/doc';
 import { isTouch } from '@/store/settings';
 import { toast } from 'sonner';
 import { uid } from '@/model/ids';
@@ -356,4 +358,99 @@ registerDrawTool('cut', {
     commit(next);
   },
   cancel: clearCut,
+});
+
+// ---------------------------------------------------------------------------
+// Mirror copy: tap a straight line (or drag to draw one) and the selection
+// gets copies reflected across it
+// ---------------------------------------------------------------------------
+
+let axesFor: { guides: Guide[]; artboard: unknown; shown: boolean; list: Axis[] } | null = null;
+function axes(): Axis[] {
+  const doc = getDoc();
+  const shown = ui().showGuides;
+  if (!axesFor || axesFor.guides !== doc.guides || axesFor.artboard !== doc.artboard || axesFor.shown !== shown) {
+    axesFor = { guides: doc.guides, artboard: doc.artboard, shown, list: mirrorAxes(doc, visibleGuides(doc, shown)) };
+  }
+  return axesFor.list;
+}
+
+let mirrorFrom: Pt | null = null;
+let mirrorDrawing = false;
+let mirrorHot: Axis | null = null;
+
+const sameAxis = (a: Axis | null, b: Axis | null): boolean => a === b || (!!a && !!b && dist(a.a, b.a) < 1e-9 && dist(a.b, b.b) < 1e-9);
+
+function showMirror(next: Axis | null): void {
+  if (sameAxis(next, mirrorHot) && (next !== null) === (useDrag.getState().mirror !== null)) return;
+  mirrorHot = next;
+  if (!next) return void useDrag.getState().set({ mirror: null });
+  const doc = getDoc();
+  // The line goes on past its ends: everything is mirrored across all of it.
+  const b = board(doc);
+  const far = Math.hypot(b.w, b.h) * 2;
+  const len = dist(next.a, next.b) || 1;
+  const ux = (next.b.x - next.a.x) / len;
+  const uy = (next.b.y - next.a.y) / len;
+  const reach = pathOf([
+    { x: next.a.x - ux * far, y: next.a.y - uy * far },
+    { x: next.b.x + ux * far, y: next.b.y + uy * far },
+  ]);
+  useDrag.getState().set({ mirror: { axis: pathOf([next.a, next.b]), reach, ghost: mirrorPreview(doc, ui().selection, next) } });
+}
+
+const clearMirror = (): void => {
+  mirrorFrom = null;
+  mirrorDrawing = false;
+  mirrorHot = null;
+  useDrag.getState().set({ mirror: null });
+};
+
+/** A drawn line snaps to level or upright when it is close, and to steps of 15° with Shift. */
+function axisEnd(from: Pt, p: Pt, shift: boolean): Pt {
+  const len = dist(p, from);
+  const angle = Math.atan2(p.y - from.y, p.x - from.x);
+  const step = shift ? Math.PI / 12 : Math.PI / 2;
+  const snapped = Math.round(angle / step) * step;
+  if (!shift && Math.abs(snapped - angle) > (4 * Math.PI) / 180) return p;
+  return { x: from.x + Math.cos(snapped) * len, y: from.y + Math.sin(snapped) * len };
+}
+
+registerDrawTool('mirror', {
+  hover(p) {
+    showMirror(axisAt(axes(), p, 7 / ui().view.k));
+  },
+  down(p, e) {
+    mirrorFrom = p;
+    mirrorDrawing = false;
+    showMirror(axisAt(axes(), p, (e.pointerType === 'touch' ? 16 : 7) / ui().view.k));
+  },
+  move(p, e) {
+    if (!mirrorFrom) return;
+    // A press that travels draws a line of its own to mirror across.
+    if (!mirrorDrawing && dist(p, mirrorFrom) > (e.pointerType === 'touch' ? 12 : 6) / ui().view.k) mirrorDrawing = true;
+    if (!mirrorDrawing) return;
+    showMirror({ a: mirrorFrom, b: axisEnd(mirrorFrom, p, e.shiftKey) });
+  },
+  up() {
+    const axis = mirrorHot;
+    const drawn = mirrorDrawing;
+    clearMirror();
+    const tap = isTouch() ? 'Tap' : 'Click';
+    if (!axis || (drawn && dist(axis.a, axis.b) < 4 / ui().view.k)) {
+      if (!drawn) toast('No straight line there', { description: `${tap} a straight line to mirror across, or drag to draw one.` });
+      return;
+    }
+    const s = ui();
+    const r = mirrorCopy(getDoc(), s.selection, axis);
+    if (!r) {
+      toast('Select what to mirror first');
+      return;
+    }
+    buzz(8);
+    commit(r.doc);
+    // The copies join the selection, so mirroring again (across the other way) makes four.
+    useUi.setState({ selection: [...new Set([...s.selection, ...r.ids])] });
+  },
+  cancel: clearMirror,
 });

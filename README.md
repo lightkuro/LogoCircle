@@ -9,9 +9,9 @@ Make a logo by drawing simple outlines and coloring in the areas between them. R
 3. **Refine.** Under Cut: tap a piece of an outline between two crossings to remove it, drag a line across shapes to slice them, or Erase areas. Show cut lines shows removed pieces as dots; tap one to bring it back. A fill follows its outlines when they are moved or reshaped. Words work the same way: put an outline over a letter, then erase or recolor what it cuts.
 4. **Export.** Hide the outlines to see the logo, adjust the frame size, then download SVG or PNG.
 
-Right-click (or press and hold) anything for what can be done with it: round a single corner, add a point to a polygon's side, edit a word, change the order, group. Sticky points, under More, makes corners and points stick to nearby corners, points and edges while moving or reshaping.
+Right-click (or press and hold) anything for what can be done with it: round a single corner, add a point to a polygon's side, edit a word, change the order, group. Sticky points, under More, makes corners and points stick to nearby corners, points and edges while moving or reshaping. Mirror copy, also under More (key M), copies the selection across a line: tap any straight line or side, one of the frame's centre lines, or drag to draw one; mirror again across the other way for four. Select, One at a time picks single pieces, even inside a group, and each tap adds to the selection or takes away, like Shift-click.
 
-Phones get their own layout: upright, one bar of tools along the bottom, colors down the side and panels on the lower half of the screen; turned on their side, the tools run down the left edge and Select and zoom down the right, so the canvas keeps the full height. Phones get touch wording only; desktops get mouse and keyboard wording. Settings, in the LogoCircle menu, can force either layout, switch between light and dark, swap what the left and right mouse buttons do on empty canvas, and change any keyboard shortcut.
+Phones get their own layout: upright, one bar of tools along the bottom, colors down the side and panels on the lower half of the screen; turned on their side, the tools run down the left edge and Select and zoom down the right, so the canvas keeps the full height. Phones get touch wording only; desktops get mouse and keyboard wording. Settings, in the LogoCircle menu, can force either layout, switch between light and dark, swap what the left and right mouse buttons do on empty canvas, turn on hold and drag (press a tool button, slide onto a choice in its list and let go), and change any keyboard shortcut.
 
 Two modes share one document:
 
@@ -40,7 +40,7 @@ npm test
 npm run build
 ```
 
-`npm test` runs the region engine's unit and property tests. `npm run e2e` (after a build) drives the built app in a real browser on a desktop and a phone viewport and rebuilds the three kinds of logo the app was designed around; it needs Playwright (`npm i -D playwright && npx playwright install chromium`).
+`npm test` runs the region engine's unit and property tests. `npm run e2e` (after a build) drives the built app in a real browser on a desktop and a phone viewport and rebuilds the three kinds of logo the app was designed around; it needs Playwright (`npm i -D playwright && npx playwright install chromium`). `E2E_ONLY=touch,mirrorAndPicking npm run e2e` runs just the named flows.
 
 ## Deploy to Cloudflare (free)
 

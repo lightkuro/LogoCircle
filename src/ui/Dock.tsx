@@ -9,6 +9,7 @@ import {
   Ellipsis,
   Eye,
   EyeOff,
+  FlipHorizontal,
   Hand,
   Hexagon,
   ImagePlus,
@@ -36,10 +37,11 @@ import { remember, useUi, type SelectMode } from '@/store/ui';
 import { buzz, useIsPhone, useIsSide, useIsTouch } from '@/store/settings';
 import { useKeys } from '@/keys';
 import { resolveFill } from '@/model/doc';
-import { addOutline, addSwatch, editFrame, fitToScreen, openBackground, openPhoto, pastePhoto, pickEraser, pickInk, pickPhoto, setSticky, setTool, zoomBy, type AddKind } from '@/actions';
+import { addOutline, addSwatch, editFrame, fitToScreen, openBackground, openPhoto, pastePhoto, pickEraser, pickInk, pickPhoto, setSticky, setTool, startMirror, zoomBy, type AddKind } from '@/actions';
 import { openSwatchMenu } from './menus';
 import { ColorPanel } from './ColorPanel';
 import { Tip } from './primitives';
+import { useSlidePick } from './slidePick';
 import { CurveIcon, EraseIcon, LineIcon } from './icons';
 
 interface Entry {
@@ -148,6 +150,16 @@ function Group({
   useEffect(() => {
     if (!open) setUnfolded(null);
   }, [open]);
+  // Hold and drag (a setting): press the button, slide onto a choice, let go.
+  const slide = useSlidePick({
+    open: () => {
+      clearTimeout(timer.current);
+      setOpen(true);
+    },
+    isOpen: open,
+    close: () => setOpen(false),
+    list,
+  });
   const pick = (e: Entry): void => {
     if (e.children) return setUnfolded(unfolded === e.id ? null : e.id);
     const i = entries.indexOf(e);
@@ -201,7 +213,9 @@ function Group({
         aria-expanded={open}
         aria-label={label}
         data-active={activeIndex >= 0 || undefined}
+        {...slide.props}
         onClick={() => {
+          if (slide.handled()) return;
           // Mouse: the list is already open from hovering, so a click means "this one again".
           if (!touch && open && !icon) pick(shown);
           else setOpen(!open);
@@ -547,7 +561,7 @@ function useEntries() {
       active: erasing,
     },
   ];
-  // Phones: the things reached for less often share one button.
+  // The things reached for less often share one button.
   const more: Entry[] = [
     ...photos,
     {
@@ -575,6 +589,16 @@ function useEntries() {
       icon: <Magnet style={{ opacity: sticky ? 1 : 0.45 }} />,
       run: () => setSticky(!sticky),
       checked: sticky,
+      divide: true,
+    },
+    // A tool: last, right above the button.
+    {
+      id: 'mirror',
+      label: 'Mirror copy',
+      keys: key('mirror'),
+      icon: <FlipHorizontal />,
+      run: startMirror,
+      active: tool === 'mirror',
       divide: true,
     },
   ];

@@ -244,10 +244,7 @@ export function FacesLayer({ arr }: { arr: Arrangement | null }) {
   const ink = useUi((s) => s.ink);
   const palette = useDoc((s) => s.doc.palette);
   const strong = useMemo(() => (arr && paint.length ? facesPath(arr, withFollowers(arr, paint)) : ''), [arr, paint]);
-  const soft = useMemo(
-    () => (arr && hover >= 0 && !paint.includes(hover) ? facesPath(arr, withFollowers(arr, [hover])) : ''),
-    [arr, hover, paint],
-  );
+  const soft = useMemo(() => (arr && hover >= 0 && !paint.includes(hover) ? facesPath(arr, withFollowers(arr, [hover])) : ''), [arr, hover, paint]);
   if (!arr) return null;
   const color = resolveFill({ palette }, ink);
   return (
@@ -271,10 +268,25 @@ export function SceneOverlays() {
   const trim = useDrag((s) => s.trim);
   const trimWidth = useDrag((s) => s.trimWidth);
   const restore = useDrag((s) => s.restore);
+  const mirror = useDrag((s) => s.mirror);
+  const mirroring = useUi((s) => s.tool === 'mirror');
+  const artboard = useDoc((s) => s.doc.artboard);
   const ink = useUi((s) => s.ink);
   const palette = useDoc((s) => s.doc.palette);
+  const b = board({ artboard });
   return (
     <g style={{ pointerEvents: 'none' }}>
+      {mirroring && (
+        // the frame's centre lines, there to be mirrored across
+        <path d={`M${b.x + b.w / 2} ${b.y}V${b.y + b.h}M${b.x} ${b.y + b.h / 2}H${b.x + b.w}`} className="mirror-centre" />
+      )}
+      {mirror && (
+        <>
+          <path d={mirror.reach} className="mirror-reach" />
+          <path d={mirror.ghost} className="mirror-ghost" />
+          <path d={mirror.axis} className="mirror-axis" />
+        </>
+      )}
       {trim && trimWidth > 0 && <path d={trim} className="trim-band" strokeWidth={trimWidth} />}
       {trim && <path d={trim} className="trim-hot" />}
       {restore && <path d={restore} className="restore-hot" />}
@@ -322,7 +334,9 @@ export function SelectionOverlay() {
   const override = useDrag((s) => s.guide);
 
   if (frameEdit) return <BoardOverlay />;
-  if (tool !== 'arrange' || !selection.length) return null;
+  // Mirroring shows what is being mirrored, without handles to drag.
+  const mirroring = tool === 'mirror';
+  if ((tool !== 'arrange' && !mirroring) || !selection.length) return null;
   const d = previewDoc(doc, override);
   const frame = selectionFrame(d, selection, selRot);
   if (!frame) return null;
@@ -330,7 +344,7 @@ export function SelectionOverlay() {
   const corners = transformFrameCorners(frame, moving ? mat : null).map((p) => toScreen(view, p));
   const isLine = selection.length === 1 && d.guides.find((g) => g.id === selection[0])?.type === 'line';
   const lockedPhoto = selection.length === 1 && !!d.refs.find((r) => r.id === selection[0])?.locked;
-  const handles = moving || lockedPhoto ? [] : placeHandles(d, selection, frame, view.k);
+  const handles = moving || lockedPhoto || mirroring ? [] : placeHandles(d, selection, frame, view.k);
   const rot = handles.find((h) => h.handle.kind === 'rot');
   const top = { x: (corners[0]!.x + corners[1]!.x) / 2, y: (corners[0]!.y + corners[1]!.y) / 2 };
   const points = corners.map((p) => `${p.x},${p.y}`).join(' ');

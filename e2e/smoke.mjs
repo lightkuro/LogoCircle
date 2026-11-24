@@ -973,6 +973,142 @@ async function firstVisit(browser, phone) {
   await ctx.close();
 }
 
+async function mirrorAndPicking(browser) {
+  console.log('\nMirror copy, one at a time, hold and drag');
+  // Mirror copy, with a mouse.
+  {
+    const { ctx, page, errors } = await fresh(browser, false);
+    const b = await page.evaluate(() => window.__lc.doc().artboard);
+    const cx = (b.x ?? 0) + b.w / 2;
+    const cy = (b.y ?? 0) + b.h / 2;
+    await add(page, false, 'Circle');
+    await moveSelectionTo(page, cx - 200, cy - 150);
+    const g0 = await page.evaluate(() => window.__lc.doc().guides[0]);
+    await fromGroup(page, 'More', 'Mirror copy');
+    check((await page.evaluate(() => window.__lc.ui().tool)) === 'mirror', 'Mirror copy is a tool under More');
+    check((await page.locator('.mirror-centre').count()) === 1, "the frame's centre lines are offered to mirror across");
+    // the vertical centre line, away from the middle so it is not the horizontal one
+    const at = await toScreen(page, cx, cy + 300);
+    await page.mouse.move(at.x, at.y);
+    await page.waitForTimeout(60);
+    check((await page.locator('.mirror-ghost').count()) === 1, 'pointing at a line previews the copy');
+    await page.mouse.click(at.x, at.y);
+    let gs = await page.evaluate(() => window.__lc.doc().guides);
+    const copy = gs[1];
+    check(gs.length === 2 && Math.abs(copy.cx - (2 * cx - g0.cx)) < 0.01 && Math.abs(copy.cy - g0.cy) < 0.01, `clicking the centre line adds a copy mirrored across it (${copy?.cx?.toFixed(1)}, ${copy?.cy?.toFixed(1)})`);
+    check((await state(page)).selection === 2, 'the copy joins the selection');
+    // across the other centre line: four
+    const at2 = await toScreen(page, cx + 350, cy);
+    await page.mouse.click(at2.x, at2.y);
+    check((await state(page)).guides === 4, 'mirroring again across the other way makes four');
+    // a line drawn just for this
+    await page.keyboard.press('Escape');
+    check((await page.evaluate(() => window.__lc.ui().tool)) === 'arrange', 'Escape puts the tool down');
+    await page.keyboard.press('Escape');
+    await clickDoc(page, cx - 200 + g0.rx, cy - 150);
+    await page.keyboard.press('m');
+    check((await page.evaluate(() => window.__lc.ui().tool)) === 'mirror', 'M picks up Mirror copy');
+    await drag(page, [cx - 500, cy + 100], [cx + 500, cy + 100]);
+    gs = await page.evaluate(() => window.__lc.doc().guides);
+    const last = gs[gs.length - 1];
+    check(gs.length === 5 && Math.abs(last.cy - (2 * (cy + 100) - (cy - 150))) < 0.5, 'dragging draws a line of its own to mirror across');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('m');
+    check((await page.evaluate(() => window.__lc.ui().tool)) === 'arrange', 'with nothing selected, there is nothing to mirror');
+    await page.screenshot({ path: join(shots, 'mirror.png') });
+    check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+    await ctx.close();
+  }
+
+  // One at a time, on a phone: each tap adds, like Shift-click.
+  {
+    const { ctx, page, errors } = await fresh(browser, true);
+    const b = await page.evaluate(() => window.__lc.doc().artboard);
+    const cx = (b.x ?? 0) + b.w / 2;
+    const cy = (b.y ?? 0) + b.h / 2;
+    await add(page, true, 'Circle');
+    await moveSelectionTo(page, cx - 200, cy);
+    await add(page, true, 'Square');
+    await moveSelectionTo(page, cx + 200, cy);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Select', exact: true }).click();
+    await page.getByRole('menuitem', { name: /^One at a time/ }).click();
+    const tap = async (x, y) => {
+      const p = await toScreen(page, x, y);
+      await page.touchscreen.tap(p.x, p.y);
+      await page.waitForTimeout(80);
+      return (await state(page)).selection;
+    };
+    const circle = await page.evaluate(() => window.__lc.doc().guides[0]);
+    const square = await page.evaluate(() => window.__lc.doc().guides[1]);
+    check((await tap(circle.cx + circle.rx, circle.cy)) === 1, 'one at a time: the first tap selects');
+    check((await tap(square.cx + square.w / 2, square.cy)) === 2, 'the next tap adds to the selection');
+    check((await page.getByRole('status').or(page.locator('.hint-pill')).first().textContent())?.includes('2 selected'), 'the hint counts what is selected');
+    check((await tap(circle.cx + circle.rx, circle.cy)) === 1, 'tapping a selected piece takes it away again');
+    check((await tap(cx, cy + 400)) === 1, 'a tap on empty canvas keeps the selection');
+    check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+    await ctx.close();
+  }
+
+  // Hold and drag to pick, with a finger and with a mouse.
+  for (const phone of [true, false]) {
+    const { ctx, page, errors } = await fresh(browser, phone);
+    // switched on in Settings, and kept for the next visit
+    await page.evaluate(() => localStorage.setItem('lc.settings', JSON.stringify({ slidePick: true })));
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__lc && window.__lc.ui().stage.w > 0);
+    const button = await page.getByRole('button', { name: 'Shapes', exact: true }).boundingBox();
+    const from = { x: button.x + button.width / 2, y: button.y + button.height / 2 };
+    if (phone) {
+      const cdp = await ctx.newCDPSession(page);
+      const touchEv = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p, id) => ({ x: p[0], y: p[1], id })) });
+      await touchEv('touchStart', [[from.x, from.y]]);
+      await page.waitForTimeout(120);
+      const item = await page.getByRole('menuitem', { name: /^Triangle/ }).boundingBox();
+      const to = { x: item.x + item.width / 2, y: item.y + item.height / 2 };
+      await touchEv('touchMove', [[from.x, from.y - 20]]);
+      await touchEv('touchMove', [[to.x, to.y]]);
+      await page.waitForTimeout(60);
+      check((await page.locator('.menu-item[data-hot]').textContent())?.startsWith('Triangle'), 'hold and drag: the choice under the finger lights up');
+      await touchEv('touchEnd', []);
+      // Resting on a heading folds it out; letting go away from the list picks nothing.
+      const more = await page.getByRole('button', { name: 'More', exact: true }).boundingBox();
+      const m = { x: more.x + more.width / 2, y: more.y + more.height / 2 };
+      await touchEv('touchStart', [[m.x, m.y]]);
+      await page.waitForTimeout(120);
+      const head = await page.getByRole('menuitem', { name: /^Import photo/ }).boundingBox();
+      await touchEv('touchMove', [[m.x, m.y - 20]]);
+      await touchEv('touchMove', [[head.x + head.width / 2, head.y + head.height / 2]]);
+      await page.waitForTimeout(500);
+      check((await page.getByRole('menuitem', { name: /^Choose photo/ }).count()) === 1, 'resting on Import photo folds out its choices');
+      await touchEv('touchMove', [[40, 300]]);
+      await touchEv('touchEnd', []);
+      await page.waitForTimeout(100);
+      check((await page.getByRole('menu', { name: 'More' }).count()) === 0, 'letting go away from the list closes it');
+    } else {
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.waitForTimeout(120);
+      const item = await page.getByRole('menuitem', { name: /^Triangle/ }).boundingBox();
+      await page.mouse.move(item.x + item.width / 2, item.y + item.height / 2, { steps: 6 });
+      await page.mouse.up();
+    }
+    await page.waitForTimeout(150);
+    const g = await page.evaluate(() => window.__lc.doc().guides);
+    check(g.length === 1 && g[0].type === 'poly' && g[0].pts.length === 3, `hold and drag on ${phone ? 'a phone' : 'a desktop'}: letting go on Triangle adds a triangle`);
+    check((await page.getByRole('menu', { name: 'Shapes' }).count()) === 0, 'and the list closes');
+    // a plain tap still just opens the list
+    if (phone) {
+      await page.getByRole('button', { name: 'Shapes', exact: true }).tap();
+      await page.waitForTimeout(120);
+      check((await page.getByRole('menu', { name: 'Shapes' }).count()) === 1, 'a plain tap still opens the list');
+    }
+    check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+    await ctx.close();
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 // Vite is started directly rather than through npx, so that stopping it stops the server itself.
@@ -981,6 +1117,12 @@ let browser;
 try {
   await waitForServer();
   browser = await chromium.launch();
+  if (process.env.E2E_ONLY) {
+    // E2E_ONLY=touch,controls runs just those flows
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking };
+    for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
+    throw 'only';
+  }
   for (const phone of [false, true]) {
     await photoToLogo(browser, phone);
     await geometric(browser, phone);
@@ -992,9 +1134,12 @@ try {
   await phoneLayout(browser);
   await sideways(browser);
   await touch(browser);
+  await mirrorAndPicking(browser);
 } catch (err) {
-  console.error(err);
-  failures++;
+  if (err !== 'only') {
+    console.error(err);
+    failures++;
+  }
 } finally {
   await browser?.close();
   server.kill();

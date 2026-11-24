@@ -22,6 +22,7 @@ import {
   fitBoardToArtwork,
   fitToScreen,
   flipSelection,
+  startMirror,
   groupSelection,
   hasClipboard,
   orderSelection,
@@ -48,6 +49,7 @@ import {
   Eye,
   EyeOff,
   FlipVertical2,
+  FlipHorizontal,
   FlipHorizontal2,
   Group as GroupIcon,
   Layers2,
@@ -326,6 +328,13 @@ function selectionMenu(d?: Pt, tol = 8): MenuItem[] {
     icon: FlipHorizontal2,
     onSelect: () => flipSelection('v'),
   });
+  if (guides.length || shapes.length)
+    items.push({
+      label: 'Mirror copy',
+      icon: FlipHorizontal,
+      keys: key('mirror'),
+      onSelect: startMirror,
+    });
 
   if (shapes.length) {
     const first = doc.shapes[0];

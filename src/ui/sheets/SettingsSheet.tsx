@@ -187,6 +187,7 @@ export function SettingsSheet() {
   const dragEmpty = useSettings((s) => s.dragEmpty);
   const haptics = useSettings((s) => s.haptics);
   const toolLabels = useSettings((s) => s.toolLabels);
+  const slidePick = useSettings((s) => s.slidePick);
   const touch = useIsTouch();
   const set = settings().set;
   const drag = (v: DragEmpty) => (): void => set({ dragEmpty: v });
@@ -241,6 +242,12 @@ export function SettingsSheet() {
       )}
 
       <Switch label="Tool names" hint="Words under the icons in the bar of tools. Off leaves just the icons." checked={toolLabels} onChange={(v) => set({ toolLabels: v })} />
+      <Switch
+        label="Hold and drag to pick"
+        hint={`${touch ? 'Press' : 'Press down on'} a tool button that has a list, slide onto a choice and let go to pick it, in one move.`}
+        checked={slidePick}
+        onChange={(v) => set({ slidePick: v })}
+      />
 
       <div className="label">Helpers</div>
       <Switch label="Snapping" hint="Things line up with nearby outlines, edges and centres as you drag them." checked={snap} onChange={(v) => useUi.setState({ snap: v })} />

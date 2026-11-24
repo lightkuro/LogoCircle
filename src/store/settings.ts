@@ -23,11 +23,13 @@ export interface Settings {
   haptics: boolean;
   /** Words under the icons in the bar of tools. */
   toolLabels: boolean;
+  /** Press a button with a list, slide onto a choice and let go to pick it. */
+  slidePick: boolean;
   /** Key bindings that differ from the defaults: command id → combo ('' = no key). */
   keys: Record<string, string>;
 }
 
-const DEFAULTS: Settings = { layout: 'auto', theme: 'auto', dragEmpty: 'pan', haptics: true, toolLabels: true, keys: {} };
+const DEFAULTS: Settings = { layout: 'auto', theme: 'auto', dragEmpty: 'pan', haptics: true, toolLabels: true, slidePick: false, keys: {} };
 const KEY = 'lc.settings';
 
 function load(): Settings {
@@ -39,6 +41,7 @@ function load(): Settings {
       dragEmpty: raw.dragEmpty === 'select' ? 'select' : 'pan',
       haptics: raw.haptics !== false,
       toolLabels: raw.toolLabels !== false,
+      slidePick: raw.slidePick === true,
       keys: raw.keys && typeof raw.keys === 'object' ? { ...raw.keys } : {},
     };
   } catch {
@@ -61,8 +64,8 @@ export const settings = (): SettingsState => useSettings.getState();
 
 useSettings.subscribe((s) => {
   try {
-    const { layout, theme, dragEmpty, haptics, toolLabels, keys } = s;
-    localStorage.setItem(KEY, JSON.stringify({ layout, theme, dragEmpty, haptics, toolLabels, keys }));
+    const { layout, theme, dragEmpty, haptics, toolLabels, slidePick, keys } = s;
+    localStorage.setItem(KEY, JSON.stringify({ layout, theme, dragEmpty, haptics, toolLabels, slidePick, keys }));
   } catch {
     /* private mode: preferences simply do not persist */
   }

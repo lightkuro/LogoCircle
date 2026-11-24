@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   FlipVertical2,
+  FlipHorizontal,
   FlipHorizontal2,
   Group as GroupIcon,
   Info,
@@ -20,6 +21,7 @@ import {
   Scaling,
   SlidersHorizontal,
   Square,
+  SquareDashed,
   SquareDashedMousePointer,
   SquareRoundCorner,
   Trash2,
@@ -39,6 +41,7 @@ import {
   editFrame,
   fitBoardToArtwork,
   flipSelection,
+  startMirror,
   groupSelection,
   pickPhoto,
   repeatDuplicate,
@@ -58,7 +61,25 @@ import { useLiveEdit } from './live';
 
 // --- Pieces -------------------------------------------------------------------
 
-function Chip({ label, icon, onClick, disabled, tone, tip, keys, active }: { label?: string; icon?: ReactNode; onClick?: () => void; disabled?: boolean; tone?: 'danger'; tip: string; keys?: string; active?: boolean }) {
+function Chip({
+  label,
+  icon,
+  onClick,
+  disabled,
+  tone,
+  tip,
+  keys,
+  active,
+}: {
+  label?: string;
+  icon?: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  tone?: 'danger';
+  tip: string;
+  keys?: string;
+  active?: boolean;
+}) {
   return (
     <Tip label={tip} keys={keys}>
       <button
@@ -130,7 +151,7 @@ const MODE_HINT = (tap: string): Record<string, string> => ({
   pan: 'Pan: drag to move around',
   box: 'Box select: drag a box around things',
   lasso: 'Lasso: draw around things to select them',
-  single: `One at a time: ${tap.toLowerCase()} single pieces, even inside a group`,
+  single: `One at a time: ${tap.toLowerCase()} pieces to select them, even inside a group`,
 });
 
 /** One line about what the current tool or mode expects. Null when nothing needs saying. */
@@ -140,20 +161,23 @@ function useHint(): string | null {
   const erasing = useUi((s) => s.erasing);
   const frameEdit = useUi((s) => s.frameEdit);
   const selectMode = useUi((s) => s.selectMode);
-  const none = useUi((s) => s.selection.length === 0);
+  const count = useUi((s) => s.selection.length);
+  const none = count === 0;
   const multi = useUi((s) => s.multi);
   const corner = useUi((s) => s.corner);
-  const count = usePen((s) => s.count);
+  const points = usePen((s) => s.count);
   const marks = useUi((s) => s.showCuts);
   const tap = touch ? 'Tap' : 'Click';
   if (frameEdit) return 'Drag the frame or its handles to set what gets exported';
   if (tool === 'color') return erasing ? `${tap} areas to clear them` : `${tap} areas to color them`;
-  if (tool === 'pen') return count === 0 ? `${tap} to place points. Drag to bend.` : `${count} point${count === 1 ? '' : 's'}`;
+  if (tool === 'pen') return points === 0 ? `${tap} to place points. Drag to bend.` : `${points} point${points === 1 ? '' : 's'}`;
   if (tool === 'brush') return 'Paint with the color you picked';
   if (tool === 'cut') return marks ? `${tap} a piece to remove it, or a dotted one to bring it back` : `${tap} a piece of an outline to remove it. Drag across a shape to slice it.`;
   if (tool === 'draw') return 'Draw a line. It comes out as a smooth curve.';
+  if (tool === 'mirror') return `${tap} a line to mirror across, or draw one`;
   if (corner) return corner.index < 0 ? 'Rounding all the corners' : 'Rounding this corner';
   if (multi) return `${tap} things to add them to the selection`;
+  if (selectMode === 'single' && tool === 'arrange' && !none) return `${count} selected. ${tap} pieces to add or remove them.`;
   if (none && selectMode !== 'move') return MODE_HINT(tap)[selectMode] ?? null;
   return null;
 }
@@ -164,7 +188,7 @@ export function TopHint() {
   if (!text) return null;
   return (
     <div className="hint-area" aria-live="polite">
-      <div className="glass hint-pill rise-down" key={text}>
+      <div className="glass hint-pill rise-down" key={text.replace(/\d+/g, '#')}>
         <Info />
         <span>{text}</span>
       </div>
@@ -466,6 +490,13 @@ export function ContextBar() {
       </ToolBar>
     );
   }
+  if (tool === 'mirror') {
+    return (
+      <ToolBar name="Mirror copy" hint={hint}>
+        <Done />
+      </ToolBar>
+    );
+  }
   if (selection.length === 0) {
     if (selectMode === 'move') return null;
     return (
@@ -509,9 +540,14 @@ export function ContextBar() {
           <Row icon={<Repeat2 />} label="Repeat with the same spacing" disabled={!canRepeat()} onClick={repeatDuplicate} />
           <Row icon={<FlipVertical2 />} label="Flip sideways" onClick={() => flipSelection('h')} />
           <Row icon={<FlipHorizontal2 />} label="Flip upside down" onClick={() => flipSelection('v')} />
+          <Row icon={<FlipHorizontal />} label="Mirror copy" onClick={startMirror} />
           {selection.length > 1 && !grouped && <Row icon={<GroupIcon />} label="Group" onClick={groupSelection} />}
           {grouped && !group?.text && <Row icon={<Ungroup />} label="Ungroup" onClick={ungroupSelection} />}
-          <Row icon={<SquareDashedMousePointer />} label="Select more" active={multi} onClick={toggleMulti} />
+          {selectMode === 'single' ? (
+            <Row icon={<SquareDashed />} label="Select none" onClick={() => useUi.setState({ selection: [] })} />
+          ) : (
+            <Row icon={<SquareDashedMousePointer />} label="Select more" active={multi} onClick={toggleMulti} />
+          )}
         </Menu>
         {editable ? <Chip tip="Edit the text" label="Edit" icon={<Pencil />} onClick={editText} /> : <Chip tip="Duplicate" label="Duplicate" icon={<CopyPlus />} onClick={duplicateSelection} />}
         <span className="sep" />
@@ -529,11 +565,14 @@ export function ContextBar() {
         </Menu>
       )}
       {cornered && <Chip tip={`Round all the corners (${hold} a corner for just that one)`} label="Corners" icon={<SquareRoundCorner />} onClick={() => roundCorner(cornered, -1)} />}
-      {touch && <Chip tip="Keep adding to the selection with each tap" label={multi ? 'Selecting' : 'Select more'} icon={<SquareDashedMousePointer />} active={multi} onClick={toggleMulti} />}
+      {touch && selectMode !== 'single' && (
+        <Chip tip="Keep adding to the selection with each tap" label={multi ? 'Selecting' : 'Select more'} icon={<SquareDashedMousePointer />} active={multi} onClick={toggleMulti} />
+      )}
       <Chip tip="Duplicate" keys={key('duplicate')} label="Duplicate" icon={<CopyPlus />} onClick={duplicateSelection} />
       <Chip tip="Repeat: copy again with the same spacing" keys={key('repeat')} label="Repeat" icon={<Repeat2 />} disabled={!canRepeat()} onClick={repeatDuplicate} />
       <Chip tip="Flip sideways" icon={<FlipVertical2 />} onClick={() => flipSelection('h')} />
       <Chip tip="Flip upside down" icon={<FlipHorizontal2 />} onClick={() => flipSelection('v')} />
+      <Chip tip="Mirror copy: copy across a line" keys={key('mirror')} icon={<FlipHorizontal />} onClick={startMirror} />
       {selection.length > 1 && !grouped && <Chip tip="Group: select and move these as one" keys={key('group')} label="Group" icon={<GroupIcon />} onClick={groupSelection} />}
       {grouped && !group?.text && <Chip tip="Ungroup" keys={key('ungroup')} label="Ungroup" icon={<Ungroup />} onClick={ungroupSelection} />}
       <span className="sep" />

@@ -14,6 +14,7 @@ import { addGuide, addRef, applyPalette, duplicateItems, removeColor, removeItem
 import { visibleGuides } from '@/model/paint';
 import { board, groupMembers, newDoc } from '@/model/doc';
 import { guideArea } from '@/model/guides';
+import { mirrorable } from '@/model/mirror';
 import { uid } from '@/model/ids';
 import { chromeInsets, fitView, toDoc, zoomAt } from '@/canvas/view';
 import { regularPoints } from '@/geom';
@@ -244,6 +245,17 @@ export function setTool(tool: Tool): void {
   useUi.setState({ tool: next, erasing: false, trayOpen: false, colorPanel: null, frameEdit: false, selection: next === 'arrange' ? s.selection : [] });
 }
 
+/** Mirror copy: pick a line and the selection gets copies reflected across it. */
+export function startMirror(): void {
+  const s = ui();
+  if (s.tool === 'mirror') return doneTool();
+  if (!mirrorable(getDoc(), s.selection).length) {
+    toast('Select what to mirror first', { description: `Then choose Mirror copy and ${isTouch() ? 'tap' : 'click'} a straight line.` });
+    return;
+  }
+  useUi.setState({ tool: 'mirror', erasing: false, trayOpen: false, colorPanel: null, frameEdit: false, multi: false });
+}
+
 /** Back to moving things around. */
 export function doneTool(): void {
   useUi.setState({ tool: 'arrange', erasing: false, colorPanel: null, frameEdit: false });
@@ -333,7 +345,7 @@ function promoteClassicColors(): void {
   if (doc.palette.length <= CLASSIC_COLORS) return;
   const use = new Array<number>(doc.palette.length).fill(0);
   for (const s of doc.shapes) if (typeof s.fill === 'number') use[s.fill] = (use[s.fill] ?? 0) + 1;
-  const order = doc.palette.map((_, i) => i).sort((a, b) => (use[b]! - use[a]!) || a - b);
+  const order = doc.palette.map((_, i) => i).sort((a, b) => use[b]! - use[a]! || a - b);
   if (order.every((v, i) => v === i)) return;
   const remap = new Map(order.map((from, to) => [from, to]));
   useDoc.getState().patch({
@@ -341,10 +353,7 @@ function promoteClassicColors(): void {
     palette: order.map((i) => doc.palette[i]!),
     shapes: doc.shapes.map((s) => (typeof s.fill === 'number' ? { ...s, fill: remap.get(s.fill) ?? s.fill } : s)),
     groups: Object.fromEntries(
-      Object.entries(doc.groups).map(([id, g]) => [
-        id,
-        g.text && typeof g.text.fill === 'number' ? { ...g, text: { ...g.text, fill: remap.get(g.text.fill) ?? g.text.fill } } : g,
-      ]),
+      Object.entries(doc.groups).map(([id, g]) => [id, g.text && typeof g.text.fill === 'number' ? { ...g, text: { ...g.text, fill: remap.get(g.text.fill) ?? g.text.fill } } : g]),
     ),
   });
 }

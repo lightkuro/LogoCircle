@@ -39,11 +39,33 @@ interface DragState {
   trimWidth: number;
   /** A dotted piece the Cut tool would bring back, as path data. */
   restore: string | null;
+  /** Mirror copy: the line it would mirror across, that line carried on across the canvas, and where the copies would go (path data). */
+  mirror: { axis: string; reach: string; ghost: string } | null;
   set: (patch: Partial<DragState>) => void;
   reset: () => void;
 }
 
-const EMPTY: Pick<DragState, 'ids' | 'mat' | 'guide' | 'paint' | 'hover' | 'marquee' | 'snapLines' | 'loupe' | 'draft' | 'draftWidth' | 'draftDashed' | 'shapeRings' | 'board' | 'hold' | 'trim' | 'trimWidth' | 'restore'> = {
+const EMPTY: Pick<
+  DragState,
+  | 'ids'
+  | 'mat'
+  | 'guide'
+  | 'paint'
+  | 'hover'
+  | 'marquee'
+  | 'snapLines'
+  | 'loupe'
+  | 'draft'
+  | 'draftWidth'
+  | 'draftDashed'
+  | 'shapeRings'
+  | 'board'
+  | 'hold'
+  | 'trim'
+  | 'trimWidth'
+  | 'restore'
+  | 'mirror'
+> = {
   ids: null,
   mat: null,
   guide: null,
@@ -61,6 +83,7 @@ const EMPTY: Pick<DragState, 'ids' | 'mat' | 'guide' | 'paint' | 'hover' | 'marq
   trim: null,
   trimWidth: 0,
   restore: null,
+  mirror: null,
 };
 
 export const useDrag = create<DragState>((set) => ({

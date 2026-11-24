@@ -31,6 +31,7 @@ export const COMMANDS: Command[] = [
   { id: 'brush', label: 'Brush', group: 'Tools', keys: ['b'] },
   { id: 'pen', label: 'Pen', group: 'Tools', keys: ['n'], advanced: true },
   { id: 'cut', label: 'Cut', group: 'Tools', keys: ['x'] },
+  { id: 'mirror', label: 'Mirror copy', group: 'Tools', keys: ['m'] },
   { id: 'photo', label: 'Photo', group: 'Tools', keys: ['p'] },
 
   { id: 'color1', label: 'Color 1', group: 'Colors', keys: ['1'] },
@@ -66,7 +67,25 @@ const BY_ID = new Map(COMMANDS.map((c) => [c.id, c]));
 export const isApple = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 /** Keys that never make a binding on their own, or that belong to the browser or to fixed behaviour. */
-const RESERVED = new Set(['Escape', 'Tab', 'Enter', ' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'ContextMenu', 'Dead', 'Process', 'Unidentified']);
+const RESERVED = new Set([
+  'Escape',
+  'Tab',
+  'Enter',
+  ' ',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'ArrowDown',
+  'Shift',
+  'Control',
+  'Alt',
+  'Meta',
+  'CapsLock',
+  'ContextMenu',
+  'Dead',
+  'Process',
+  'Unidentified',
+]);
 
 /** The combo a key press makes, or null when it is only a modifier or a reserved key. */
 export function comboOf(e: KeyboardEvent): string | null {

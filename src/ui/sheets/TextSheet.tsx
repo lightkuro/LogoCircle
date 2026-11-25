@@ -317,6 +317,8 @@ export function TextSheet() {
   const [fill, setFill] = useState<number | string>(0);
   // a border around the letters: 0 wide is none
   const [border, setBorder] = useState<Border>({ width: 0, fill: 1 });
+  // the border before Outline only was picked, to go back to when a fill color is picked again
+  const beforeOutline = useRef<Border | null>(null);
   // weight, italic and OpenType features of the chosen font
   const [style, setStyleState] = useState<TextStyle>({});
   const [busy, setBusy] = useState(false);
@@ -343,6 +345,7 @@ export function TextSheet() {
     setSpacing(existing?.spacing ?? 0);
     setFill(existing?.fill ?? (typeof ink === 'number' && ink < palette.length ? ink : 0));
     setBorder(existing?.border ?? { width: 0, fill: palette.length > 1 ? 1 : '#ffffff' });
+    beforeOutline.current = null;
     setStyleState(existing ? { weight: existing.weight, italic: existing.italic, features: existing.features ?? [] } : rememberedStyle(font));
     clearTextPreview();
     latest.current = null;
@@ -756,14 +759,31 @@ export function TextSheet() {
     </div>
   );
 
+  // Outline only: no fill, just the letters' outline (a hollow border) in the letters' color.
+  const outlineOnly = !!border.hollow && border.width > 0;
+  const outline = (): void => {
+    if (outlineOnly) return;
+    beforeOutline.current = border;
+    setBorder({ width: border.width > 0 ? border.width : Math.min(40, Math.max(2, Math.round(size / 30))), fill: safeFill, hollow: true });
+  };
+  const pickFill = (i: number): void => {
+    setFill(i);
+    // a fill again: back to the border there was before Outline only
+    if (outlineOnly) setBorder(beforeOutline.current && !beforeOutline.current.hollow ? beforeOutline.current : { ...border, width: 0, hollow: false });
+    beforeOutline.current = null;
+  };
   const colors = (
     <div className="tx-colors" role="group" aria-label="Color">
       {palette.map((c, i) => (
-        <button key={i} type="button" className="tx-color" aria-pressed={safeFill === i} aria-label={`Color ${i + 1}`} onClick={() => setFill(i)}>
+        <button key={i} type="button" className="tx-color" aria-pressed={!outlineOnly && safeFill === i} aria-label={`Color ${i + 1}`} onClick={() => pickFill(i)}>
           <span className="tx-color-dot" style={{ background: c }} />
           <span aria-hidden>{i + 1}</span>
         </button>
       ))}
+      <button type="button" className="tx-color" aria-pressed={outlineOnly} aria-label="Outline only" title="Outline only, no fill" onClick={outline}>
+        <span className="tx-color-dot is-outline" style={{ borderColor: resolveFill({ palette }, outlineOnly ? borderFill : safeFill) }} />
+        <span aria-hidden>Outline</span>
+      </button>
     </div>
   );
 

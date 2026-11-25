@@ -11,6 +11,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.16',
+    date: '25 Nov 2026',
+    changes: ['Text color: Outline only, for letters with no fill, just their outline'],
+  },
+  {
     version: '1.15',
     date: '24 Nov 2026',
     changes: ['Drag a project file onto the canvas to open it', 'Open project file is in the LogoCircle menu in Classic mode too'],

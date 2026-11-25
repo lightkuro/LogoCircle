@@ -1304,7 +1304,7 @@ async function movePoints(browser) {
 }
 
 async function bordersAndFlips(browser) {
-  console.log('\nText borders, Flip list, narrow menu');
+  console.log('\nText borders, outline only, Flip list, narrow menu');
   const { ctx, page, errors } = await fresh(browser, false);
   const btn = (name) => page.getByRole('button', { name, exact: true });
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -1346,6 +1346,38 @@ async function bordersAndFlips(browser) {
   await btn('Flip').hover();
   await page.waitForTimeout(200);
   check((await page.getByRole('button', { name: 'Flip sideways' }).count()) === 1 && (await page.getByRole('button', { name: 'Mirror copy' }).count()) === 1, 'Flip opens on hover: sideways, upside down, mirror copy');
+  await page.mouse.move(800, 120);
+  await page.keyboard.press('Escape');
+  // Outline only, as a text color: no fill, an outline in the letters' color.
+  await page.evaluate(() => window.__lc.ui().set({ sheet: 'text', textTarget: null }));
+  await page.waitForTimeout(400);
+  await page.getByRole('textbox', { name: 'Text', exact: true }).fill('Ring');
+  await btn('Color 2').click();
+  await btn('Outline only').click();
+  await page.waitForTimeout(600);
+  check((await btn('Outline only').getAttribute('aria-pressed')) === 'true' && (await btn('Hollow').getAttribute('aria-pressed')) === 'true', 'Outline only is picked, and Hollow with it');
+  check((await page.locator('.text-preview').getAttribute('fill')) === 'none', 'the word on the canvas is unfilled while typing');
+  await btn('Add to canvas').click();
+  await page.waitForTimeout(800);
+  const newest = () =>
+    page.evaluate(() => {
+      const groups = Object.keys(window.__lc.doc().groups);
+      return window.__lc.doc().shapes.filter((s) => s.group === groups[groups.length - 1]).map((s) => ({ fill: s.fill, stroke: s.stroke }));
+    });
+  let letters = await newest();
+  check(letters.length === 4 && letters.every((s) => s.fill === null && s.stroke?.color === 1 && !s.stroke.outside && s.stroke.width > 0), `Outline only: letters with no fill, outlined in color 2 (${JSON.stringify(letters[0])})`);
+  // Picking a color fills the letters again.
+  await page.evaluate(() => {
+    const groups = Object.keys(window.__lc.doc().groups);
+    window.__lc.ui().set({ sheet: 'text', textTarget: groups[groups.length - 1] });
+  });
+  await page.waitForTimeout(400);
+  check((await btn('Outline only').getAttribute('aria-pressed')) === 'true', 'reopening the word shows Outline only picked');
+  await btn('Color 1').click();
+  await btn('Update').click();
+  await page.waitForTimeout(800);
+  letters = await newest();
+  check(letters.length === 4 && letters.every((s) => s.fill === 0 && !s.stroke), `picking a color fills them again, with no outline (${JSON.stringify(letters[0])})`);
   check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
   await ctx.close();
 }

@@ -304,6 +304,11 @@
     transform 180ms var(--ease-out),
     box-shadow 180ms var(--ease-out);
 }
+/* Outline only: a ring in the letters' color, no fill */
+.tx-color-dot.is-outline {
+  background: transparent;
+  border: 3.5px solid;
+}
 .tx-color:active .tx-color-dot {
   transform: scale(0.92);
 }

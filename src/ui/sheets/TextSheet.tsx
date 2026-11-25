@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import { ChevronDown, Search, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import '@/styles/text.css';
-import { ringsBBox, ringsToPath, type Pt } from '@/geom';
+import { ringsBBox, ringsToPath, type Pt, type Ring } from '@/geom';
 import { useDoc } from '@/store/doc';
 import { resolveFill } from '@/model/doc';
 import { ui, useUi } from '@/store/ui';
@@ -105,6 +105,11 @@ const FontTile = memo(function FontTile({ def, word, active, onPick, onRemove }:
   );
 });
 
+/** The lines of a built word, whether it is letters or outlines: one list of rings per letter or outline. */
+function builtRings(built: BuiltText): Ring[][] {
+  return [...built.shapes.map((sh) => sh.rings), ...built.guides.map((g) => (g.type === 'edges' ? [g.edges] : []))];
+}
+
 /** The word as it will land on the canvas, on the canvas's own background. Bigger sizes show bigger. */
 function Preview({
   value,
@@ -115,6 +120,7 @@ function Preview({
   paper,
   style,
   border,
+  outline,
 }: {
   value: string;
   fontId: string;
@@ -124,6 +130,8 @@ function Preview({
   paper: string | null;
   style: TextStyle;
   border?: { width: number; color: string; hollow?: boolean };
+  /** Drawn as thin lines, the way outlines show on the canvas. */
+  outline?: boolean;
 }) {
   const [layout, setLayout] = useState<Layout | null>(null);
   const styleKey = JSON.stringify(style);
@@ -154,14 +162,18 @@ function Preview({
   return (
     <div className={`tx-preview${paper ? '' : ' tx-checker'}`} style={paper ? { background: paper } : undefined} data-paper={paper ?? 'none'}>
       <svg viewBox={`${-pad} ${-asc - bw} ${w + pad * 2} ${asc - desc + bw * 2}`} style={{ height: `${Math.round(k * 100)}%` }} aria-label="Preview">
-        <path
-          d={d}
-          fill={border?.hollow ? 'none' : color}
-          stroke={border ? border.color : undefined}
-          strokeWidth={border ? (border.hollow ? bw : bw * 2) : undefined}
-          strokeLinejoin="round"
-          paintOrder={border && !border.hollow ? 'stroke' : undefined}
-        />
+        {outline ? (
+          <path d={d} className="tx-preview-outline" />
+        ) : (
+          <path
+            d={d}
+            fill={border?.hollow ? 'none' : color}
+            stroke={border ? border.color : undefined}
+            strokeWidth={border ? (border.hollow ? bw : bw * 2) : undefined}
+            strokeLinejoin="round"
+            paintOrder={border && !border.hollow ? 'stroke' : undefined}
+          />
+        )}
       </svg>
     </div>
   );
@@ -317,8 +329,8 @@ export function TextSheet() {
   const [fill, setFill] = useState<number | string>(0);
   // a border around the letters: 0 wide is none
   const [border, setBorder] = useState<Border>({ width: 0, fill: 1 });
-  // the border before Outline only was picked, to go back to when a fill color is picked again
-  const beforeOutline = useRef<Border | null>(null);
+  // Outline: the letters come in as outlines to color in, cut or thicken
+  const [outline, setOutline] = useState(false);
   // weight, italic and OpenType features of the chosen font
   const [style, setStyleState] = useState<TextStyle>({});
   const [busy, setBusy] = useState(false);
@@ -345,7 +357,7 @@ export function TextSheet() {
     setSpacing(existing?.spacing ?? 0);
     setFill(existing?.fill ?? (typeof ink === 'number' && ink < palette.length ? ink : 0));
     setBorder(existing?.border ?? { width: 0, fill: palette.length > 1 ? 1 : '#ffffff' });
-    beforeOutline.current = null;
+    setOutline(false);
     setStyleState(existing ? { weight: existing.weight, italic: existing.italic, features: existing.features ?? [] } : rememberedStyle(font));
     clearTextPreview();
     latest.current = null;
@@ -399,7 +411,8 @@ export function TextSheet() {
     weight: style.weight,
     italic: style.italic,
     features: style.features,
-    border: border.width > 0 ? { ...border, fill: borderFill } : undefined,
+    border: border.width > 0 && !outline ? { ...border, fill: borderFill } : undefined,
+    ...(outline ? { outline: true } : null),
   };
   const inputKey = JSON.stringify([params, target]);
 
@@ -428,8 +441,8 @@ export function TextSheet() {
     let hi = -Infinity;
     let top = Infinity;
     let bottom = -Infinity;
-    for (const sh of built.shapes) {
-      const b = ringsBBox(sh.rings);
+    for (const rings of builtRings(built)) {
+      const b = ringsBBox(rings);
       lo = Math.min(lo, b.x);
       hi = Math.max(hi, b.x + b.w);
       top = Math.min(top, b.y);
@@ -497,8 +510,16 @@ export function TextSheet() {
           latest.current = built ? { key, built } : null;
           useTextPreview.setState(
             built
-              ? { d: built.shapes.map((sh) => ringsToPath(sh.rings)).join(''), fill: built.shapes[0]?.fill ?? null, stroke: built.shapes[0]?.stroke ?? null, hide: built.replaces }
-              : { d: null, stroke: null, hide: null },
+              ? {
+                  d: builtRings(built)
+                    .map((rings) => ringsToPath(rings))
+                    .join(''),
+                  fill: built.shapes[0]?.fill ?? null,
+                  stroke: built.shapes[0]?.stroke ?? null,
+                  outline: built.guides.length > 0,
+                  hide: built.replaces,
+                }
+              : { d: null, stroke: null, outline: false, hide: null },
           );
           reveal(built);
         },
@@ -518,6 +539,7 @@ export function TextSheet() {
     if (!existing) return false;
     const same = (a?: string[], b?: string[]): boolean => [...(a ?? [])].sort().join() === [...(b ?? [])].sort().join();
     return (
+      !outline &&
       existing.value === text.trim() &&
       existing.fontId === fontId &&
       existing.size === size &&
@@ -647,6 +669,7 @@ export function TextSheet() {
       paper={paper}
       style={style}
       border={params.border ? { width: params.border.width, color: resolveFill({ palette }, params.border.fill), hollow: params.border.hollow } : undefined}
+      outline={outline}
     />
   );
 
@@ -759,29 +782,26 @@ export function TextSheet() {
     </div>
   );
 
-  // Outline only: no fill, just the letters' outline (a hollow border) in the letters' color.
-  const outlineOnly = !!border.hollow && border.width > 0;
-  const outline = (): void => {
-    if (outlineOnly) return;
-    beforeOutline.current = border;
-    setBorder({ width: border.width > 0 ? border.width : Math.min(40, Math.max(2, Math.round(size / 30))), fill: safeFill, hollow: true });
-  };
-  const pickFill = (i: number): void => {
-    setFill(i);
-    // a fill again: back to the border there was before Outline only
-    if (outlineOnly) setBorder(beforeOutline.current && !beforeOutline.current.hollow ? beforeOutline.current : { ...border, width: 0, hollow: false });
-    beforeOutline.current = null;
-  };
   const colors = (
     <div className="tx-colors" role="group" aria-label="Color">
       {palette.map((c, i) => (
-        <button key={i} type="button" className="tx-color" aria-pressed={!outlineOnly && safeFill === i} aria-label={`Color ${i + 1}`} onClick={() => pickFill(i)}>
+        <button
+          key={i}
+          type="button"
+          className="tx-color"
+          aria-pressed={!outline && safeFill === i}
+          aria-label={`Color ${i + 1}`}
+          onClick={() => {
+            setFill(i);
+            setOutline(false);
+          }}
+        >
           <span className="tx-color-dot" style={{ background: c }} />
           <span aria-hidden>{i + 1}</span>
         </button>
       ))}
-      <button type="button" className="tx-color" aria-pressed={outlineOnly} aria-label="Outline only" title="Outline only, no fill" onClick={outline}>
-        <span className="tx-color-dot is-outline" style={{ borderColor: resolveFill({ palette }, outlineOnly ? borderFill : safeFill) }} />
+      <button type="button" className="tx-color" aria-pressed={outline} aria-label="Outline" title="Outlines to color in, cut or thicken" onClick={() => setOutline(true)}>
+        <span className="tx-color-dot is-outline" />
         <span aria-hidden>Outline</span>
       </button>
     </div>
@@ -792,7 +812,9 @@ export function TextSheet() {
     { fill: '#ffffff', name: 'White' },
     { fill: '#000000', name: 'Black' },
   ];
-  const borderControls = (
+  const borderControls = outline ? (
+    <p className="tx-note">The letters come in as outlines. Color them in, cut them, or make them thicker.</p>
+  ) : (
     <div className="tx-border" role="group" aria-label="Border">
       <div className="txp-slider">
         <span>Border</span>

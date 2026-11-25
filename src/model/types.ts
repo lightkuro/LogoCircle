@@ -193,6 +193,8 @@ export interface Group {
   kind: 'text' | 'group';
   name?: string;
   text?: TextInfo;
+  /** The outlines of a word's letters: coloring them leaves the letters' holes open. */
+  letters?: boolean;
 }
 
 /** A reference photo. Never exported. */

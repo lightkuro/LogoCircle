@@ -11,6 +11,8 @@ interface TextPreview {
   fill: Fill | null;
   /** The border, when the word has one. */
   stroke: Stroke | null;
+  /** The word comes in as outlines: drawn as thin lines. */
+  outline?: boolean;
   /** The word being retyped, hidden while its new version is shown. */
   hide: string | null;
 }

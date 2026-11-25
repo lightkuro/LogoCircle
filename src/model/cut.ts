@@ -187,15 +187,16 @@ function cutGuides(doc: Doc, cut: LineC): Guide[] {
     }
     const width = g.width ?? 0;
     pieces.forEach((piece, i) => {
-      const id = i === 0 ? g.id : uid('g');
+      // the pieces stay in the outline's group (a word's letters stay one word)
+      const base = { id: i === 0 ? g.id : uid('g'), ...(g.group ? { group: g.group } : null), ...(g.name ? { name: g.name } : null) };
       const only = piece.edges.length === 1 ? piece.edges[0]! : null;
       if (only && only.c.k === 'L' && !piece.closed) {
         // a piece of a straight line is still a straight line, with its two end handles
         const a = evalC(only.c, only.t0);
         const b = evalC(only.c, only.t1);
-        out.push({ id, type: 'line', x0: a.x, y0: a.y, x1: b.x, y1: b.y, width });
+        out.push({ ...base, type: 'line', x0: a.x, y0: a.y, x1: b.x, y1: b.y, width });
       } else {
-        out.push({ id, type: 'edges', edges: piece.edges, closed: piece.closed, width, band: g.type === 'line' ? undefined : g.band });
+        out.push({ ...base, type: 'edges', edges: piece.edges, closed: piece.closed, width, band: g.type === 'line' ? undefined : g.band });
       }
     });
   }

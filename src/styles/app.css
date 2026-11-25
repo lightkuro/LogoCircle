@@ -246,6 +246,13 @@ select {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+.text-preview-outline {
+  fill: none;
+  stroke: var(--guide);
+  stroke-width: 1.1px;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
 .guide-halo {
   stroke: var(--guide-halo);
   stroke-width: 3.2px;

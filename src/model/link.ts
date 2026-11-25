@@ -11,7 +11,7 @@
  * are deleted: from then on it stands by itself.
  */
 import { buildArrangement, faceBoundaryKeys, outline, regionBoundaryKeys, withFollowers, type Arrangement, type Source } from '@/engine';
-import { carrierKey, flattenChain, windingOfPolygon, type Chain, type Pt, type Ring } from '@/geom';
+import { carrierKey, evalC, flattenChain, windingOfPolygon, type Chain, type Pt, type Ring } from '@/geom';
 import { board } from './doc';
 import { guideArea, guideChains, reach } from './guides';
 import type { Doc, Guide, Link, Seed, Shape } from './types';
@@ -226,3 +226,47 @@ export function linkWithin(link: Link, ids: ReadonlySet<string>): boolean {
   return linkGuides(link).every((id) => ids.has(id));
 }
 
+/**
+ * The selected outlines of a word's letters, colored as letters: a line inside
+ * another line of the same word is a hole (the inside of an O), and one inside
+ * a hole is filled again. Each outer line gets its area less its holes, linked
+ * so it follows them; a hole maps to null (nothing of its own to color).
+ */
+export function letterAreas(doc: Doc, selected: ReadonlySet<string>): Map<string, { rings: Ring[]; from: Link } | null> {
+  const out = new Map<string, { rings: Ring[]; from: Link } | null>();
+  const words = new Map<string, Extract<Guide, { type: 'edges' }>[]>();
+  for (const g of doc.guides) {
+    if (!selected.has(g.id) || g.type !== 'edges' || !g.closed || g.width > 0 || !g.group || !doc.groups[g.group]?.letters) continue;
+    const list = words.get(g.group);
+    if (list) list.push(g);
+    else words.set(g.group, [g]);
+  }
+  for (const list of words.values()) {
+    const polys = list.map((g) => flattenChain({ edges: g.edges, closed: true }, 0.5));
+    const starts = list.map((g) => evalC(g.edges[0]!.c, g.edges[0]!.t0));
+    // the lines each one lies inside
+    const around = list.map((_, i) => list.flatMap((__, j) => (j !== i && windingOfPolygon(starts[i]!, polys[j]!) !== 0 ? [j] : [])));
+    list.forEach((g, i) => {
+      const depth = around[i]!.length;
+      if (depth % 2) return void out.set(g.id, null);
+      const holes = list.filter((_, k) => around[k]!.length === depth + 1 && around[k]!.includes(i));
+      if (!holes.length) return void out.set(g.id, { rings: [g.edges], from: { area: g.id } });
+      const from: Link = { guides: [g.id, ...holes.map((h) => h.id)], seeds: [{ in: [`${g.id}#0`], sides: {} }] };
+      let rings: Ring[] | null = null;
+      try {
+        rings = rederive(doc, from);
+      } catch {
+        rings = null;
+      }
+      out.set(g.id, { rings: rings?.length ? rings : [g.edges, ...holes.map((h) => h.edges)], from });
+    });
+  }
+  return out;
+}
+
+/** Is this shape the color of one outline's area (or a letter's, less its holes)? */
+export function colorsArea(s: Shape, id: string): boolean {
+  if (!s.from) return false;
+  if ('area' in s.from) return s.from.area === id;
+  return s.from.guides[0] === id && s.from.seeds.length === 1 && s.from.seeds[0]!.in.length === 1 && s.from.seeds[0]!.in[0] === `${id}#0`;
+}

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { faceAt } from '@/engine';
-import { ringArea, ringsBBox, roundedPolygonChain, translate } from '@/geom';
+import { rectChain, ringArea, ringsBBox, roundedPolygonChain, translate } from '@/geom';
 import { newDoc } from './doc';
 import { cutAlong } from './cut';
 import { guideArea } from './guides';
-import { syncLinks } from './link';
+import { letterAreas, syncLinks } from './link';
 import { removeColor, removeItems, transformItems } from './ops';
 import { buildDocArrangement, paintFaces } from './paint';
 import type { Doc, Guide, Shape } from './types';
@@ -159,5 +159,26 @@ describe('rounded corners and colors', () => {
     expect(next.palette).toEqual(['#111111', '#00ff00']);
     expect(next.shapes.map((s) => s.fill)).toEqual(['#ff0000', 1]);
     expect(removeColor({ ...doc, palette: ['#111111'] }, 0).palette).toEqual(['#111111']);
+  });
+});
+
+describe('a word as outlines', () => {
+  // An O as two square outlines, and a dot beside it, grouped as a word's letters.
+  const box = (id: string, cx: number, w: number): Guide => ({ id, type: 'edges', edges: rectChain(cx, 500, w, w).edges, closed: true, width: 0, group: 'w' });
+  const word = (): Doc => ({ ...newDoc(), guides: [box('out', 400, 200), box('in', 400, 100), box('dot', 700, 40)], groups: { w: { id: 'w', kind: 'group', name: 'O.', letters: true } } });
+
+  it('colors a letter less its hole, and the hole on its own colors nothing', () => {
+    const got = letterAreas(word(), new Set(['out', 'in', 'dot']));
+    expect(got.get('in')).toBeNull();
+    const o = got.get('out')!;
+    expect(o.rings).toHaveLength(2);
+    near(Math.abs(o.rings.reduce((a, r) => a + ringArea(r, 0.01), 0)), 200 * 200 - 100 * 100);
+    expect(o.from).toEqual({ guides: ['out', 'in'], seeds: [{ in: ['out#0'], sides: {} }] });
+    expect(got.get('dot')?.from).toEqual({ area: 'dot' });
+  });
+
+  it("leaves outlines that are not a word's letters alone", () => {
+    const doc = word();
+    expect(letterAreas({ ...doc, groups: { w: { id: 'w', kind: 'group', name: 'Group' } } }, new Set(['out', 'in'])).size).toBe(0);
   });
 });

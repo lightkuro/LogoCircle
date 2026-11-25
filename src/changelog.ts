@@ -11,6 +11,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.17',
+    date: '25 Nov 2026',
+    changes: [
+      'Text color Outline now brings the letters in as outlines: color them in, cut them, or make them thicker',
+      'Coloring a whole outlined word leaves the holes in its letters open',
+      'Grouped outlines stay grouped when you color something',
+    ],
+  },
+  {
     version: '1.16',
     date: '25 Nov 2026',
     changes: ['Text color: Outline only, for letters with no fill, just their outline'],

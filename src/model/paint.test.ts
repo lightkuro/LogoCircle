@@ -134,4 +134,9 @@ describe('paintFaces', () => {
     expect(cut.groups.w!.text!.pristine).toBe(false);
     expect(cut.shapes[0]!.group).toBe('w');
   });
+
+  it('coloring keeps groups made only of outlines', () => {
+    const doc: Doc = { ...withGuides({ ...circle('a', 400, 500, 100), group: 'g' }, { ...circle('b', 700, 500, 100), group: 'g' }), groups: { g: { id: 'g', kind: 'group', name: 'Group' } } };
+    expect(paintAt(doc, [[400, 500]], 0).groups.g).toBeDefined();
+  });
 });

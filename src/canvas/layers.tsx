@@ -125,8 +125,11 @@ export function TextPreviewLayer() {
   const d = useTextPreview((s) => s.d);
   const fill = useTextPreview((s) => s.fill);
   const stroke = useTextPreview((s) => s.stroke);
+  const outline = useTextPreview((s) => s.outline);
   const palette = useDoc((s) => s.doc.palette);
   if (!d) return null;
+  // outlines show as outlines do, hairlines whatever the zoom
+  if (outline) return <path d={d} className="text-preview text-preview-outline" style={{ pointerEvents: 'none' }} />;
   return (
     <path
       d={d}

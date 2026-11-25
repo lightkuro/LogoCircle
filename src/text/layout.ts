@@ -1,7 +1,7 @@
 import type { Font, PathCommand } from 'opentype.js';
 import { cubicEdge, lineEdge, transformRings, type Edge, type Mat, type Ring } from '@/geom';
 import { normalizeRings } from '@/engine';
-import type { Fill, Group, Shape, TextInfo } from '@/model/types';
+import type { EdgesGuide, Fill, Group, Shape, TextInfo } from '@/model/types';
 import { borderStroke } from '@/model/border';
 import { uid } from '@/model/ids';
 import { loadFont } from './load';
@@ -164,4 +164,16 @@ export function textShapes(layout: Layout, info: Omit<TextInfo, 'pristine' | 'm'
   }));
   const group: Group = { id: groupId, kind: 'text', name: info.value, text: { ...info, m, pristine: true } };
   return { shapes, group };
+}
+
+/**
+ * The word as outlines instead of letters: one closed outline for each line of
+ * each letter (an O is two), grouped as the word, to color in, cut or thicken
+ * like any drawn outline.
+ */
+export function textOutlines(layout: Layout, value: string, m: Mat, groupId = uid('w')): { guides: EdgesGuide[]; group: Group } {
+  const guides: EdgesGuide[] = layout.glyphs.flatMap((g) =>
+    transformRings(g.rings, m).map((edges) => ({ id: uid('g'), type: 'edges' as const, edges, closed: true, width: 0, group: groupId, name: g.char })),
+  );
+  return { guides, group: { id: groupId, kind: 'group', name: value, letters: true } };
 }

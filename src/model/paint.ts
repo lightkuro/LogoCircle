@@ -252,6 +252,8 @@ export function paintFaces(doc: Doc, arr: Arrangement, faceIds: Iterable<number>
   // Groups: anything cut or merged is no longer "as typed"; drop emptied groups.
   const used = new Set<string>();
   for (const s of shapes) if (s.group) used.add(s.group);
+  // outlines keep their groups too (a word as outlines, or outlines grouped by hand)
+  for (const g of doc.guides) if (g.group) used.add(g.group);
   const groups: Doc['groups'] = {};
   for (const [id, g] of Object.entries(doc.groups)) {
     if (!used.has(id)) continue;

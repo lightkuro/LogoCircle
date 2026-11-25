@@ -304,10 +304,24 @@
     transform 180ms var(--ease-out),
     box-shadow 180ms var(--ease-out);
 }
-/* Outline only: a ring in the letters' color, no fill */
+/* Outline: thin lines, as outlines show on the canvas */
 .tx-color-dot.is-outline {
   background: transparent;
-  border: 3.5px solid;
+  border: 1.5px solid var(--guide);
+  box-shadow: none;
+}
+.tx-preview-outline {
+  fill: none;
+  stroke: var(--guide);
+  stroke-width: 1.2px;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+.tx-note {
+  margin: 4px 2px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 .tx-color:active .tx-color-dot {
   transform: scale(0.92);

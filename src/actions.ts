@@ -15,6 +15,7 @@ import { visibleGuides } from '@/model/paint';
 import { board, groupMembers, newDoc } from '@/model/doc';
 import { guideArea } from '@/model/guides';
 import { mirrorable } from '@/model/mirror';
+import { colorsArea, letterAreas } from '@/model/link';
 import { applyPattern, defaultPattern, type PatternKind, type PatternSpec } from '@/model/pattern';
 import { applyFillet, maxFillet, type Crossing } from '@/model/fillet';
 import { uid } from '@/model/ids';
@@ -195,12 +196,16 @@ export function colorSelection(fill: number | string): boolean {
     return { ...s, fill };
   });
   const added: Shape[] = [];
+  // a word's letters as outlines color as letters, holes left open
+  const letters = letterAreas(doc, sel);
   for (const g of doc.guides) {
     if (!sel.has(g.id)) continue;
-    const rings = guideArea(g);
+    const letter = letters.get(g.id);
+    if (letter === null) continue;
+    const rings = letter ? letter.rings : guideArea(g);
     if (!rings) continue;
     // already colored from this outline? then just change that color
-    const mine = shapes.findIndex((s) => s.from && 'area' in s.from && s.from.area === g.id);
+    const mine = shapes.findIndex((s) => colorsArea(s, g.id));
     if (mine >= 0) {
       if (shapes[mine]!.fill !== fill) {
         shapes[mine] = { ...shapes[mine]!, fill };
@@ -208,7 +213,7 @@ export function colorSelection(fill: number | string): boolean {
       }
       continue;
     }
-    added.push({ id: uid('s'), rings, fill, from: { area: g.id }, group: g.group });
+    added.push({ id: uid('s'), rings, fill, from: letter ? letter.from : { area: g.id }, group: g.group });
     did = true;
   }
   if (!did) return false;
@@ -684,11 +689,15 @@ export interface TextInput {
   italic?: boolean;
   features?: string[];
   border?: Border;
+  /** The letters as outlines to color in, cut or thicken, rather than filled letters. */
+  outline?: boolean;
 }
 
 /** A word laid out where it will land, ready to go on the canvas. */
 export interface BuiltText {
   shapes: Shape[];
+  /** The word as outlines (Outline), instead of shapes. */
+  guides: Guide[];
   group: Group;
   /** The word it takes the place of, when retyping one. */
   replaces: string | null;
@@ -700,7 +709,7 @@ export interface BuiltText {
  * view unless given), or in place of the word being retyped.
  */
 export async function buildText(input: TextInput, target: string | null, center?: Pt): Promise<BuiltText | null> {
-  const { layoutText, textShapes } = await import('@/text/layout');
+  const { layoutText, textShapes, textOutlines } = await import('@/text/layout');
   const value = input.value.trim();
   if (!value) return null;
   const features = input.features?.length ? [...input.features].sort() : undefined;
@@ -718,21 +727,24 @@ export async function buildText(input: TextInput, target: string | null, center?
     ...(input.border && input.border.width > 0 ? { border: input.border } : null),
   };
   const existing = target ? getDoc().groups[target] : undefined;
-  if (existing?.text) return { ...textShapes(layout, info, existing.text.m, existing.id), replaces: existing.id, missing: layout.missing };
+  // Outlines: the letters' lines, to color in, cut or thicken. A word turned into outlines can't be retyped.
+  const made = (m: Mat, id?: string) => (input.outline ? { shapes: [], ...textOutlines(layout, value, m, id) } : { guides: [], ...textShapes(layout, info, m, id) });
+  if (existing?.text) return { ...made(existing.text.m, existing.id), replaces: existing.id, missing: layout.missing };
   const c = center ?? viewCenter();
   const m = translate(c.x - layout.width / 2, c.y + (layout.ascent + layout.descent) / 2 - layout.descent * 0.15);
-  return { ...textShapes(layout, info, m), replaces: null, missing: layout.missing };
+  return { ...made(m), replaces: null, missing: layout.missing };
 }
 
 /** Put a built word on the canvas (one undo step) and select it. */
 export function placeText(built: BuiltText): void {
   const doc = getDoc();
-  const { shapes, group } = built;
+  const { shapes, guides, group } = built;
   const at = built.replaces ? doc.shapes.findIndex((s) => s.group === built.replaces) : -1;
   const rest = built.replaces ? doc.shapes.filter((s) => s.group !== built.replaces) : [...doc.shapes];
   rest.splice(at < 0 ? rest.length : Math.min(at, rest.length), 0, ...shapes);
-  commit({ ...doc, shapes: rest, groups: { ...doc.groups, [group.id]: group }, updatedAt: Date.now() });
-  useUi.setState({ selection: shapes.map((s) => s.id), tool: 'arrange', erasing: false });
+  commit({ ...doc, shapes: rest, guides: [...doc.guides, ...guides], groups: { ...doc.groups, [group.id]: group }, updatedAt: Date.now() });
+  // outlines need to be seen to be colored in
+  useUi.setState({ selection: [...shapes, ...guides].map((s) => s.id), tool: 'arrange', erasing: false, ...(guides.length ? { showGuides: true } : null) });
   if (built.missing.length) toast(`This font has no “${built.missing.join('')}”`, { description: 'Try another font for these.' });
 }
 

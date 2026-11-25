@@ -1304,7 +1304,7 @@ async function movePoints(browser) {
 }
 
 async function bordersAndFlips(browser) {
-  console.log('\nText borders, outline only, Flip list, narrow menu');
+  console.log('\nText borders, outlined words, Flip list, narrow menu');
   const { ctx, page, errors } = await fresh(browser, false);
   const btn = (name) => page.getByRole('button', { name, exact: true });
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -1348,36 +1348,79 @@ async function bordersAndFlips(browser) {
   check((await page.getByRole('button', { name: 'Flip sideways' }).count()) === 1 && (await page.getByRole('button', { name: 'Mirror copy' }).count()) === 1, 'Flip opens on hover: sideways, upside down, mirror copy');
   await page.mouse.move(800, 120);
   await page.keyboard.press('Escape');
-  // Outline only, as a text color: no fill, an outline in the letters' color.
+  // Outline, as a text color: the letters come in as outlines, to color in, cut or thicken.
+  await page.keyboard.press('Control+a');
+  await page.keyboard.press('Delete');
   await page.evaluate(() => window.__lc.ui().set({ sheet: 'text', textTarget: null }));
   await page.waitForTimeout(400);
   await page.getByRole('textbox', { name: 'Text', exact: true }).fill('Ring');
-  await btn('Color 2').click();
-  await btn('Outline only').click();
+  await btn('Outline').click();
   await page.waitForTimeout(600);
-  check((await btn('Outline only').getAttribute('aria-pressed')) === 'true' && (await btn('Hollow').getAttribute('aria-pressed')) === 'true', 'Outline only is picked, and Hollow with it');
-  check((await page.locator('.text-preview').getAttribute('fill')) === 'none', 'the word on the canvas is unfilled while typing');
+  check((await btn('Outline').getAttribute('aria-pressed')) === 'true' && (await page.getByRole('slider', { name: 'Border' }).count()) === 0, 'Outline is picked, and the border settings make way for a note');
+  check((await page.locator('.text-preview-outline').count()) === 1 && (await page.locator('.tx-preview-outline').count()) === 1, 'the word shows as thin lines, on the canvas and in the preview');
   await btn('Add to canvas').click();
   await page.waitForTimeout(800);
-  const newest = () =>
+  const word = () =>
     page.evaluate(() => {
-      const groups = Object.keys(window.__lc.doc().groups);
-      return window.__lc.doc().shapes.filter((s) => s.group === groups[groups.length - 1]).map((s) => ({ fill: s.fill, stroke: s.stroke }));
+      const d = window.__lc.doc();
+      const gid = Object.keys(d.groups).filter((k) => d.groups[k].letters).pop();
+      const box = (g) => {
+        const xs = [];
+        const ys = [];
+        for (const e of g.edges ?? []) for (const k of ['0', '1', '2', '3']) if (e.c['x' + k] !== undefined) xs.push(e.c['x' + k]), ys.push(e.c['y' + k]);
+        return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+      };
+      const guides = d.guides.filter((g) => g.group === gid);
+      return {
+        name: d.groups[gid]?.name,
+        guides: guides.map((g) => ({ id: g.id, type: g.type, closed: g.closed, width: g.width, name: g.name, box: box(g) })),
+        letters: d.shapes.filter((s) => s.group === gid).map((s) => ({ fill: s.fill, rings: s.rings.length, linked: !!s.from })),
+        shapes: d.shapes.map((s) => ({ fill: s.fill, linked: !!s.from })),
+        selected: window.__lc.ui().selection.length,
+      };
     });
-  let letters = await newest();
-  check(letters.length === 4 && letters.every((s) => s.fill === null && s.stroke?.color === 1 && !s.stroke.outside && s.stroke.width > 0), `Outline only: letters with no fill, outlined in color 2 (${JSON.stringify(letters[0])})`);
-  // Picking a color fills the letters again.
-  await page.evaluate(() => {
-    const groups = Object.keys(window.__lc.doc().groups);
-    window.__lc.ui().set({ sheet: 'text', textTarget: groups[groups.length - 1] });
-  });
-  await page.waitForTimeout(400);
-  check((await btn('Outline only').getAttribute('aria-pressed')) === 'true', 'reopening the word shows Outline only picked');
+  let w = await word();
+  check(w.name === 'Ring' && w.letters.length === 0 && w.guides.length === 7 && w.guides.every((g) => g.type === 'edges' && g.closed && g.width === 0), `Outline: the word comes in as outlines, one per line of each letter, nothing filled (${w.guides.length})`);
+  check(w.selected === w.guides.length, 'and lands selected as one word');
+  // Coloring the whole word fills the letters and leaves their holes open (the R's, the g's).
   await btn('Color 1').click();
-  await btn('Update').click();
-  await page.waitForTimeout(800);
-  letters = await newest();
-  check(letters.length === 4 && letters.every((s) => s.fill === 0 && !s.stroke), `picking a color fills them again, with no outline (${JSON.stringify(letters[0])})`);
+  await page.waitForTimeout(500);
+  w = await word();
+  check(w.letters.length === 5 && w.letters.filter((l) => l.rings === 2).length === 2 && w.letters.every((l) => l.fill === 0 && l.linked), `coloring the word fills its letters with their holes open (${JSON.stringify(w.letters)})`);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  // Or color one area at a time, as with any outlines.
+  await pickColor(page, 2);
+  const n = w.guides.find((g) => g.name === 'n');
+  await clickDoc(page, n.box[0] + (n.box[2] - n.box[0]) * 0.08, (n.box[1] + n.box[3]) / 2);
+  await page.waitForTimeout(400);
+  w = await word();
+  const tapped = () => w.shapes.filter((x) => x.fill === 1 && x.linked).length;
+  check(tapped() === 1 && w.name === 'Ring', 'tapping inside a letter colors it, and the word stays grouped');
+  // Cut: drag through the R; its pieces stay part of the word.
+  const R = w.guides.filter((g) => g.name === 'R').sort((a, b) => b.box[3] - b.box[1] - (a.box[3] - a.box[1]))[0];
+  await fromGroup(page, 'Cut', 'Cut');
+  const mx = (R.box[0] + R.box[2]) / 2;
+  await drag(page, [mx, R.box[1] - 40], [mx, R.box[3] + 40]);
+  await page.waitForTimeout(400);
+  await btn('Done').click();
+  w = await word();
+  check(w.guides.filter((g) => g.name === 'R').length === 4, `a cut through the R splits its outlines, and the pieces stay in the word (${w.guides.filter((g) => g.name === 'R').length} pieces)`);
+  // Thickness: the outlines become bands to color.
+  await page.evaluate(() => {
+    const d = window.__lc.doc();
+    const gid = Object.keys(d.groups).filter((k) => d.groups[k].letters).pop();
+    window.__lc.ui().set({ selection: d.guides.filter((g) => g.group === gid).map((g) => g.id), tool: 'arrange', erasing: false });
+  });
+  await page.waitForTimeout(300);
+  await btn('Thickness').click();
+  await page.waitForTimeout(400);
+  await page.getByLabel('Thickness value').fill('8');
+  await page.getByLabel('Thickness value').press('Enter');
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Escape');
+  w = await word();
+  check(w.guides.every((g) => g.width === 8) && tapped() === 1, 'Thickness makes every outline of the word thick, and the color stays');
   check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
   await ctx.close();
 }

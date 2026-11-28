@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { apply, chainsToPath, polygonToPath, ringsToPath, toCss, type Mat, type Pt } from '@/geom';
 import { withFollowers, type Arrangement } from '@/engine';
-import { useDoc } from '@/store/doc';
+import { getDoc, useDoc } from '@/store/doc';
+import { followSet } from '@/model/link';
 import { selectionKey, useUi } from '@/store/ui';
 import { useIsDark, useSettings } from '@/store/settings';
 import { imageUrl } from '@/store/persist';
@@ -163,6 +164,8 @@ function isDark(color: string | null | undefined): boolean {
 
 /** One guide's halo, or its line. The two are drawn in separate passes so the halos can be masked. */
 const GuideItem = memo(function GuideItem({ guide, selected, quiet, part }: { guide: Guide; selected: boolean; quiet: boolean; part: 'halo' | 'line' }) {
+  // the mouse is over something that would move this outline
+  const hovered = useDrag((s) => !selected && !!s.moves?.has(guide.id));
   const override = useDrag((s) => (s.guide?.id === guide.id ? s.guide : null));
   const mat = useDrag((s) => (s.ids?.has(guide.id) ? s.mat : null));
   const g = override ?? guide;
@@ -171,7 +174,7 @@ const GuideItem = memo(function GuideItem({ guide, selected, quiet, part }: { gu
   if (g.hidden) return null;
   const cut = g.type === 'line' && g.cut;
   return (
-    <g transform={mat ? toCss(mat) : undefined} className={`guide${selected ? ' is-selected' : quiet ? ' is-quiet' : ''}${cut ? ' is-cut' : ''}`}>
+    <g transform={mat ? toCss(mat) : undefined} className={`guide${selected ? ' is-selected' : hovered ? ' is-hover' : quiet ? ' is-quiet' : ''}${cut ? ' is-cut' : ''}`}>
       {part === 'halo' ? <path d={d} className="guide-halo" /> : <path d={d} className="guide-line" />}
       {spine && <path d={spine} className="guide-spine" />}
     </g>
@@ -222,7 +225,10 @@ function DarkMask() {
 
 export function GuidesLayer() {
   const guides = useDoc((s) => s.doc.guides);
+  const shapes = useDoc((s) => s.doc.shapes);
   const selection = useUi((s) => s.selection);
+  // A selected colored piece moves with the outlines it is made from: they show as selected too.
+  const moving = useMemo(() => followSet({ ...getDoc(), guides, shapes }, selection), [guides, shapes, selection]);
   const show = useUi((s) => s.showGuides);
   const showCuts = useUi((s) => s.showCuts);
   const quiet = useUi((s) => s.tool === 'color');
@@ -233,11 +239,11 @@ export function GuidesLayer() {
       <DarkMask />
       <g mask="url(#lc-dark)">
         {list.map((g) => (
-          <GuideItem key={g.id} guide={g} selected={selection.includes(g.id)} quiet={quiet} part="halo" />
+          <GuideItem key={g.id} guide={g} selected={moving.has(g.id)} quiet={quiet} part="halo" />
         ))}
       </g>
       {list.map((g) => (
-        <GuideItem key={g.id} guide={g} selected={selection.includes(g.id)} quiet={quiet} part="line" />
+        <GuideItem key={g.id} guide={g} selected={moving.has(g.id)} quiet={quiet} part="line" />
       ))}
       {showCuts && <TrimmedLayer />}
     </g>

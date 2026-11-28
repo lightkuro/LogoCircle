@@ -11,6 +11,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.19',
+    date: '28 Nov 2026',
+    changes: [
+      'See what will move: hovering something shows the outlines a drag would move',
+      'A selected colored piece shows the outlines it moves with, and its box goes around all of them',
+    ],
+  },
+  {
     version: '1.18',
     date: '28 Nov 2026',
     changes: ['Phones: the LogoCircle menu drops down from the top, under its button; swipe it up to close'],

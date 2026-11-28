@@ -16,6 +16,8 @@ interface DragState {
   paint: number[];
   /** Face under the mouse (hover preview). */
   hover: number;
+  /** The outlines a press under the mouse would move (hover preview while arranging), by id. */
+  moves: Set<string> | null;
   /** Rubber-band selection rectangle, in document space. */
   marquee: BBox | null;
   /** Alignment lines to show while snapping, in document space. */
@@ -52,6 +54,7 @@ const EMPTY: Pick<
   | 'guide'
   | 'paint'
   | 'hover'
+  | 'moves'
   | 'marquee'
   | 'snapLines'
   | 'loupe'
@@ -71,6 +74,7 @@ const EMPTY: Pick<
   guide: null,
   paint: [],
   hover: -1,
+  moves: null,
   marquee: null,
   snapLines: [],
   loupe: null,

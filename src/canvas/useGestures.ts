@@ -120,6 +120,38 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
 
+    /** Show which outlines a press here would move (mouse hover while arranging); null for none. */
+    const showMoves = (next: Set<string> | null): void => {
+      const cur = drag().moves;
+      if (cur === next || (cur && next && cur.size === next.size && [...next].every((id) => cur.has(id)))) return;
+      drag().set({ moves: next });
+    };
+
+    /**
+     * The outlines a press at `d` would move: those of the thing under it (a
+     * colored piece brings the outlines it is made from). Nothing new when the
+     * press would move the selection, which already shows.
+     */
+    const wouldMove = (doc: Doc, d: Pt, hits: string[]): Set<string> | null => {
+      const s = ui();
+      if (hits.some((id) => s.selection.includes(id))) return null;
+      if (s.selection.length) {
+        const f = selectionFrame(doc, s.selection, s.selRot);
+        if (f) {
+          const c = Math.cos(-f.rot);
+          const sn = Math.sin(-f.rot);
+          const lx = (d.x - f.cx) * c - (d.y - f.cy) * sn;
+          const ly = (d.x - f.cx) * sn + (d.y - f.cy) * c;
+          if (Math.abs(lx) <= f.w / 2 && Math.abs(ly) <= f.h / 2) return null;
+        }
+      }
+      const top = hits[0];
+      if (!top) return null;
+      const guides = new Set(doc.guides.map((g) => g.id));
+      const out = new Set([...followSet(doc, expandToGroup(doc, top))].filter((id) => guides.has(id)));
+      return out.size ? out : null;
+    };
+
     const stopHold = (): void => {
       if (g.kind === 'press' && g.hold) clearTimeout(g.hold);
     };
@@ -210,6 +242,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
       const p = local(e);
       pointers.set(e.pointerId, p);
       const s = ui();
+      showMoves(null);
 
       if (e.pointerType === 'mouse' && e.button === 2) {
         // Decided on the way: let go without moving for the menu, drag for the other of pan / box-select.
@@ -385,6 +418,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
         // Hovering mouse.
         if (e.pointerType !== 'mouse') return;
         const d = toDoc(s.view, p);
+        if (s.frameEdit || s.tool !== 'arrange') showMoves(null);
         if (s.frameEdit) {
           const at = findBoardHandle(p, false);
           svg.style.cursor = !at ? 'move' : at === 'n' || at === 's' ? 'ns-resize' : at === 'e' || at === 'w' ? 'ew-resize' : at === 'nw' || at === 'se' ? 'nwse-resize' : 'nesw-resize';
@@ -404,6 +438,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           return;
         }
         const h = findHandle(p, false);
+        if (h) showMoves(null);
         if (h) {
           svg.style.cursor = h.handle.kind === 'rot' ? 'grab' : 'pointer';
           if (h.handle.kind === 'box') {
@@ -413,8 +448,10 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
           }
           return;
         }
-        const hits = hitItems(getDoc(), d, 7 / s.view.k, shown());
+        const doc = getDoc();
+        const hits = hitItems(doc, d, 7 / s.view.k, shown());
         svg.style.cursor = spaceDown ? 'grab' : hits.length ? 'move' : 'default';
+        showMoves(spaceDown ? null : wouldMove(doc, d, hits));
         return;
       }
 
@@ -757,6 +794,7 @@ export function useGestures(ref: RefObject<SVGSVGElement | null>): void {
 
     const onLeave = (): void => {
       if (drag().hover !== -1) drag().set({ hover: -1 });
+      showMoves(null);
     };
 
     const onWheel = (e: WheelEvent): void => {

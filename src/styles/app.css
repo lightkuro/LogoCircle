@@ -273,6 +273,13 @@ select {
 .guide.is-selected .guide-line {
   stroke-width: 2px;
 }
+/* What a drag from under the mouse would move (hover preview). */
+.guide.is-hover .guide-halo {
+  stroke-width: 5px;
+}
+.guide.is-hover .guide-line {
+  stroke-width: 2.4px;
+}
 .guide.is-quiet .guide-halo {
   stroke-width: 2.4px;
   opacity: 0.55;

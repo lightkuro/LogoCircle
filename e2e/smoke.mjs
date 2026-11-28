@@ -1449,6 +1449,36 @@ async function bordersAndFlips(browser) {
   await ctx.close();
 }
 
+async function whatMoves(browser) {
+  console.log('\nWhat a drag moves: shown before and while moving');
+  const { ctx, page, errors } = await fresh(browser, false, { starter: true });
+  await page.waitForFunction(() => window.__lc.doc().shapes.some((s) => s.from));
+  const hovered = () => page.locator('.guide.is-hover .guide-line').count();
+  const selected = () => page.locator('.guide.is-selected .guide-line').count();
+  const circles = await page.evaluate(() => window.__lc.doc().guides.filter((g) => g.type === 'ellipse').map((g) => ({ cx: g.cx, cy: g.cy, r: g.rx })));
+  const [big, small] = circles.sort((a, b) => b.r - a.r);
+  // Over a colored piece: both circles it is made from light up.
+  const piece = await toScreen(page, big.cx - big.r * 0.4, big.cy + big.r * 0.2);
+  await page.mouse.move(piece.x, piece.y);
+  await page.waitForTimeout(150);
+  check((await hovered()) === 2, 'hovering a colored piece shows both outlines it moves with');
+  // Over one circle's line: just that circle.
+  const line = await toScreen(page, big.cx - big.r, big.cy);
+  await page.mouse.move(line.x, line.y);
+  await page.waitForTimeout(150);
+  check((await hovered()) === 1, 'hovering a line shows just that outline');
+  // Selecting the piece: its outlines show as selected, and the box goes around everything that will move.
+  await page.mouse.click(piece.x, piece.y);
+  await page.waitForTimeout(200);
+  const box = await page.locator('.sel-frame').boundingBox();
+  const a = await toScreen(page, big.cx - big.r, Math.min(big.cy - big.r, small.cy - small.r));
+  const b = await toScreen(page, Math.max(big.cx + big.r, small.cx + small.r), big.cy + big.r);
+  check((await selected()) === 2 && Math.abs(box.x - a.x) < 6 && Math.abs(box.x + box.width - b.x) < 6 && Math.abs(box.y - a.y) < 6 && Math.abs(box.y + box.height - b.y) < 6, `a selected piece shows both its outlines, with the box around both circles (${Math.round(box.width)}×${Math.round(box.height)})`);
+  check((await hovered()) === 0, 'nothing else lights up once it is selected');
+  check(errors.length === 0, `no console errors${errors.length ? ': ' + errors[0] : ''}`);
+  await ctx.close();
+}
+
 async function pasting(browser) {
   console.log('\nPasting: our own copy, or an image from elsewhere, never both');
   const { ctx, page, errors } = await fresh(browser, false);
@@ -1831,7 +1861,7 @@ try {
       await fn(b, false);
       await fn(b, true);
     };
-    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, bordersAndFlips, pasting, recipes, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
+    const flows = { controls, refinements, phoneLayout, sideways, touch, mirrorAndPicking, desktopBar, help, textDesktop, shapesAndMenus, listsAndPhoneText, movePoints, bordersAndFlips, whatMoves, pasting, recipes, wordmark: both(wordmark), photoToLogo: both(photoToLogo), geometric: both(geometric), firstVisit: both(firstVisit) };
     for (const name of process.env.E2E_ONLY.split(',')) await flows[name](browser);
     throw 'only';
   }
@@ -1853,6 +1883,7 @@ try {
   await listsAndPhoneText(browser);
   await movePoints(browser);
   await bordersAndFlips(browser);
+  await whatMoves(browser);
   await pasting(browser);
   await recipes(browser);
   await textDesktop(browser);

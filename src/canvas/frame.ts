@@ -4,6 +4,7 @@ import { guideCenterline, guideHandles, guidePoints, guideRot, rectCorners } fro
 import { settings } from '@/store/settings';
 import { refCorners, shapePolygons } from '@/model/ops';
 import { board } from '@/model/doc';
+import { followSet } from '@/model/link';
 
 /** An oriented box around the selection, in document space. */
 export interface Frame {
@@ -104,7 +105,9 @@ export function selectionFrame(doc: Doc, ids: string[], hint?: { key: string; ro
     const r = doc.refs.find((x) => x.id === ids[0]);
     if (r) return { cx: r.cx, cy: r.cy, w: r.w, h: r.h, rot: r.rot };
   }
-  const set = new Set(ids);
+  // The box goes around everything that moves with the selection: a colored
+  // piece brings the outlines it is made from.
+  const set = new Set([...ids, ...followSet(doc, ids)]);
   const pts: Pt[] = [];
   let rot: number | null = null;
   let mixed = false;

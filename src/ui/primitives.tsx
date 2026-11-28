@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Popover } from '@base-ui/react/popover';
 import { Drawer } from '@base-ui/react/drawer';
@@ -316,6 +316,7 @@ export function Sheet({
   name,
   note,
   narrow,
+  drop,
 }: {
   open: boolean;
   /** `reason` says how: 'close-press' for the X, 'escape-key', 'outside-press' for a click elsewhere. */
@@ -327,7 +328,7 @@ export function Sheet({
   /**
    * Where the panel sits on larger screens. Anything but 'center' drops it
    * next to the control that opened it and leaves the canvas visible.
-   * Phones always get a bottom sheet.
+   * Upright phones get a bottom sheet (or, with `drop`, one from the top).
    */
   place?: SheetPlace;
   /** Remembers the panel's width under this name; defaults to the title. */
@@ -336,6 +337,11 @@ export function Sheet({
   note?: ReactNode;
   /** A short panel (a few rows): keeps its compact width on big screens. */
   narrow?: boolean;
+  /**
+   * Upright phones: drop down from under this bar (a CSS selector), where the
+   * button that opens it is, instead of rising from the bottom. Swipe up to close.
+   */
+  drop?: string;
 }) {
   // Upright phones get a sheet from the bottom; a phone on its side has the room for a side panel.
   const kind = useLayoutKind();
@@ -343,6 +349,14 @@ export function Sheet({
   // Side panels on a desktop can be dragged wider by their inner edge.
   const [width, setWidth] = usePanelWidth(name ?? title);
   const resizable = kind === 'desktop' && place !== 'center';
+  // where a dropped panel starts: just under the bar it comes from
+  const [dropTop, setDropTop] = useState<number | null>(null);
+  const dropping = phone && !!drop;
+  useLayoutEffect(() => {
+    if (!open || !dropping) return;
+    const r = document.querySelector(drop!)?.getBoundingClientRect();
+    setDropTop(r ? Math.round(r.bottom + 8) : null);
+  }, [open, dropping, drop]);
   const head = (Title: typeof Dialog.Title | typeof Drawer.Title, Close: typeof Dialog.Close | typeof Drawer.Close) => (
     <div className="sheet-head">
       <div className="flex min-w-0 items-baseline">
@@ -359,14 +373,20 @@ export function Sheet({
   );
   if (phone) {
     return (
-      <Drawer.Root open={open} onOpenChange={(o) => !o && onClose()}>
+      <Drawer.Root open={open} onOpenChange={(o) => !o && onClose()} swipeDirection={dropping ? 'up' : 'down'}>
         <Drawer.Portal>
           <Drawer.Backdrop className="backdrop" />
-          <Drawer.Viewport className="drawer-viewport">
+          <Drawer.Viewport
+            className="drawer-viewport"
+            data-drop={dropping || undefined}
+            style={dropping && dropTop !== null ? ({ paddingTop: dropTop, '--drop-top': `${dropTop}px` } as CSSProperties) : undefined}
+          >
             <Drawer.Popup className="drawer">
-              <div className="drawer-grip" />
+              {!dropping && <div className="drawer-grip" />}
               {head(Drawer.Title, Drawer.Close)}
               <Drawer.Content className="sheet-body">{children}</Drawer.Content>
+              {/* the grip sits on the side it swipes away to */}
+              {dropping && <div className="drawer-grip" />}
             </Drawer.Popup>
           </Drawer.Viewport>
         </Drawer.Portal>

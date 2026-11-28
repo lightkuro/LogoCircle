@@ -39,6 +39,7 @@ export function MenuSheet() {
       title="LogoCircle"
       place="top-left"
       narrow
+      drop=".chrome-top > .bar"
       note={
         <>
           – a{' '}

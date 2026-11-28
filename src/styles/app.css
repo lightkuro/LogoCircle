@@ -1095,6 +1095,35 @@ select {
   background: var(--border-strong);
   flex-shrink: 0;
 }
+/* Upright phones: a menu opened from the top bar drops down under it, from its button, and swipes up to close. */
+.drawer-viewport[data-drop] {
+  align-items: flex-start;
+  padding: calc(var(--safe-top) + 68px) calc(var(--safe-right) + 10px) 0 calc(var(--safe-left) + 10px);
+}
+.drawer-viewport[data-drop] .drawer {
+  max-width: none;
+  max-height: min(70dvh, calc(100dvh - var(--drop-top, 80px) - 16px));
+  border-radius: 20px;
+  padding-bottom: 0;
+  transform-origin: top left;
+  transition:
+    transform 220ms var(--ease-out),
+    opacity 220ms var(--ease-out);
+}
+.drawer-viewport[data-drop] .drawer[data-swiping] {
+  transition: none;
+}
+.drawer-viewport[data-drop] .drawer[data-starting-style],
+.drawer-viewport[data-drop] .drawer[data-ending-style] {
+  opacity: 0;
+  transform: translateY(calc(var(--drawer-swipe-movement-y, 0px) - 8px)) scale(0.96);
+}
+.drawer-viewport[data-drop] .drawer[data-ending-style] {
+  transition-duration: 160ms;
+}
+.drawer-viewport[data-drop] .drawer-grip {
+  margin: 2px auto 8px;
+}
 .sheet-head {
   display: flex;
   align-items: center;

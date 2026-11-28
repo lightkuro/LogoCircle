@@ -11,6 +11,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.18',
+    date: '28 Nov 2026',
+    changes: ['Phones: the LogoCircle menu drops down from the top, under its button; swipe it up to close'],
+  },
+  {
     version: '1.17',
     date: '25 Nov 2026',
     changes: [

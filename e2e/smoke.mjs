@@ -764,6 +764,30 @@ async function phoneLayout(browser) {
   check((await page.getByRole('toolbar', { name: 'Colors' }).count()) === 0, 'and fold away');
   await btn('Show colors').click();
 
+  // The LogoCircle menu drops down from its button at the top, and swipes up (or taps away) to close.
+  const topBar = await page.locator('.chrome-top > .bar').first().boundingBox();
+  await btn('Menu').click();
+  await page.waitForTimeout(450);
+  const menuBox = await page.getByRole('dialog', { name: 'LogoCircle' }).boundingBox();
+  check(menuBox.y >= topBar.y + topBar.height && menuBox.y < topBar.y + topBar.height + 20 && menuBox.y + menuBox.height < vh * 0.8, `the menu drops down just under the top bar (top ${Math.round(menuBox.y)}, bar ends ${Math.round(topBar.y + topBar.height)})`);
+  const cdp = await ctx.newCDPSession(page);
+  const sx = menuBox.x + menuBox.width / 2;
+  const sy = menuBox.y + menuBox.height - 10;
+  const touch = (type, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: sx, y }] });
+  await touch('touchStart', sy);
+  for (let i = 1; i <= 8; i++) {
+    await touch('touchMove', sy - i * 25);
+    await page.waitForTimeout(16);
+  }
+  await touch('touchEnd', sy - 200);
+  await page.waitForTimeout(500);
+  check((await page.getByRole('dialog', { name: 'LogoCircle' }).count()) === 0, 'swiping the menu up closes it');
+  await btn('Menu').click();
+  await page.waitForTimeout(450);
+  await page.mouse.click(200, Math.min(vh - 20, menuBox.y + menuBox.height + 40));
+  await page.waitForTimeout(450);
+  check((await page.getByRole('dialog', { name: 'LogoCircle' }).count()) === 0, 'and so does a tap outside it');
+
   // Text: half the screen at most, more on request, and "Test" when nothing is typed.
   await btn('Text').click();
   await page.waitForTimeout(600);
